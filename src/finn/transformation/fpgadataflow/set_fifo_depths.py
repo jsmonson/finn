@@ -326,6 +326,7 @@ class InsertAndSetFIFODepths(Transformation):
         # change external to decoupled and warn user
         # this way we are sure we have exactly one input/output
         modified_fc_nodes = []
+        modified_mlo_max_iter_nodes = {}
         for node in model.graph.node:
             # verify assumptions
             assert is_hls_node(node) or is_rtl_node(node), "Found non-fpgadataflow node: " + str(
@@ -352,6 +353,11 @@ class InsertAndSetFIFODepths(Transformation):
                     ofd[o] = tensor_size if tensor_size > 1 else 2
             node.set_nodeattr("inFIFODepths", ifd)
             node.set_nodeattr("outFIFODepths", ofd)
+            if "mlo_max_iter" in node.get_nodeattr_types():
+                mlo_max_iter = node.get_nodeattr("mlo_max_iter")
+                if mlo_max_iter > 0:
+                    node.set_nodeattr("mlo_max_iter", 0)
+                    modified_mlo_max_iter_nodes[node.name] = mlo_max_iter
 
         # insert stream infrastructure (DWC/FIFO)
         model = model.transform(InsertDWC())
@@ -457,10 +463,17 @@ class InsertAndSetFIFODepths(Transformation):
                         node_inst.set_nodeattr("mem_mode", "external")
                         reset_implementation(node_inst)
                         modified_fc_nodes.remove(node.name)
+                if node.name in modified_mlo_max_iter_nodes:
+                    node_inst = getCustomOp(node)
+                    node_inst.set_nodeattr("mlo_max_iter", modified_mlo_max_iter_nodes[node.name])
+                    del modified_mlo_max_iter_nodes[node.name]
 
         assert (
             len(modified_fc_nodes) == 0 and len(fifos.keys()) == 0
         ), "FIFO/FC nodes left untouched after model reconfiguration"
+        assert (
+            len(modified_mlo_max_iter_nodes) == 0
+        ), "MLO max iter nodes left untouched after model reconfiguration"
 
         # handle custom sizing for SWG FIFOs if desired
         if self.swg_exception:
