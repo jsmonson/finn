@@ -378,6 +378,7 @@ class MVAU(HWCustomOp):
             or (mmode == "internal_embedded" and self.calc_wmem() <= 128)
             or (mmode == "external")
             or self.get_nodeattr("mlo_max_iter")
+            or "mlo_max_iter" in self.get_nodeattr_types()
         ):
             return 0
         width_multiplier = math.ceil(mem_width / 72)
@@ -408,6 +409,7 @@ class MVAU(HWCustomOp):
             or (mmode == "internal_embedded" and self.calc_wmem() <= 128)
             or (mmode == "external")
             or self.get_nodeattr("mlo_max_iter")
+            or "mlo_max_iter" in self.get_nodeattr_types()
         ):
             return 0
         # assuming SDP mode RAMB18s (see UG573 Table 1-10)
@@ -484,6 +486,7 @@ class MVAU(HWCustomOp):
             self.get_nodeattr("runtime_writeable_weights")
             or self.get_nodeattr("mem_mode") == "external"
             or self.get_nodeattr("mlo_max_iter")
+            or "mlo_max_iter" in self.get_nodeattr_types()
         ):
             mw = self.get_nodeattr("MW")
             mh = self.get_nodeattr("MH")
@@ -556,6 +559,7 @@ class MVAU(HWCustomOp):
             self.get_nodeattr("runtime_writeable_weights")
             or self.get_nodeattr("mem_mode") == "external"
             or self.get_nodeattr("mlo_max_iter")
+            or "mlo_max_iter" in self.get_nodeattr_types()
         ):
             weights = model.get_initializer(self.onnx_node.input[1])
             w_min = weights.min()
@@ -900,7 +904,7 @@ class MVAU(HWCustomOp):
             intf_names["clk2x"] = ["ap_clk2x"]
 
         mem_mode = self.get_nodeattr("mem_mode")
-        if self.get_nodeattr("mlo_max_iter"):
+        if self.get_nodeattr("mlo_max_iter") or "mlo_max_iter" in self.get_nodeattr_types():
             intf_names["aximm"].append(("axi_mm", 64))
             intf_names["s_axis"].append(("in_idx0_V", 32))
         if mem_mode == "external":
@@ -917,7 +921,7 @@ class MVAU(HWCustomOp):
         cmd = ["file mkdir %s" % source_target]
         # add streamer if needed
         mem_mode = self.get_nodeattr("mem_mode")
-        if mem_mode == "internal_decoupled" or self.get_nodeattr("mlo_max_iter"):
+        if mem_mode == "internal_decoupled" or self.get_nodeattr("mlo_max_iter") or "mlo_max_iter" in self.get_nodeattr_types():
             runtime_writeable = self.get_nodeattr("runtime_writeable_weights")
             node_name = self.onnx_node.name
             # create a hierarchy for this layer, with the same port names
@@ -950,7 +954,7 @@ class MVAU(HWCustomOp):
             # Instantiate either the HLS or RTL IP depending on operator
             self.instantiate_ip(cmd)
             code_gen_dir = self.get_nodeattr("code_gen_dir_ipgen")
-            if self.get_nodeattr("mlo_max_iter"):
+            if self.get_nodeattr("mlo_max_iter") or "mlo_max_iter" in self.get_nodeattr_types():
                 # instantiate a fetch weights component and connect it to the IP
                 swg_rtllib_dir = os.path.join(os.environ["FINN_ROOT"], "finn-rtllib/mlo/")
                 file_suffix = "_fetch_weights_wrapper.v"
