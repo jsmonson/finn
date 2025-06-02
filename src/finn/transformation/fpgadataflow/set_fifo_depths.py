@@ -357,7 +357,7 @@ class InsertAndSetFIFODepths(Transformation):
                 mlo_max_iter = node.get_nodeattr("mlo_max_iter")
                 if mlo_max_iter > 0:
                     node.set_nodeattr("mlo_max_iter", 0)
-                    modified_mlo_max_iter_nodes[node.name] = mlo_max_iter
+                    modified_mlo_max_iter_nodes[node.onnx_node.name] = mlo_max_iter
 
         # insert stream infrastructure (DWC/FIFO)
         model = model.transform(InsertDWC())

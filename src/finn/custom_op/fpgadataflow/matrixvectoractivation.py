@@ -262,6 +262,7 @@ class MVAU(HWCustomOp):
                 self.get_nodeattr("mem_mode") == "internal_decoupled"
                 or self.get_nodeattr("mem_mode") == "external"
                 or self.get_nodeattr("mlo_max_iter")
+                or "mlo_max_iter" in self.get_nodeattr_types()
             ):
                 pe = self.get_nodeattr("PE")
                 simd = self.get_nodeattr("SIMD")
@@ -302,6 +303,7 @@ class MVAU(HWCustomOp):
             folded_input_shape = tuple(vecs + [sf, simd])
         elif ind == 1 and (
             self.get_nodeattr("mem_mode") == "external" or self.get_nodeattr("mlo_max_iter")
+            or "mlo_max_iter" in self.get_nodeattr_types()
         ):
             # calculate shape of input 1 (weights)
             folded_input_shape = tuple(vecs + [sf * nf, simd * pe])
