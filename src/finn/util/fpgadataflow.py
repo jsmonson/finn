@@ -47,7 +47,9 @@ def is_hls_node(node):
     """Returns True if given node is hls node. Otherwise False."""
     is_node = False
     if node is not None:
-        if node.domain.endswith(".custom_op.fpgadataflow.hls"):
+        if (node.domain.endswith(".custom_op.fpgadataflow.hls") or
+            (node.domain.startswith("brainsmith.libraries.kernels") and 
+             node.domain.endswith(".hls"))):
             n_backend = get_by_name(node.attribute, "backend")
             if n_backend is not None:
                 backend_value = n_backend.s.decode("UTF-8")
@@ -61,7 +63,9 @@ def is_rtl_node(node):
     """Returns True if given node is rtl node. Otherwise False."""
     is_node = False
     if node is not None:
-        if node.domain.endswith(".custom_op.fpgadataflow.rtl"):
+        if (node.domain.endswith(".custom_op.fpgadataflow.rtl") or
+            (node.domain.startswith("brainsmith.libraries.kernels") and 
+             node.domain.endswith(".rtl"))):
             n_backend = get_by_name(node.attribute, "backend")
             if n_backend is not None:
                 backend_value = n_backend.s.decode("UTF-8")

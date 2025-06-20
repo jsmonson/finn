@@ -328,7 +328,9 @@ class SpecializeLayers(Transformation):
         graph_modified = False
         for node in graph.node:
             # Skip nodes that are not hw layers
-            if not node.domain.endswith(".custom_op.fpgadataflow"):
+            if not (node.domain.endswith(".custom_op.fpgadataflow") or 
+                    (node.domain.startswith("brainsmith.libraries.kernels") and 
+                     not (node.domain.endswith(".hls") or node.domain.endswith(".rtl")))):
                 continue
             node_ind += 1
             optype, impl_style = _determine_hw_op_type(node, self.fpgapart, model)
