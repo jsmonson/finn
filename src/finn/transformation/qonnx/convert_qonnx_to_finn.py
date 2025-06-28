@@ -41,8 +41,14 @@ from finn.transformation.qonnx.quant_act_to_multithreshold import (
     ConvertQuantActToMultiThreshold,
     default_filter_function_generator,
 )
+from finn.plugin import transform
 
 
+@transform(
+    name="ConvertQONNXtoFINN",
+    stage="graph_cleanup",
+    description="Convert QONNX dialect to FINN ONNX dialect"
+)
 class ConvertQONNXtoFINN(Transformation):
     """Converts QONNX dialect to FINN ONNX dialect.
     First the weights are converted using the FoldQuantWeights transformation,

@@ -65,7 +65,14 @@ from finn.transformation.streamline.reorder import (
 from finn.transformation.streamline.round_thresholds import RoundAndClipThresholds
 from finn.transformation.streamline.sign_to_thres import ConvertSignToThres
 
+from finn.plugin import transform
 
+
+@transform(
+    name="Streamline",
+    stage="topology_optimization",
+    description="Apply the streamlining transform meta-operation (arXiv:1709.04060)"
+)
 class Streamline(Transformation):
     """Apply the streamlining transform, see arXiv:1709.04060."""
 

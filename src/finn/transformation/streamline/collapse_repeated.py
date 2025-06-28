@@ -31,7 +31,14 @@ from qonnx.core.datatype import DataType
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.infer_shapes import InferShapes
 
+from finn.plugin import transform
 
+
+@transform(
+    name="CollapseRepeatedOp",
+    stage="topology_optimization",
+    description="Collapse repeated consecutive operations with constant parameters"
+)
 class CollapseRepeatedOp(Transformation):
     """Collapse repeated consecutive operations with constant parameters into
     a single operation. make_collapsed_param_fxn must take two tensors and
@@ -94,6 +101,11 @@ class CollapseRepeatedOp(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="CollapseRepeatedAdd",
+    stage="topology_optimization",
+    description="Collapse repeated adder nodes into a single operation"
+)
 class CollapseRepeatedAdd(CollapseRepeatedOp):
     """Collapse repeated adder node into a single operation."""
 
@@ -101,6 +113,11 @@ class CollapseRepeatedAdd(CollapseRepeatedOp):
         super().__init__("Add", lambda x, y: y + x)
 
 
+@transform(
+    name="CollapseRepeatedMul",
+    stage="topology_optimization",
+    description="Collapse repeated multiplier nodes into a single operation"
+)
 class CollapseRepeatedMul(CollapseRepeatedOp):
     """Collapse repeated multiplier node into a single operation."""
 

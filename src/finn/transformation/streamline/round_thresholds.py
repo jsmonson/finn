@@ -34,7 +34,14 @@ from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.infer_datatypes import InferDataTypes
 
+from finn.plugin import transform
 
+
+@transform(
+    name="RoundAndClipThresholds",
+    stage="topology_optimization",
+    description="Round thresholds to integers and clip negatives for unsigned inputs"
+)
 class RoundAndClipThresholds(Transformation):
     """For MultiThreshold nodes operating on integer inputs, round up
     thresholds values to the nearest integer. Additionally, if the input

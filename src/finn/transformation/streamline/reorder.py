@@ -42,7 +42,14 @@ from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import get_by_name
 
+from finn.plugin import transform
 
+
+@transform(
+    name="MoveAddPastMul",
+    stage="topology_optimization",
+    description="Move add operations past multiply operations"
+)
 class MoveAddPastMul(Transformation):
     """Move add operations past multiply operations on linear segments of the graph.
     The aim is to have them next to each other such that they can be collapsed into
@@ -101,6 +108,11 @@ class MoveAddPastMul(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveScalarMulPastMatMul",
+    stage="topology_optimization",
+    description="Move scalar multiply past matrix multiplication"
+)
 class MoveScalarMulPastMatMul(Transformation):
     """Move scalar mul operations past matmul operations. We want to have muls
     next to each other such that they can be collapsed into a single mul."""
@@ -157,6 +169,11 @@ class MoveScalarMulPastMatMul(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveScalarAddPastMatMul",
+    stage="topology_optimization",
+    description="Move scalar add past matrix multiplication"
+)
 class MoveScalarAddPastMatMul(Transformation):
     """Move scalar add operations past matmul operations. We want to have adds
     next to each other such that they can be collapsed into a single add."""
@@ -214,6 +231,11 @@ class MoveScalarAddPastMatMul(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveAddPastConv",
+    stage="topology_optimization",
+    description="Move add operations past convolution"
+)
 class MoveAddPastConv(Transformation):
     """Move scalar and channelwise add operations past conv operations. We want to have adds
     next to each other such that they can be collapsed into a single add."""
@@ -292,6 +314,11 @@ class MoveAddPastConv(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveScalarMulPastConv",
+    stage="topology_optimization",
+    description="Move scalar multiply past convolution"
+)
 class MoveScalarMulPastConv(Transformation):
     """Move scalar mul operations past conv operations. We want to have muls
     next to each other such that they can be collapsed into a single mul."""
@@ -341,6 +368,11 @@ class MoveScalarMulPastConv(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveScalarMulPastConvTranspose",
+    stage="topology_optimization",
+    description="Move scalar multiply past convolution transpose"
+)
 class MoveScalarMulPastConvTranspose(Transformation):
     """Move scalar mul operations past ConvTranspose operations. We want to have muls
     next to each other such that they can be collapsed into a single mul."""
@@ -390,6 +422,11 @@ class MoveScalarMulPastConvTranspose(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveMulPastDWConv",
+    stage="topology_optimization",
+    description="Move multiply past depthwise convolution"
+)
 class MoveMulPastDWConv(Transformation):
     """Move channelwise mul operations past depthwise conv operations. We want to have muls
     next to each other such that they can be collapsed into a single mul."""
@@ -451,6 +488,11 @@ class MoveMulPastDWConv(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveMulPastMaxPool",
+    stage="topology_optimization",
+    description="Move multiply past max pooling"
+)
 class MoveMulPastMaxPool(Transformation):
     """Move non-negative scalar or channelwise mul operations past max pool operations.
     We want to have muls next to each other such that they can be collapsed into a
@@ -519,6 +561,11 @@ class MoveMulPastMaxPool(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveLinearPastEltwiseAdd",
+    stage="topology_optimization",
+    description="Move linear operations past element-wise add"
+)
 class MoveLinearPastEltwiseAdd(Transformation):
     """Move linear operations (mul, add) past elementwise add operations where possible.
     Specifically,matches and transforms the following patterns:
@@ -598,6 +645,11 @@ class MoveLinearPastEltwiseAdd(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveScalarLinearPastInvariants",
+    stage="topology_optimization",
+    description="Move scalar linear operations past invariants"
+)
 class MoveScalarLinearPastInvariants(Transformation):
     """Move scalar linear operations (mul, add) past functions which are invariant
     to them. Specifically, matches and transforms the following patterns:
@@ -679,6 +731,11 @@ class MoveScalarLinearPastInvariants(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MakeMaxPoolNHWC",
+    stage="topology_optimization",
+    description="Convert MaxPool to NHWC layout"
+)
 class MakeMaxPoolNHWC(Transformation):
     """Convert (MaxPool, NHWCTranspose) into (NHWCTranspose, MaxPoolNHWC)
     and (NCHWTranspose, MaxPool) into (MaxPoolNHWC, NCHWTranspose)."""
@@ -751,6 +808,11 @@ class MakeMaxPoolNHWC(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MakeScaleResizeNHWC",
+    stage="topology_optimization",
+    description="Convert scale/resize to NHWC layout"
+)
 class MakeScaleResizeNHWC(Transformation):
     """
     Converts the inputs and outputs for all scales Resize and Upsample nodes
@@ -827,6 +889,11 @@ class MakeScaleResizeNHWC(Transformation):
         return (model, False)
 
 
+@transform(
+    name="MoveOpPastFork",
+    stage="topology_optimization",
+    description="Move operations past fork nodes"
+)
 class MoveOpPastFork(Transformation):
     """Move node operations past graph forks. Used when a node before a fork
     can be merged with nodes in the branches
@@ -900,26 +967,51 @@ class MoveOpPastFork(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveAddPastFork",
+    stage="topology_optimization",
+    description="Move add operations past fork nodes"
+)
 class MoveAddPastFork(MoveOpPastFork):
     def __init__(self):
         super().__init__(["Add"])
 
 
+@transform(
+    name="MoveMulPastFork",
+    stage="topology_optimization",
+    description="Move multiply operations past fork nodes"
+)
 class MoveMulPastFork(MoveOpPastFork):
     def __init__(self):
         super().__init__(["Mul"])
 
 
+@transform(
+    name="MoveLinearPastFork",
+    stage="topology_optimization",
+    description="Move linear operations past fork nodes"
+)
 class MoveLinearPastFork(MoveOpPastFork):
     def __init__(self):
         super().__init__(["Add", "Mul"])
 
 
+@transform(
+    name="MoveTransposePastFork",
+    stage="topology_optimization",
+    description="Move transpose operations past fork nodes"
+)
 class MoveTransposePastFork(MoveOpPastFork):
     def __init__(self):
         super().__init__(["Transpose"])
 
 
+@transform(
+    name="MoveMaxPoolPastMultiThreshold",
+    stage="topology_optimization",
+    description="Move max pooling past multi-threshold"
+)
 class MoveMaxPoolPastMultiThreshold(Transformation):
     """Move MaxPool nodes past MultiThreshold nodes on linear segments of the graph."""
 
@@ -982,6 +1074,11 @@ class MoveMaxPoolPastMultiThreshold(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveFlattenPastTopK",
+    stage="topology_optimization",
+    description="Move flatten operations past TopK"
+)
 class MoveFlattenPastTopK(Transformation):
     """Move flatten node past a succeeding topk node, if the "axis" attribute in topk
     is set to -1 and the data layout before the flatten is NHWC with H=W=1"""
@@ -1043,6 +1140,11 @@ class MoveFlattenPastTopK(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveFlattenPastAffine",
+    stage="topology_optimization",
+    description="Move flatten operations past affine"
+)
 class MoveFlattenPastAffine(Transformation):
     """Moves a node that implements a (1, -1) reshape past a MatMul, Mul or Add node."""
 
@@ -1129,6 +1231,11 @@ class MoveFlattenPastAffine(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveTransposePastScalarMul",
+    stage="topology_optimization",
+    description="Move transpose past scalar multiply"
+)
 class MoveTransposePastScalarMul(Transformation):
     """Moves a Transpose node past a scalar Mul node"""
 
@@ -1188,6 +1295,11 @@ class MoveTransposePastScalarMul(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveIdenticalOpPastJoinOp",
+    stage="topology_optimization",
+    description="Move identical operations past join nodes"
+)
 class MoveIdenticalOpPastJoinOp(Transformation):
     """
     Move identical operations on different branches past the common join node.
@@ -1257,6 +1369,11 @@ class MoveIdenticalOpPastJoinOp(Transformation):
         return (model, graph_modified)
 
 
+@transform(
+    name="MoveTransposePastJoinAdd",
+    stage="topology_optimization",
+    description="Move transpose past join add nodes"
+)
 class MoveTransposePastJoinAdd(MoveIdenticalOpPastJoinOp):
     def __init__(self):
         super().__init__(["Transpose"], ["Add"])

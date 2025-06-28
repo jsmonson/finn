@@ -34,6 +34,7 @@ from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.base import Transformation
 
 from finn.util.fpgadataflow import is_fpgadataflow_node
+from finn.plugin import transform
 
 
 def _is_fifo_node(node):
@@ -62,6 +63,11 @@ def _suitable_folded_shapes(ishape, oshape):
     return matching_stream_width and matching_size
 
 
+@transform(
+    name="InsertFIFO",
+    stage="graph_optimization",
+    description="Insert FIFOs between fpgadataflow nodes and at graph boundaries"
+)
 class InsertFIFO(Transformation):
     """Inserting FIFOs in the beginning and end of the graph as well as
     between fpgadataflow nodes.
