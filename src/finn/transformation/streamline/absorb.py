@@ -42,7 +42,7 @@ from finn.plugin import transform
 
 @transform(
     name="AbsorbSignBiasIntoMultiThreshold",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Absorb scalar bias originating from signed int export back into MultiThreshold"
 )
 class AbsorbSignBiasIntoMultiThreshold(Transformation):
@@ -109,7 +109,7 @@ class AbsorbSignBiasIntoMultiThreshold(Transformation):
 
 @transform(
     name="AbsorbAddIntoMultiThreshold",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Absorb preceding Add ops into MultiThreshold by updating threshold values"
 )
 class AbsorbAddIntoMultiThreshold(Transformation):
@@ -151,7 +151,7 @@ class AbsorbAddIntoMultiThreshold(Transformation):
 
 @transform(
     name="AbsorbMulIntoMultiThreshold",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Absorb preceding Mul ops into MultiThreshold by updating threshold values"
 )
 class AbsorbMulIntoMultiThreshold(Transformation):
@@ -194,7 +194,7 @@ class AbsorbMulIntoMultiThreshold(Transformation):
 
 @transform(
     name="FactorOutMulSignMagnitude",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Factor out multiplication sign and magnitude components"
 )
 class FactorOutMulSignMagnitude(Transformation):
@@ -238,7 +238,7 @@ class FactorOutMulSignMagnitude(Transformation):
 
 @transform(
     name="Absorb1BitMulIntoMatMul",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Absorb 1-bit multiplication into matrix multiplication"
 )
 class Absorb1BitMulIntoMatMul(Transformation):
@@ -280,7 +280,7 @@ class Absorb1BitMulIntoMatMul(Transformation):
 
 @transform(
     name="Absorb1BitMulIntoConv",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Absorb 1-bit multiplication into convolution"
 )
 class Absorb1BitMulIntoConv(Transformation):
@@ -326,7 +326,7 @@ class Absorb1BitMulIntoConv(Transformation):
 
 @transform(
     name="AbsorbTransposeIntoMultiThreshold",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Absorb transpose operations into MultiThreshold"
 )
 class AbsorbTransposeIntoMultiThreshold(Transformation):
@@ -388,7 +388,7 @@ class AbsorbTransposeIntoMultiThreshold(Transformation):
 
 @transform(
     name="AbsorbTransposeIntoFlatten",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Absorb transpose operations into flatten"
 )
 class AbsorbTransposeIntoFlatten(Transformation):
@@ -455,7 +455,7 @@ class AbsorbTransposeIntoFlatten(Transformation):
 
 @transform(
     name="AbsorbScalarMulAddIntoTopK",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Absorb scalar multiply and add into TopK"
 )
 class AbsorbScalarMulAddIntoTopK(Transformation):
@@ -499,7 +499,7 @@ class AbsorbScalarMulAddIntoTopK(Transformation):
 
 @transform(
     name="AbsorbConsecutiveTransposes",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Absorb consecutive transpose operations"
 )
 class AbsorbConsecutiveTransposes(Transformation):
@@ -564,7 +564,7 @@ class AbsorbConsecutiveTransposes(Transformation):
 
 @transform(
     name="AbsorbTransposeIntoResize",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Absorb transpose operations into resize"
 )
 class AbsorbTransposeIntoResize(Transformation):

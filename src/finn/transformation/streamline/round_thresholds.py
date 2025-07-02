@@ -39,7 +39,7 @@ from finn.plugin import transform
 
 @transform(
     name="RoundAndClipThresholds",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Round thresholds to integers and clip negatives for unsigned inputs"
 )
 class RoundAndClipThresholds(Transformation):

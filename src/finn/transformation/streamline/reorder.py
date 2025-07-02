@@ -47,7 +47,7 @@ from finn.plugin import transform
 
 @transform(
     name="MoveAddPastMul",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move add operations past multiply operations"
 )
 class MoveAddPastMul(Transformation):
@@ -110,7 +110,7 @@ class MoveAddPastMul(Transformation):
 
 @transform(
     name="MoveScalarMulPastMatMul",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move scalar multiply past matrix multiplication"
 )
 class MoveScalarMulPastMatMul(Transformation):
@@ -171,7 +171,7 @@ class MoveScalarMulPastMatMul(Transformation):
 
 @transform(
     name="MoveScalarAddPastMatMul",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move scalar add past matrix multiplication"
 )
 class MoveScalarAddPastMatMul(Transformation):
@@ -233,7 +233,7 @@ class MoveScalarAddPastMatMul(Transformation):
 
 @transform(
     name="MoveAddPastConv",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move add operations past convolution"
 )
 class MoveAddPastConv(Transformation):
@@ -316,7 +316,7 @@ class MoveAddPastConv(Transformation):
 
 @transform(
     name="MoveScalarMulPastConv",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move scalar multiply past convolution"
 )
 class MoveScalarMulPastConv(Transformation):
@@ -370,7 +370,7 @@ class MoveScalarMulPastConv(Transformation):
 
 @transform(
     name="MoveScalarMulPastConvTranspose",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move scalar multiply past convolution transpose"
 )
 class MoveScalarMulPastConvTranspose(Transformation):
@@ -424,7 +424,7 @@ class MoveScalarMulPastConvTranspose(Transformation):
 
 @transform(
     name="MoveMulPastDWConv",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move multiply past depthwise convolution"
 )
 class MoveMulPastDWConv(Transformation):
@@ -490,7 +490,7 @@ class MoveMulPastDWConv(Transformation):
 
 @transform(
     name="MoveMulPastMaxPool",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move multiply past max pooling"
 )
 class MoveMulPastMaxPool(Transformation):
@@ -563,7 +563,7 @@ class MoveMulPastMaxPool(Transformation):
 
 @transform(
     name="MoveLinearPastEltwiseAdd",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move linear operations past element-wise add"
 )
 class MoveLinearPastEltwiseAdd(Transformation):
@@ -647,7 +647,7 @@ class MoveLinearPastEltwiseAdd(Transformation):
 
 @transform(
     name="MoveScalarLinearPastInvariants",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move scalar linear operations past invariants"
 )
 class MoveScalarLinearPastInvariants(Transformation):
@@ -733,7 +733,7 @@ class MoveScalarLinearPastInvariants(Transformation):
 
 @transform(
     name="MakeMaxPoolNHWC",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Convert MaxPool to NHWC layout"
 )
 class MakeMaxPoolNHWC(Transformation):
@@ -810,7 +810,7 @@ class MakeMaxPoolNHWC(Transformation):
 
 @transform(
     name="MakeScaleResizeNHWC",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Convert scale/resize to NHWC layout"
 )
 class MakeScaleResizeNHWC(Transformation):
@@ -891,7 +891,7 @@ class MakeScaleResizeNHWC(Transformation):
 
 @transform(
     name="MoveOpPastFork",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move operations past fork nodes"
 )
 class MoveOpPastFork(Transformation):
@@ -969,7 +969,7 @@ class MoveOpPastFork(Transformation):
 
 @transform(
     name="MoveAddPastFork",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move add operations past fork nodes"
 )
 class MoveAddPastFork(MoveOpPastFork):
@@ -979,7 +979,7 @@ class MoveAddPastFork(MoveOpPastFork):
 
 @transform(
     name="MoveMulPastFork",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move multiply operations past fork nodes"
 )
 class MoveMulPastFork(MoveOpPastFork):
@@ -989,7 +989,7 @@ class MoveMulPastFork(MoveOpPastFork):
 
 @transform(
     name="MoveLinearPastFork",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move linear operations past fork nodes"
 )
 class MoveLinearPastFork(MoveOpPastFork):
@@ -999,7 +999,7 @@ class MoveLinearPastFork(MoveOpPastFork):
 
 @transform(
     name="MoveTransposePastFork",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move transpose operations past fork nodes"
 )
 class MoveTransposePastFork(MoveOpPastFork):
@@ -1009,7 +1009,7 @@ class MoveTransposePastFork(MoveOpPastFork):
 
 @transform(
     name="MoveMaxPoolPastMultiThreshold",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move max pooling past multi-threshold"
 )
 class MoveMaxPoolPastMultiThreshold(Transformation):
@@ -1076,7 +1076,7 @@ class MoveMaxPoolPastMultiThreshold(Transformation):
 
 @transform(
     name="MoveFlattenPastTopK",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move flatten operations past TopK"
 )
 class MoveFlattenPastTopK(Transformation):
@@ -1142,7 +1142,7 @@ class MoveFlattenPastTopK(Transformation):
 
 @transform(
     name="MoveFlattenPastAffine",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move flatten operations past affine"
 )
 class MoveFlattenPastAffine(Transformation):
@@ -1233,7 +1233,7 @@ class MoveFlattenPastAffine(Transformation):
 
 @transform(
     name="MoveTransposePastScalarMul",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move transpose past scalar multiply"
 )
 class MoveTransposePastScalarMul(Transformation):
@@ -1297,7 +1297,7 @@ class MoveTransposePastScalarMul(Transformation):
 
 @transform(
     name="MoveIdenticalOpPastJoinOp",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move identical operations past join nodes"
 )
 class MoveIdenticalOpPastJoinOp(Transformation):
@@ -1371,7 +1371,7 @@ class MoveIdenticalOpPastJoinOp(Transformation):
 
 @transform(
     name="MoveTransposePastJoinAdd",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Move transpose past join add nodes"
 )
 class MoveTransposePastJoinAdd(MoveIdenticalOpPastJoinOp):

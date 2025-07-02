@@ -36,7 +36,7 @@ from finn.plugin import transform
 
 @transform(
     name="ConvertSignToThres",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Convert Sign nodes to MultiThreshold with threshold at 0"
 )
 class ConvertSignToThres(Transformation):

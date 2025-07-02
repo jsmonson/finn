@@ -65,7 +65,7 @@ def _suitable_folded_shapes(ishape, oshape):
 
 @transform(
     name="InsertFIFO",
-    stage="graph_optimization",
+    stage="dataflow_opt",
     description="Insert FIFOs between fpgadataflow nodes and at graph boundaries"
 )
 class InsertFIFO(Transformation):

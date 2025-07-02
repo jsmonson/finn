@@ -46,7 +46,7 @@ from finn.plugin import transform
 
 @transform(
     name="ConvertQONNXtoFINN",
-    stage="graph_cleanup",
+    stage="cleanup",
     description="Convert QONNX dialect to FINN ONNX dialect"
 )
 class ConvertQONNXtoFINN(Transformation):

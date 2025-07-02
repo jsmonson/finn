@@ -36,7 +36,7 @@ from finn.plugin import transform
 
 @transform(
     name="CollapseRepeatedOp",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Collapse repeated consecutive operations with constant parameters"
 )
 class CollapseRepeatedOp(Transformation):
@@ -103,7 +103,7 @@ class CollapseRepeatedOp(Transformation):
 
 @transform(
     name="CollapseRepeatedAdd",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Collapse repeated adder nodes into a single operation"
 )
 class CollapseRepeatedAdd(CollapseRepeatedOp):
@@ -115,7 +115,7 @@ class CollapseRepeatedAdd(CollapseRepeatedOp):
 
 @transform(
     name="CollapseRepeatedMul",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Collapse repeated multiplier nodes into a single operation"
 )
 class CollapseRepeatedMul(CollapseRepeatedOp):

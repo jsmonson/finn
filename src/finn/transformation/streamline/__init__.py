@@ -70,7 +70,7 @@ from finn.plugin import transform
 
 @transform(
     name="Streamline",
-    stage="topology_optimization",
+    stage="topology_opt",
     description="Apply the streamlining transform meta-operation (arXiv:1709.04060)"
 )
 class Streamline(Transformation):

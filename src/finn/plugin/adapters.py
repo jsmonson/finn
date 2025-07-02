@@ -9,6 +9,9 @@ from typing import Type, Optional
 
 logger = logging.getLogger(__name__)
 
+# Define valid stages matching BrainSmith
+VALID_STAGES = ["cleanup", "topology_opt", "kernel_opt", "dataflow_opt"]
+
 
 def transform(
     name: str,
@@ -27,7 +30,7 @@ def transform(
     
     Args:
         name: Name of the transform (required)
-        stage: Compilation stage where transform applies (topology_optimization, graph_optimization, etc.)
+        stage: Compilation stage - one of: cleanup, topology_opt, kernel_opt, dataflow_opt
         description: Human-readable description
         author: Author name or organization
         version: Version string (e.g., "1.0.0")
@@ -42,46 +45,58 @@ def transform(
             ...
     """
     def decorator(cls: Type) -> Type:
-        # Validate it's a Transformation
+        # No strict validation - just log warnings
         try:
             from qonnx.transformation.base import Transformation
             if not issubclass(cls, Transformation):
-                raise ValueError(
-                    f"Transform '{name}' must inherit from qonnx.transformation.base.Transformation"
-                )
+                logger.debug(f"Transform '{name}' does not inherit from Transformation base class")
         except ImportError:
-            logger.warning("QONNX not available, skipping transform validation")
+            logger.debug("QONNX not available for validation")
         
-        # Use stage directly
-        effective_stage = stage
+        # Warn about non-standard stages but allow them
+        if stage and stage not in VALID_STAGES:
+            logger.debug(
+                f"Transform '{name}' uses non-standard stage '{stage}'. "
+                f"Standard stages are: {', '.join(VALID_STAGES)}"
+            )
         
         # Store FINN metadata on class
         cls._plugin_metadata = {
             "type": "transform",
             "name": name,
-            "stage": effective_stage,
+            "stage": stage,
             "description": description,
             "author": author,
-            "version": version
+            "version": version,
+            "framework": "finn"
         }
         
         # Register with QONNX transformation registry
         try:
             from qonnx.transformation.registry import register_transformation
-            cls = register_transformation(name)(cls)
-            logger.info(f"Registered transform with QONNX: {name}")
-        except ImportError:
-            logger.warning(f"QONNX registry not available, skipping QONNX registration for {name}")
+            # Pass all metadata except finn-specific ones
+            qonnx_kwargs = {
+                "description": description,
+                "author": author,
+                "version": version
+            }
+            cls = register_transformation(name, **qonnx_kwargs)(cls)
+            logger.debug(f"Registered transform with QONNX: {name}")
         except Exception as e:
-            logger.error(f"Failed to register {name} with QONNX: {e}")
+            logger.debug(f"QONNX registration skipped: {e}")
         
-        # Register with FINN plugin registry
+        # Register with FINN plugin registry using new method
         try:
-            from .registry import FinnPluginRegistry
-            FinnPluginRegistry.register(cls)
-            logger.info(f"Registered transform with FINN: {name} (stage: {effective_stage})")
+            from .registry import get_finn_registry
+            registry = get_finn_registry()
+            registry.register("transform", name, cls, 
+                            stage=stage,
+                            description=description,
+                            author=author,
+                            version=version)
+            logger.debug(f"Registered transform with FINN: {name} (stage: {stage})")
         except Exception as e:
-            logger.error(f"Failed to register {name} with FINN: {e}")
+            logger.debug(f"FINN registration skipped: {e}")
         
         return cls
     
@@ -130,26 +145,31 @@ def kernel(
             "domain": domain,
             "description": description,
             "author": author,
-            "version": version
+            "version": version,
+            "framework": "finn"
         }
         
-        # Register with QONNX custom op registry if available
+        # Register with QONNX custom op registry
         try:
             from qonnx.custom_op.registry import register_op
             cls = register_op(domain, op_type)(cls)
-            logger.info(f"Registered kernel with QONNX: {op_type} in domain {domain}")
-        except ImportError:
-            logger.warning(f"QONNX not available, skipping custom op registration for {name}")
+            logger.debug(f"Registered kernel with QONNX: {op_type} in domain {domain}")
         except Exception as e:
-            logger.error(f"Failed to register {name} with QONNX: {e}")
+            logger.debug(f"QONNX registration skipped: {e}")
         
-        # Register with FINN plugin registry
+        # Register with FINN plugin registry using new method
         try:
-            from .registry import FinnPluginRegistry
-            FinnPluginRegistry.register(cls)
-            logger.info(f"Registered kernel with FINN: {name}")
+            from .registry import get_finn_registry
+            registry = get_finn_registry()
+            registry.register("kernel", name, cls,
+                            op_type=op_type,
+                            domain=domain,
+                            description=description,
+                            author=author,
+                            version=version)
+            logger.debug(f"Registered kernel with FINN: {name}")
         except Exception as e:
-            logger.error(f"Failed to register kernel {name} with FINN: {e}")
+            logger.debug(f"FINN registration skipped: {e}")
         
         return cls
     
@@ -189,9 +209,9 @@ def backend(
             ...
     """
     def decorator(cls: Type) -> Type:
-        # Validate backend type
+        # Warn about non-standard backend types but allow them
         if backend_type not in ["hls", "rtl"]:
-            raise ValueError(f"Invalid backend_type '{backend_type}'. Must be 'hls' or 'rtl'")
+            logger.debug(f"Backend '{name}' uses non-standard type '{backend_type}'. Standard types are: hls, rtl")
         
         # Store FINN metadata on class
         cls._plugin_metadata = {
@@ -201,16 +221,23 @@ def backend(
             "backend_type": backend_type,
             "description": description,
             "author": author,
-            "version": version
+            "version": version,
+            "framework": "finn"
         }
         
-        # Register with FINN plugin registry
+        # Register with FINN plugin registry using new method
         try:
-            from .registry import FinnPluginRegistry
-            FinnPluginRegistry.register(cls)
-            logger.info(f"Registered backend with FINN: {name} for kernel {kernel} (type: {backend_type})")
+            from .registry import get_finn_registry
+            registry = get_finn_registry()
+            registry.register("backend", name, cls,
+                            kernel=kernel,
+                            backend_type=backend_type,
+                            description=description,
+                            author=author,
+                            version=version)
+            logger.debug(f"Registered backend with FINN: {name} for kernel {kernel} (type: {backend_type})")
         except Exception as e:
-            logger.error(f"Failed to register backend {name} with FINN: {e}")
+            logger.debug(f"FINN registration skipped: {e}")
         
         return cls
     
