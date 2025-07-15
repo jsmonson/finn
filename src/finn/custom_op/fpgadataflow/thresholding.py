@@ -37,12 +37,13 @@ from qonnx.util.basic import (
 
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 
-
+exe_idx = 0
 class Thresholding(HWCustomOp):
     """Abstraction layer for HW implementation of Thresholding."""
 
     def __init__(self, onnx_node, **kwargs):
         super().__init__(onnx_node, **kwargs)
+        
 
     def get_nodeattr_types(self):
         my_attrs = {
@@ -251,6 +252,7 @@ class Thresholding(HWCustomOp):
         return ret.reshape(1, pe, tmem, n_thres_steps)
 
     def execute_node(self, context, graph):
+        global exe_idx
         node = self.onnx_node
         inp_values = context[node.input[0]]
         th_val = context[node.input[1]]
@@ -262,6 +264,9 @@ class Thresholding(HWCustomOp):
         is_4d = len(inp_values.shape) == 4
         if is_4d:
             inp_values = np.transpose(inp_values, (0, 3, 1, 2))
+        np.save(f"{node.name}_{exe_idx}_input_values.npy", inp_values)
+        np.save(f"{node.name}_{exe_idx}_th_val.npy", th_val)
+        np.save(f"{node.name}_{exe_idx}_out_bias.npy", out_bias)
         y = multithreshold(inp_values, th_val, out_bias=out_bias)
         if is_4d:
             y = y.transpose(0, 2, 3, 1)
@@ -269,6 +274,8 @@ class Thresholding(HWCustomOp):
         if act == DataType["BIPOLAR"]:
             # binary to bipolar
             y = 2 * y - 1
+        np.save(f"{node.name}_{exe_idx}_output_values.npy", y)
+        exe_idx+= 1
         context[node.output[0]] = y
 
     def calc_tmem(self):

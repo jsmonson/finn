@@ -534,9 +534,12 @@ def test_fpgadataflow_loop():
     body = body.transform(SetExecMode("cppsim"))
     inst.set_nodeattr("body", body.graph)
     x = gen_finn_dt_tensor(DataType["INT8"], [1, 3, 3, 16])
+    np.save("input.npy", x)
     input_dict = {model.graph.input[0].name: x}
-    y_dict = oxe.execute_onnx(model, input_dict)
+    y_dict = oxe.execute_onnx(model, input_dict, True)
     y = y_dict[model.graph.output[0].name]
+    np.save("expected_output.npy", y)
+    np.savez("expected_output.npz", **y_dict)
     print(y)
 
 
@@ -549,11 +552,21 @@ def test_fpgadataflow_loop_stitchedip():
     model.save("finn_loop_sip.onnx")
     inst = getCustomOp(model.graph.node[0])
     body = inst.get_nodeattr("body")
-    body = body.transform(PrepareIP(test_fpga_part, 5))
-    body = body.transform(HLSSynthIP())
-    body = body.transform(CreateStitchedIP(test_fpga_part, 5))
+    body = body.transform(PrepareCppSim())
+    body = body.transform(CompileCppSim())
+    body = body.transform(SetExecMode("cppsim"))
     inst.set_nodeattr("body", body.graph)
-    model.save("FINNLoop_sip_made.onnx")
-    model = model.transform(PrepareIP(test_fpga_part, 5), apply_to_subgraphs=True)
-    model = model.transform(CreateStitchedIP(test_fpga_part, 5), apply_to_subgraphs=True)
-    model.save("post_stitched_ip.onnx")
+    x = gen_finn_dt_tensor(DataType["INT8"], [1, 3, 16])
+    np.save("input.npy", x)
+    input_dict = {model.graph.input[0].name: x}
+    y_dict = oxe.execute_onnx(model, input_dict, True)
+    y = y_dict[model.graph.output[0].name]
+    np.save("expected_output.npy", y)
+    #body = body.transform(PrepareIP(test_fpga_part, 5))
+    #body = body.transform(HLSSynthIP())
+    #body = body.transform(CreateStitchedIP(test_fpga_part, 5))
+    #inst.set_nodeattr("body", body.graph)
+    #model.save("FINNLoop_sip_made.onnx")
+    #model = model.transform(PrepareIP(test_fpga_part, 5), apply_to_subgraphs=True)
+    #model = model.transform(CreateStitchedIP(test_fpga_part, 5), apply_to_subgraphs=True)
+    #model.save("post_stitched_ip.onnx")

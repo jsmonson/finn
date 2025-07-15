@@ -49,7 +49,7 @@ from finn.util.data_packing import numpy_to_hls_code, pack_innermost_dim_as_hex_
 # output 0 is the output tensor, shape (.., o_size) = (..., MH)
 # the ... here can be any shape (representing groups of vectors)
 
-
+exe_idx = 0
 class MVAU(HWCustomOp):
     """Abstraction layer for HW implementation of MatrixVectorActivation layers."""
 
@@ -130,6 +130,7 @@ class MVAU(HWCustomOp):
         return my_attrs
 
     def execute_node(self, context, graph):
+        global exe_idx
         node = self.onnx_node
         in_act = context[node.input[0]]
         # ensure that shape is compatible
@@ -148,7 +149,11 @@ class MVAU(HWCustomOp):
             result = xp.xnorpopcountmatmul((in_act + 1) / 2, (mvau_w + 1) / 2)
         else:
             # Regular matrix multiplication
+            np.save(f"{node.name}_{exe_idx}_in_act.npy", in_act)
+            np.save(f"{node.name}_{exe_idx}_mvau_w.npy", mvau_w)
             result = np.matmul(in_act, mvau_w)
+            np.save(f"{node.name}_{exe_idx}_result.npy", result)
+            
         if self.get_nodeattr("noActivation") == 0:
             mvau_thr = context[node.input[2]]
             odt_is_bipolar = self.get_nodeattr("outputDataType") == "BIPOLAR"
@@ -162,6 +167,7 @@ class MVAU(HWCustomOp):
                 # NCHW to NHWC
                 result = result.transpose((0, 2, 3, 1))
         oshape = context[node.output[0]].shape
+        exe_idx += 1
         context[node.output[0]] = result.reshape(oshape)
 
     def verify_node(self):
