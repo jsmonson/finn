@@ -44,19 +44,15 @@ def make_loop_modelwrapper(mw, mh, iter_count):
     mt0_out = helper.make_tensor_value_info("mt0_out", TensorProto.FLOAT, [1, 3, 3, mh])
     mm1_out = helper.make_tensor_value_info("mm1_out", TensorProto.FLOAT, [1, 3, 3, mh])
     mt1_out = helper.make_tensor_value_info("mt1_out", TensorProto.FLOAT, [1, 3, 3, mh])
-    mm2_out = helper.make_tensor_value_info("mm2_out", TensorProto.FLOAT, [1, 3, 3, 3])
-    mt2_out = helper.make_tensor_value_info("mt2_out", TensorProto.FLOAT, [1, 3, 3, 3])
+    mm2_out = helper.make_tensor_value_info("mm2_out", TensorProto.FLOAT, [1, 3, 3, mh])
+    mt2_out = helper.make_tensor_value_info("mt2_out", TensorProto.FLOAT, [1, 3, 3, mh])
     mm3_out = helper.make_tensor_value_info("mm3_out", TensorProto.FLOAT, [1, 3, 3, mh])
     ofm = helper.make_tensor_value_info("ofm", TensorProto.FLOAT, (1, 3, 3, mh))
-    ofm_0 = helper.make_tensor_value_info("ofm_0", TensorProto.FLOAT, (1, 3, 3, mh))
-    ofm_1 = helper.make_tensor_value_info("ofm_1", TensorProto.FLOAT, (1, 3, 3, mh))
-    ofm_2 = helper.make_tensor_value_info("ofm_2", TensorProto.FLOAT, (1, 3, 3, mh))
-    ofm_3 = helper.make_tensor_value_info("ofm_3", TensorProto.FLOAT, (1, 3, 3, mh))
     ofm_final = helper.make_tensor_value_info("ofm_final", TensorProto.FLOAT, (1, 3, 3, mh))
     dtype = DataType["INT8"]
     W0 = gen_finn_dt_tensor(dtype, (mw, mh))
     W1 = gen_finn_dt_tensor(dtype, (mw, mh))
-    W2 = gen_finn_dt_tensor(dtype, (mh, 3))
+    W2 = gen_finn_dt_tensor(dtype, (mh, mh))
     T0 = generate_random_threshold_values(dtype, 1, dtype.get_num_possible_values() - 1)
     T0 = np.sort(T0, axis=1)
     T1 = generate_random_threshold_values(dtype, 1, dtype.get_num_possible_values() - 1)
@@ -65,16 +61,13 @@ def make_loop_modelwrapper(mw, mh, iter_count):
     T2 = np.sort(T2, axis=1)
     T3 = generate_random_threshold_values(dtype, 1, dtype.get_num_possible_values() - 1)
     T3 = np.sort(T3, axis=1)
-    T4 = generate_random_threshold_values(dtype, 1, dtype.get_num_possible_values() - 1)
-    T4 = np.sort(T4, axis=1)
     weights0 = helper.make_tensor_value_info("weights0", TensorProto.FLOAT, [mw, mh])
     weights1 = helper.make_tensor_value_info("weights1", TensorProto.FLOAT, [mw, mh])
-    weights2 = helper.make_tensor_value_info("weights2", TensorProto.FLOAT, [mh, 3])
+    weights2 = helper.make_tensor_value_info("weights2", TensorProto.FLOAT, [mh, mh])
     thresh0 = helper.make_tensor_value_info("thresh0", TensorProto.FLOAT, T0.shape)
     thresh1 = helper.make_tensor_value_info("thresh1", TensorProto.FLOAT, T1.shape)
     thresh2 = helper.make_tensor_value_info("thresh2", TensorProto.FLOAT, T2.shape)
     thresh3 = helper.make_tensor_value_info("thresh3", TensorProto.FLOAT, T3.shape)
-    thresh4 = helper.make_tensor_value_info("thresh4", TensorProto.FLOAT, T4.shape)
 
     dupstrm_node = helper.make_node(
         "DuplicateStreams_hls",
@@ -108,7 +101,7 @@ def make_loop_modelwrapper(mw, mh, iter_count):
         binaryXnorMode=0,
         noActivation=1,
         numInputVectors=list((1, 3, 3)),
-        mlo_max_iter=3,
+        mlo_max_iter=iter_count,
         inFIFODepths=[2, 2],
         name="MVAU_rtl0",
     )
@@ -125,7 +118,7 @@ def make_loop_modelwrapper(mw, mh, iter_count):
         weightDataType="INT33",
         outputDataType="INT8",
         numInputVectors=list((1, 3, 3)),
-        mlo_max_iter=3,
+        mlo_max_iter=iter_count,
         inFIFODepths=[2, 2],
         ActVal=int(dtype.min()),
         name="Thresholding_rtl0",
@@ -147,7 +140,7 @@ def make_loop_modelwrapper(mw, mh, iter_count):
         binaryXnorMode=0,
         noActivation=1,
         numInputVectors=list([1, 3, 3]),
-        mlo_max_iter=3,
+        mlo_max_iter=iter_count,
         inFIFODepths=[2, 2],
         name="MVAU_rtl1",
     )
@@ -164,7 +157,7 @@ def make_loop_modelwrapper(mw, mh, iter_count):
         weightDataType="INT33",
         outputDataType="INT8",
         numInputVectors=list((1, 3, 3)),
-        mlo_max_iter=3,
+        mlo_max_iter=iter_count,
         inFIFODepths=[2, 2],
         ActVal=int(dtype.min()),
         name="Thresholding_rtl1",
@@ -175,8 +168,8 @@ def make_loop_modelwrapper(mw, mh, iter_count):
         ["mm2_out"],
         domain="finn.custom_op.fpgadataflow.rtl",
         backend="fpgadataflow",
-        MW=mh,
-        MH=3,
+        MW=mw,
+        MH=mh,
         SIMD=1,
         PE=1,
         inputDataType="INT8",
@@ -186,7 +179,7 @@ def make_loop_modelwrapper(mw, mh, iter_count):
         binaryXnorMode=0,
         noActivation=1,
         numInputVectors=list((1, 3, 3)),
-        mlo_max_iter=3,
+        mlo_max_iter=iter_count,
         inFIFODepths=[2, 2],
         name="MVAU_rtl2",
     )
@@ -197,94 +190,23 @@ def make_loop_modelwrapper(mw, mh, iter_count):
         ["mt2_out"],
         domain="finn.custom_op.fpgadataflow.rtl",
         backend="fpgadataflow",
-        NumChannels=3,
+        NumChannels=mh,
         PE=1,
         numSteps=T1.shape[1],
         inputDataType="INT32",
         weightDataType="INT33",
         outputDataType="INT8",
         numInputVectors=list((1, 3, 3)),
-        mlo_max_iter=3,
+        mlo_max_iter=iter_count,
         inFIFODepths=[2, 2],
         ActVal=int(dtype.min()),
         name="Thresholding_rtl2",
     )
-
+    # overwrite dynamic matmul with add node
     matmul_node3 = helper.make_node(
-        "MVAU_rtl",
+        "AddStreams_hls",
         ["mt2_out", "mt1_out"],
         ["ofm"],
-        domain="finn.custom_op.fpgadataflow.rtl",
-        backend="fpgadataflow",
-        MW=3,
-        MH=mh,
-        SIMD=1,
-        PE=1,
-        inputDataType="INT8",
-        weightDataType="INT8",
-        outputDataType="INT32",
-        ActVal=0,
-        binaryXnorMode=0,
-        noActivation=1,
-        dynamic_input=1,
-        numInputVectors=list((1, 3, 3)),
-        inFIFODepths=[2, 2],
-        name="MVAU_rtl3",
-    )
-    dupstrm_node0 = helper.make_node(
-        "DuplicateStreams_hls",
-        ["ofm"],
-        ["ofm_0", "ofm_1"],
-        domain="finn.custom_op.fpgadataflow.hls",
-        backend="fpgadataflow",
-        NumChannels=mh,
-        NumOutputStreams=2,
-        PE=1,
-        inputDataType=dtype.name,
-        numInputVectors=[1, 3, 3],
-        outFIFODepths=[2, 2],
-        name="DuplicateStreams_hls1",
-    )
-    mt_node3 = helper.make_node(
-        "Thresholding_rtl",
-        ["ofm_0", "thresh3"],
-        ["ofm_2"],
-        domain="finn.custom_op.fpgadataflow.rtl",
-        backend="fpgadataflow",
-        NumChannels=mh,
-        PE=1,
-        numSteps=T1.shape[1],
-        inputDataType="INT32",
-        weightDataType="INT33",
-        outputDataType="INT8",
-        numInputVectors=list((1, 3, 3)),
-        mlo_max_iter=3,
-        inFIFODepths=[2, 2],
-        ActVal=int(dtype.min()),
-        name="Thresholding_rtl4",
-    )
-    mt_node4 = helper.make_node(
-        "Thresholding_rtl",
-        ["ofm_1", "thresh4"],
-        ["ofm_3"],
-        domain="finn.custom_op.fpgadataflow.rtl",
-        backend="fpgadataflow",
-        NumChannels=mh,
-        PE=1,
-        numSteps=T1.shape[1],
-        inputDataType="INT32",
-        weightDataType="INT33",
-        outputDataType="INT8",
-        numInputVectors=list((1, 3, 3)),
-        mlo_max_iter=3,
-        inFIFODepths=[2, 2],
-        ActVal=int(dtype.min()),
-        name="Thresholding_rtl5",
-    )
-    add_node = helper.make_node(
-        "AddStreams_hls",
-        ["ofm_2", "ofm_3"],
-        ["ofm_final"],
         domain="finn.custom_op.fpgadataflow.hls",
         backend="fpgadataflow",
         NumChannels=16,
@@ -294,7 +216,44 @@ def make_loop_modelwrapper(mw, mh, iter_count):
         inFIFODepths=[2, 2],
         name="AddStreams_hls0",
     )
-
+    # "MVAU_rtl",
+    # ["mt2_out", "mt1_out"],
+    # ["ofm"],
+    # domain="finn.custom_op.fpgadataflow.rtl",
+    # backend="fpgadataflow",
+    # MW=3,
+    # MH=mh,
+    # SIMD=1,
+    # PE=1,
+    # inputDataType="INT8",
+    # weightDataType="INT8",
+    # outputDataType="INT32",
+    # ActVal=0,
+    # binaryXnorMode=0,
+    # noActivation=1,
+    # dynamic_input=1,
+    # numInputVectors=list((1, 3, 3)),
+    # inFIFODepths=[2, 2],
+    # name="MVAU_rtl3",
+    # )
+    mt_node3 = helper.make_node(
+        "Thresholding_rtl",
+        ["ofm", "thresh3"],
+        ["ofm_final"],
+        domain="finn.custom_op.fpgadataflow.rtl",
+        backend="fpgadataflow",
+        NumChannels=mh,
+        PE=1,
+        numSteps=T1.shape[1],
+        inputDataType="INT32",
+        weightDataType="INT33",
+        outputDataType="INT8",
+        numInputVectors=list((1, 3, 3)),
+        mlo_max_iter=iter_count,
+        inFIFODepths=[2, 2],
+        ActVal=int(dtype.min()),
+        name="Thresholding_rtl4",
+    )
     nodes = [
         dupstrm_node,
         matmul_node0,
@@ -304,15 +263,12 @@ def make_loop_modelwrapper(mw, mh, iter_count):
         matmul_node2,
         mt_node2,
         matmul_node3,
-        dupstrm_node0,
         mt_node3,
-        mt_node4,
-        add_node,
     ]
     loop_body = helper.make_graph(
         nodes=nodes,
         name="matmul_graph",
-        inputs=[ifm, weights0, thresh0, weights1, thresh1, weights2, thresh2, thresh3, thresh4],
+        inputs=[ifm, weights0, thresh0, weights1, thresh1, weights2, thresh2, thresh3],
         outputs=[ofm_final],
         value_info=[
             ifm_1,
@@ -325,10 +281,6 @@ def make_loop_modelwrapper(mw, mh, iter_count):
             mt2_out,
             mm3_out,
             ofm,
-            ofm_0,
-            ofm_1,
-            ofm_2,
-            ofm_3,
         ],
     )
     loop_body_model = qonnx_make_model(loop_body, producer_name="loop-body-model")
@@ -341,13 +293,12 @@ def make_loop_modelwrapper(mw, mh, iter_count):
     loop_body_model.set_tensor_datatype("thresh1", dtype)
     loop_body_model.set_tensor_datatype("thresh2", dtype)
     loop_body_model.set_tensor_datatype("thresh3", dtype)
-    loop_body_model.set_tensor_datatype("thresh4", dtype)
     loop_body_model.set_tensor_datatype("ifm", dtype)
     loop_body_model.set_tensor_datatype("ofm_final", dtype)
     loop_body_model = loop_body_model.transform(InferShapes())
     loop_body_model = loop_body_model.transform(InferDataTypes())
 
-    iteration = 3
+    iteration = iter_count
     # stack according to iteration count
     W0 = np.stack([W0] * iter_count)
     W1 = np.stack([W1] * iter_count)
@@ -356,7 +307,6 @@ def make_loop_modelwrapper(mw, mh, iter_count):
     T1 = np.stack([T1] * iter_count)
     T2 = np.stack([T2] * iter_count)
     T3 = np.stack([T3] * iter_count)
-    T4 = np.stack([T4] * iter_count)
     loop_node = helper.make_node(
         "FINNLoop",
         name="FINNLoop_0",
@@ -371,7 +321,6 @@ def make_loop_modelwrapper(mw, mh, iter_count):
             "weights2",
             "thresh2",
             "thresh3",
-            "thresh4",
         ],
         outputs=["ofm_final"],
         body=loop_body_model.graph,
@@ -393,14 +342,12 @@ def make_loop_modelwrapper(mw, mh, iter_count):
     model.set_tensor_datatype("weights2", dtype)
     model.set_initializer("thresh0", T0)
     model.set_tensor_datatype("thresh0", dtype)
-    model.set_initializer("thresh1", T1)
+    model.set_initializer("thresh1", T0)
     model.set_tensor_datatype("thresh1", dtype)
-    model.set_initializer("thresh2", T2)
+    model.set_initializer("thresh2", T0)
     model.set_tensor_datatype("thresh2", dtype)
-    model.set_initializer("thresh3", T3)
+    model.set_initializer("thresh3", T0)
     model.set_tensor_datatype("thresh3", dtype)
-    model.set_initializer("thresh4", T4)
-    model.set_tensor_datatype("thresh4", dtype)
     model.set_tensor_datatype("ifm", dtype)
     model.set_tensor_datatype("ofm_final", dtype)
 
@@ -443,7 +390,7 @@ def make_loop_modelwrapper_nofork(mw, mh, iter_count):
         binaryXnorMode=0,
         noActivation=1,
         numInputVectors=list((1, 3)),
-        mlo_max_iter=3,
+        mlo_max_iter=iter_count,
         inFIFODepths=[2, 2],
         name="MVAU_rtl0",
     )
@@ -460,7 +407,7 @@ def make_loop_modelwrapper_nofork(mw, mh, iter_count):
         weightDataType="INT33",
         outputDataType="INT8",
         numInputVectors=list((1, 3)),
-        mlo_max_iter=3,
+        mlo_max_iter=iter_count,
         inFIFODepths=[2, 2],
         ActVal=int(dtype.min()),
         name="Thresholding_rtl0",
@@ -482,7 +429,7 @@ def make_loop_modelwrapper_nofork(mw, mh, iter_count):
         binaryXnorMode=0,
         noActivation=1,
         numInputVectors=list([1, 3]),
-        mlo_max_iter=3,
+        mlo_max_iter=iter_count,
         inFIFODepths=[2, 2],
         name="MVAU_rtl1",
     )
@@ -499,7 +446,7 @@ def make_loop_modelwrapper_nofork(mw, mh, iter_count):
         weightDataType="INT33",
         outputDataType="INT8",
         numInputVectors=list((1, 3)),
-        mlo_max_iter=3,
+        mlo_max_iter=iter_count,
         inFIFODepths=[2, 2],
         ActVal=int(dtype.min()),
         name="Thresholding_rtl1",
@@ -525,7 +472,7 @@ def make_loop_modelwrapper_nofork(mw, mh, iter_count):
     loop_body_model = loop_body_model.transform(InferShapes())
     loop_body_model = loop_body_model.transform(InferDataTypes())
 
-    iteration = 3
+    iteration = iter_count
     # stack according to iteration count
     W0 = np.stack([W0] * iter_count)
     W1 = np.stack([W1] * iter_count)
@@ -562,9 +509,10 @@ def make_loop_modelwrapper_nofork(mw, mh, iter_count):
 
 
 def test_fpgadataflow_loop():
-    model = make_loop_modelwrapper(16, 16, 3)
+    model = make_loop_modelwrapper(16, 16, 1)
     model = model.transform(InferShapes())
     model.save("finn_loop.onnx")
+    # model = ModelWrapper("finn_loop.onnx")
     inst = getCustomOp(model.graph.node[0])
     for i in range(len(model.graph.node[0].input)):
         idt = inst.get_input_datatype(i)
@@ -585,7 +533,7 @@ def test_fpgadataflow_loop():
     body = body.transform(CompileCppSim())
     body = body.transform(SetExecMode("cppsim"))
     inst.set_nodeattr("body", body.graph)
-    x = gen_finn_dt_tensor(DataType["INT8"], [1, 3, 16])
+    x = gen_finn_dt_tensor(DataType["INT8"], [1, 3, 3, 16])
     input_dict = {model.graph.input[0].name: x}
     y_dict = oxe.execute_onnx(model, input_dict)
     y = y_dict[model.graph.output[0].name]

@@ -51,7 +51,7 @@ module local_weight_buffer #(
 
     input   logic  ivld,
     output  logic  irdy,
-    input   logic  [PE-1:0][WEIGHT_WIDTH-1:0] idat,
+    input   logic  [SIMD-1:0][WEIGHT_WIDTH-1:0] idat,
 
     output  logic  ovld,
     input   logic  ordy,
@@ -67,8 +67,9 @@ localparam int unsigned  NF = MH/PE;
 localparam int unsigned  N_TLS = SF * NF;
 
 localparam int unsigned SIMD_BITS = (SIMD == 1) ? 1 : $clog2(SIMD);
+localparam int unsigned PE_BITS = (PE == 1) ? 1 : $clog2(PE);
 localparam int unsigned WGT_ADDR_BITS = $clog2(NF * SF);
-localparam int unsigned RAM_BITS = (PE*WEIGHT_WIDTH + 7)/8 * 8;
+localparam int unsigned RAM_BITS = (SIMD*WEIGHT_WIDTH + 7)/8 * 8;
 localparam int unsigned WGT_EN_BITS = RAM_BITS / 8;
 localparam int unsigned N_TLS_BITS = $clog2(N_TLS);
 localparam int unsigned N_REPS_BITS = $clog2(N_REPS);
@@ -84,16 +85,13 @@ typedef enum logic  {ST_RD_0, ST_RD_1} state_rd_t;
 state_wr_t state_wr_C = ST_WR_0, state_wr_N;
 state_rd_t state_rd_C = ST_RD_0, state_rd_N;
 
-//logic[N_TLS_BITS-1:0] wr_pntr_C = '0, wr_pntr_N;
-//logic[SIMD_BITS-1:0] curr_simd_C = '0, curr_simd_N;
-
-logic[15:0] wr_pntr_C = '0, wr_pntr_N;
-logic[15:0] curr_simd_C = '0, curr_simd_N;
+logic[N_TLS_BITS-1:0] wr_pntr_C = '0, wr_pntr_N;
+logic[PE_BITS-1:0] curr_pe_C = '0, curr_pe_N;
 
 // -- Signals
-logic [1:0][SIMD-1:0][WGT_EN_BITS-1:0] a_we; // Bank enables
+logic [1:0][PE-1:0][WGT_EN_BITS-1:0] a_we; // Bank enables
 logic [1:0][WGT_ADDR_BITS-1:0] a_addr;
-logic [1:0][PE-1:0][WEIGHT_WIDTH-1:0] a_data_in;
+logic [1:0][SIMD-1:0][WEIGHT_WIDTH-1:0] a_data_in;
 
 // -- REG
 always_ff @( posedge clk ) begin : REG_PROC_WR
@@ -101,13 +99,13 @@ always_ff @( posedge clk ) begin : REG_PROC_WR
         state_wr_C <= ST_WR_0;
 
         wr_pntr_C <= '0;
-        curr_simd_C <= '0;
+        curr_pe_C <= '0;
     end
     else begin
         state_wr_C <= state_wr_N;
 
         wr_pntr_C <= wr_pntr_N;
-        curr_simd_C <= curr_simd_N;
+        curr_pe_C <= curr_pe_N;
     end
 end
 
@@ -117,7 +115,7 @@ always_comb begin : NSL_PROC_WR
 
     case (state_wr_C)
         ST_WR_0:
-            if((curr_simd_C == SIMD - 1) && (wr_pntr_C == N_TLS - 1) && ivld) begin
+            if((curr_pe_C == PE - 1) && (wr_pntr_C == N_TLS - 1) && ivld) begin
                 state_wr_N = (state_rd_C == ST_RD_0) ? ST_WR_1 : ST_WR_0_WAIT;
             end
 
@@ -125,7 +123,7 @@ always_comb begin : NSL_PROC_WR
             state_wr_N = (state_rd_C == ST_RD_0) ? ST_WR_1 : ST_WR_0_WAIT;
 
         ST_WR_1:
-            if((curr_simd_C == SIMD - 1) && (wr_pntr_C == N_TLS - 1) && ivld) begin
+            if((curr_pe_C == PE - 1) && (wr_pntr_C == N_TLS - 1) && ivld) begin
                 state_wr_N = (state_rd_C == ST_RD_1) ? ST_WR_0 : ST_WR_1_WAIT;
             end
 
@@ -138,7 +136,7 @@ end
 // -- DP
 always_comb begin : DP_PROC_WR
     wr_pntr_N = wr_pntr_C;
-    curr_simd_N = curr_simd_C;
+    curr_pe_N = curr_pe_C;
 
     // Input
     irdy = 1'b0;
@@ -156,14 +154,14 @@ always_comb begin : DP_PROC_WR
             irdy = 1'b1;
 
             if(ivld) begin
-                for(int i = 0; i < SIMD; i++) begin
-                    if(curr_simd_C == i) begin
+                for(int i = 0; i < PE; i++) begin
+                    if(curr_pe_C == i) begin
                         a_we[state_wr_C == ST_WR_1][i] = '1;
                     end
                 end
 
-                curr_simd_N = (curr_simd_C == SIMD-1) ? 0 : curr_simd_C + 1;
-                wr_pntr_N = (curr_simd_C == SIMD-1) ? ((wr_pntr_C == N_TLS-1) ? 0 : wr_pntr_C + 1) : wr_pntr_C;
+                curr_pe_N = (curr_pe_C == PE-1) ? 0 : curr_pe_C + 1;
+                wr_pntr_N = (curr_pe_C == PE-1) ? ((wr_pntr_C == N_TLS-1) ? 0 : wr_pntr_C + 1) : wr_pntr_C;
             end
         end
     endcase
@@ -175,11 +173,11 @@ end
 // ----------------------------------------------------------------------------
 
 // -- Regs
-//logic [N_TLS_BITS-1:0] rd_pntr_C = '0, rd_pntr_N;
-//logic [N_REPS_BITS-1:0] reps_C = '0, reps_N;
+logic [N_TLS_BITS-1:0] rd_pntr_C = '0, rd_pntr_N;
+logic [N_REPS_BITS-1:0] reps_C = '0, reps_N;
 
-logic [15:0] rd_pntr_C = '0, rd_pntr_N;
-logic [15:0] reps_C = '0, reps_N;
+//logic [15:0] rd_pntr_C = '0, rd_pntr_N;
+//logic [15:0] reps_C = '0, reps_N;
 
 logic [1:0] vld_s0_C = '0, vld_s0_N;
 logic [1:0] vld_s1_C = '0, vld_s1_N;
@@ -189,8 +187,7 @@ logic [PE-1:0][SIMD-1:0][WEIGHT_WIDTH-1:0] odat_C = '0, odat_N;
 
 // -- Signals
 logic [1:0][WGT_ADDR_BITS-1:0] b_addr;
-logic [1:0][SIMD-1:0][PE-1:0][WEIGHT_WIDTH-1:0] odat_ram;
-logic [1:0][PE-1:0][SIMD-1:0][WEIGHT_WIDTH-1:0] odat_ram_arr;
+logic [1:0][PE-1:0][SIMD-1:0][WEIGHT_WIDTH-1:0] odat_ram;
 
 // -- REG
 always_ff @( posedge clk ) begin : REG_PROC_RD
@@ -250,7 +247,7 @@ always_comb begin : DP_PROC_RD
     end
 
     vld_N = ordy ? |vld_s1_C : vld_C;
-    odat_N = ordy ? (vld_s1_C[0] ? odat_ram_arr[0] : odat_ram_arr[1]) : odat_C;
+    odat_N = ordy ? (vld_s1_C[0] ? odat_ram[0] : odat_ram[1]) : odat_C;
 
     for(int i = 0; i < 2; i++) begin
         b_addr[i] = rd_pntr_C;
@@ -293,7 +290,7 @@ assign odat = odat_C;
 // ----------------------------------------------------------------------------
 
 for(genvar i = 0; i < 2; i++) begin
-    for(genvar j = 0; j < SIMD; j++) begin
+    for(genvar j = 0; j < PE; j++) begin
         ram_p_c #(
             .ADDR_BITS(WGT_ADDR_BITS),
             .DATA_BITS(RAM_BITS),
@@ -309,10 +306,6 @@ for(genvar i = 0; i < 2; i++) begin
             .a_data_out(),
             .b_data_out(odat_ram[i][j])
         );
-
-        for(genvar k = 0; k < PE; k++) begin
-            assign odat_ram_arr[i][k][j] = odat_ram[i][j][k];
-        end
     end
 end
 

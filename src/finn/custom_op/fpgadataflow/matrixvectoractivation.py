@@ -934,13 +934,18 @@ class MVAU(HWCustomOp):
         else:
             dynamic_input = self.get_nodeattr("dynamic_input")
             mem_mode = self.get_nodeattr("mem_mode")
-            if mem_mode == "external" or dynamic_input:
-                intf_names["s_axis"].append(("in1_V", self.get_instream_width_padded(1)))
-            elif mem_mode == "internal_decoupled":
-                # only expose axilite interface if attribute is set
-                runtime_writeable = self.get_nodeattr("runtime_writeable_weights")
-                if runtime_writeable:
-                    intf_names["axilite"] = ["s_axilite"]
+            if dynamic_input:
+                weight_width = self.get_instream_width(1)
+                weight_width = weight_width * self.get_nodeattr("SIMD")
+                intf_names["s_axis"].append(("in1_V", roundup_to_integer_multiple(weight_width, 8)))
+            else:
+                if mem_mode == "external":
+                    intf_names["s_axis"].append(("in1_V", self.get_instream_width_padded(1)))
+                elif mem_mode == "internal_decoupled":
+                    # only expose axilite interface if attribute is set
+                    runtime_writeable = self.get_nodeattr("runtime_writeable_weights")
+                    if runtime_writeable:
+                        intf_names["axilite"] = ["s_axilite"]
         return intf_names
 
     def code_generation_ipi(self):

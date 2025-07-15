@@ -281,7 +281,8 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 else:
                     params = context[node.input[i]]
                     input_dict[loop_body.graph.input[i].name] = params[i_iter]
-            outp_dict = oxe.execute_onnx(loop_body, input_dict)
+            outp_dict = oxe.execute_onnx(loop_body, input_dict, return_full_exec_context=True)
+            np.savez(f"expt_out_{i_iter}.npz", **outp_dict)
             inp_values = outp_dict[loop_body.graph.output[0].name]
         result = outp_dict[loop_body.graph.output[0].name]
         context[node.output[0]] = np.asarray(result, dtype=np.float32)
@@ -375,7 +376,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
                         shutil.move(param_path, new_param_file)
             if param_node.op_type.startswith("MVAU"):
                 # concatinate all .dat files together
-                param_file = "{}/memblock_{}.dat".format(path, param_node.name)
+                param_file = "{}/memblock_MVAU_id_{}.dat".format(path, i + 1)
                 with open(param_file, "w") as outfile:
                     for iter in range(iteration):
                         memblock_file = "{}/memblock_{}.dat".format(path, iter)
@@ -390,8 +391,8 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 o_bitwidth = DataType[output_data_type].bitwidth()
                 for stage in range(o_bitwidth):
                     for pe_value in range(pe):
-                        param_file = path + "/%s_threshs_%s_%s.dat" % (
-                            param_node.name,
+                        param_file = path + "/Thresholding_id_%s_threshs_%s_%s.dat" % (
+                            i + 1,
                             pe_value,
                             stage,
                         )
@@ -416,11 +417,8 @@ class FINNLoop(HWCustomOp, RTLBackend):
                                 fpath = os.path.join(dname, fname)
                                 with open(fpath, "r") as f:
                                     s = f.read()
-                                old = '$readmemh(".'
-                                new = '$readmemh("%s' % path
-                                s = s.replace(old, new)
-                                old = '"./'
-                                new = '"%s/' % path
+                                old = "./%s" % param_node.name
+                                new = "%s/Thresholding_id_%s" % (path, i + 1)
                                 s = s.replace(old, new)
                                 with open(fpath, "w") as f:
                                     f.write(s)

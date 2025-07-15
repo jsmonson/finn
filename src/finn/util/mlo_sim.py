@@ -46,9 +46,18 @@ def is_mlo(model: ModelWrapper) -> bool:
 
 
 def dat_file_to_numpy_array(file_path):
+    byte_values = []
+
     with open(file_path, "r") as file:
-        byte_values = [int(line.strip(), 16) for line in file]
+        for line in file:
+            hex_string = line.strip()
+            for i in range(len(hex_string) - 2, -1, -2):
+                byte = hex_string[i : i + 2]
+                byte_values.append(int(byte, 16))
+            if len(hex_string) % 2 == 1:  # Dealing when we have a leftover nibble
+                byte_values.append(int(hex_string[-1], 16))
     byte_array = np.array(byte_values, dtype=np.uint8)
+
     return byte_array
 
 
@@ -67,25 +76,21 @@ def mlo_prehook_func_factory(model: ModelWrapper) -> Callable[[SimEngine], None]
     finnloop_body = finnloop_op.get_nodeattr("body")
 
     mvau_hbm_weights = {}
-    # extern_idx = 0
+    extern_idx = 0
     for idx, lb_inp in enumerate(finnloop_body.graph.input):
         downstream = finnloop_body.find_consumer(lb_inp.name)
         if downstream.op_type.startswith("MVAU"):
             mvau_hbm_weights[idx] = {}
             mvau_hbm_weights[idx]["name"] = lb_inp.name
-            # param_name = finnloop_op.onnx_node.input[idx]
-            # import pdb; pdb.set_trace()
-            # param_val = model.get_initializer(param_name)
-            # mvau_hbm_weights[idx]["value"] = param_val
-            datfile = (
-                f"{finnloop_op.get_nodeattr('code_gen_dir_ipgen')}/memblock_{downstream.name}.dat"
-            )
+            datfile = f"{finnloop_op.get_nodeattr('code_gen_dir_ipgen')}/memblock_MVAU_id_{idx}.dat"
             mvau_hbm_weights[idx]["value"] = dat_file_to_numpy_array(datfile)
-            mvau_hbm_weights[idx]["extern_idx"] = int(downstream.name.split("_")[-1])
+            mvau_hbm_weights[idx]["extern_idx"] = extern_idx
+            mvau_hbm_weights[idx]["extern_name"] = f"m_axi_MVAU_id_{idx}"
+            extern_idx += 1
 
     def mlo_rtlsim_prehook(sim):
         sim.aximm_queue("m_axi_hbm")
         for name, intf in mvau_hbm_weights.items():
-            sim.aximm_ro_image(f"m_axi_gmem{intf['extern_idx']}", 0, intf["value"].flatten())
+            sim.aximm_ro_image(intf["extern_name"], 0, intf["value"].flatten())
 
     return mlo_rtlsim_prehook
