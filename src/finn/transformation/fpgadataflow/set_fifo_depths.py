@@ -342,7 +342,6 @@ class InsertAndSetFIFODepths(Transformation):
                         self.ind_map[node.onnx_node.name] = ind
                     self.mlo_max_iter = mlo_max_iter
                     reset_implementation(node)
-
         # insert stream infrastructure (DWC/FIFO)
         model = model.transform(InsertDWC())
         model = model.transform(InsertFIFO(create_shallow_fifos=True))
@@ -438,20 +437,26 @@ class InsertAndSetFIFODepths(Transformation):
                 # for every extw node we changed from external to decoupled,
                 # change back and reset implementation
                 if node.op_type in mlo_optypes:
-                    if node.name in modified_mlo_nodes:
+                    if node.name in modified_mlo_nodes and node.op_type.startswith("MVAU"):
                         node_inst = getCustomOp(node)
                         node_inst.set_nodeattr("mlo_max_iter", self.mlo_max_iter)
-                        if node.op_type.startswith("MVAU"):
-                            node_inst.set_nodeattr("mem_mode", "internal_decoupled")
-                        elif node.op_type == "Thresholding_rtl":
-                            # remove initializer again
-                            param_input = node.input[1]
-                            param_input_vi = model.get_tensor_valueinfo(param_input)
-                            model.del_initializer(param_input)
-                            model.graph.input.insert(self.ind_map[node.name], param_input_vi)
-                            model.graph.value_info.remove(param_input_vi)
+                        node_inst.set_nodeattr("mem_mode", "internal_decoupled")
                         reset_implementation(node_inst)
                         modified_mlo_nodes.remove(node.name)
+
+        sorted_ind_map = dict(sorted(self.ind_map.items(), key=lambda item: item[1]))
+        for k, v in sorted_ind_map.items():
+            node = model.get_node_from_name(k)
+            node_inst = getCustomOp(node)
+            node_inst.set_nodeattr("mlo_max_iter", self.mlo_max_iter)
+            # remove initializer again
+            param_input = node.input[1]
+            param_input_vi = model.get_tensor_valueinfo(param_input)
+            model.del_initializer(param_input)
+            model.graph.input.insert(self.ind_map[node.name], param_input_vi)
+            model.graph.value_info.remove(param_input_vi)
+            reset_implementation(node_inst)
+            modified_mlo_nodes.remove(node.name)
 
         assert (
             len(modified_mlo_nodes) == 0 and len(fifos.keys()) == 0
