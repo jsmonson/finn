@@ -489,9 +489,11 @@ class SimEngine:
 
                     length = 1 + self.arlen.read().as_unsigned()
                     size = 2 ** self.arsize.read().as_unsigned()
-                    if addr + (length * size) > len(self.img): # account for minimum dma burst read size of 32 bytes
+                    if addr + (length * size) > len(
+                        self.img
+                    ):  # account for minimum dma burst read size of 32 bytes
                         print(f"Range extends beyond range {addr=} {length=} {size=}")
-                        #assert addr + length * size < len(self.img), "Read extends beyond range."
+                        # assert addr + length * size < len(self.img), "Read extends beyond range."
 
                     self.queue.append((addr, length, size))
 

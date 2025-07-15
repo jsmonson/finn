@@ -1952,7 +1952,7 @@ def FinnLoopRewrite(op, M, cond, X, loop_out):
         iteration=iteration,
         inputDataType=idt,
         outputDataType=odt,
-        _domain ="finn.custom_op.fpgadataflow.rtl",
+        _domain="finn.custom_op.fpgadataflow.rtl",
         backend="fpgadataflow",
     )
 
