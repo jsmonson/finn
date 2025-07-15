@@ -58,7 +58,7 @@ module fetch_weights #(
     parameter int unsigned              DBG = 0,
 
     // Safely deducible parameters
-    parameter                          DS_BITS_BA = (SIMD+7)/8 * 8,
+    parameter                          DS_BITS_BA = (SIMD*WEIGHT_WIDTH+7)/8 * 8,
 	parameter                          WS_BITS_BA = (PE*SIMD*WEIGHT_WIDTH+7)/8 * 8,
     parameter logic[ADDR_BITS-1:0]     LAYER_OFFS = ((MH*MW*WEIGHT_WIDTH+7)/8) & ~7 // 8-byte aligned
 ) (
