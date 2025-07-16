@@ -26,7 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from qonnx.custom_op.regisry import register_domain
+from qonnx.custom_op.registry import register_domain
 
 # Register FINN domains (module path defaults to domain name)
 register_domain("finn.custom_op.fpgadataflow.rtl")
