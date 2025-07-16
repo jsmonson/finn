@@ -26,12 +26,10 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# The base class of all HWCustomOp specializations to HLS backend implementation
-from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
+from qonnx.custom_op.regisry import register_domain
 
-# The base class of all generic custom operations before specializing to either
-# HLS or RTL backend
-from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
+# Register FINN domains (module path defaults to domain name)
+register_domain("finn.custom_op.fpgadataflow.hls")
 
 # flake8: noqa
 # Disable linting from here, as all import will be flagged E402 and maybe F401
@@ -68,7 +66,7 @@ from finn.custom_op.fpgadataflow.hls.vectorvectoractivation_hls import VVAU_hls
 # Also import ElementwiseBinary variants
 from finn.custom_op.fpgadataflow.hls.elementwise_binary_hls import (
     ElementwiseBinaryOperation_hls,
-    ElementwiseAdd_hls, 
+    ElementwiseAdd_hls,
     ElementwiseSub_hls,
     ElementwiseMul_hls,
     ElementwiseDiv_hls,
