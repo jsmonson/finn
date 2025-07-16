@@ -28,7 +28,7 @@
 import numpy as np
 import os
 from qonnx.core.datatype import DataType
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.matrixvectoractivation import MVAU
 from finn.custom_op.fpgadataflow.rtlbackend import RTLBackend
@@ -41,7 +41,7 @@ except ModuleNotFoundError:
     PyVerilator = None
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.rtl", op_type="DynMVU_rtl")
+@register_custom_op
 class DynMVU_rtl(MVAU, RTLBackend):
     def __init__(self, onnx_node, **kwargs):
         super().__init__(onnx_node, **kwargs)

@@ -31,6 +31,13 @@
 # HLS or RTL backend
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 
+from qonnx.custom_op.registry import register_domain
+
+# Register FINN domains (module path defaults to domain name)
+register_domain("finn.custom_op.fpgadataflow")
+register_domain("finn.custom_op.fpgadataflow.hls")
+register_domain("finn.custom_op.fpgadataflow.rtl")
+
 # flake8: noqa
 # Disable linting from here, as all import will be flagged E402 and maybe F401
 

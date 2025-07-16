@@ -30,13 +30,13 @@ import numpy as np
 import warnings
 from qonnx.core.datatype import DataType
 from qonnx.custom_op.general.multithreshold import multithreshold
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 from qonnx.util.basic import interleave_matrix_outer_dim_from_partitions
 
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 
 
-@register_op(domain="finn.custom_op.fpgadataflow", op_type="Thresholding")
+@register_custom_op
 class Thresholding(HWCustomOp):
     """Abstraction layer for HW implementation of Thresholding."""
 

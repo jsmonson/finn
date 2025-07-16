@@ -28,7 +28,7 @@
 
 import numpy as np
 
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 from finn.custom_op.fpgadataflow.streamingdatawidthconverter import (
@@ -39,7 +39,7 @@ from finn.custom_op.fpgadataflow.streamingdatawidthconverter import (
 # tensor shapes are the same. performs data width conversion at the rtlsim level
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="StreamingDataWidthConverter_hls")
+@register_custom_op
 class StreamingDataWidthConverter_hls(StreamingDataWidthConverter, HLSBackend):
     """Class that corresponds to finn-hlslib StreamingDataWidthConverter_Batch
     function."""

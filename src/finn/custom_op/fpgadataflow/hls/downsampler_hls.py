@@ -29,10 +29,10 @@
 from finn.custom_op.fpgadataflow.downsampler import DownSampler
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="DownSampler_hls")
+@register_custom_op
 class DownSampler_hls(DownSampler, HLSBackend):
     """Corresponds to finn-hlslib ConvolutionInputGenerator_*_kernel1 function.
     Basically performs a down sampling of the image removing rows and columns."""

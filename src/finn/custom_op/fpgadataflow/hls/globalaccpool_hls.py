@@ -29,10 +29,10 @@
 from finn.custom_op.fpgadataflow.globalaccpool import GlobalAccPool
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="GlobalAccPool_hls")
+@register_custom_op
 class GlobalAccPool_hls(GlobalAccPool, HLSBackend):
     """Class that corresponds to finn-hlslib AccPool_Batch function."""
 

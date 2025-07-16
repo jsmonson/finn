@@ -29,7 +29,7 @@
 import numpy as np
 from math import ceil
 from qonnx.core.datatype import DataType
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.channelwise_op import ChannelwiseOp
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
@@ -42,7 +42,7 @@ from finn.util.data_packing import numpy_to_hls_code
 # the ... here can be any shape (representing groups of vectors)
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="ChannelwiseOp_hls")
+@register_custom_op
 class ChannelwiseOp_hls(ChannelwiseOp, HLSBackend):
     """Class that corresponds to finn-hls Thresholding_Batch function.
     It can implement a variety of channel-wise parametrized operations,

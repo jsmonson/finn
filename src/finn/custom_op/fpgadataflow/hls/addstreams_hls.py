@@ -29,10 +29,10 @@
 from finn.custom_op.fpgadataflow.addstreams import AddStreams
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="AddStreams_hls")
+@register_custom_op
 class AddStreams_hls(AddStreams, HLSBackend):
     """Class that corresponds to finn-hlslib AddStreams_Batch function."""
 

@@ -31,7 +31,7 @@ import math
 import numpy as np
 import warnings
 from qonnx.core.datatype import DataType
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.convolutioninputgenerator import (
     ConvolutionInputGenerator,
@@ -51,7 +51,7 @@ from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 # between the two layouts
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="ConvolutionInputGenerator_hls")
+@register_custom_op
 class ConvolutionInputGenerator_hls(ConvolutionInputGenerator, HLSBackend):
     """Class that corresponds to one of the 1D finn-hlslib ConvolutionInputGenerator
     (sliding window) function variants. Depending on the combination of

@@ -29,12 +29,12 @@
 
 import numpy as np
 from qonnx.core.datatype import DataType
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 
 
-@register_op(domain="finn.custom_op.fpgadataflow", op_type="StreamingConcat")
+@register_custom_op
 class StreamingConcat(HWCustomOp):
     """Abstraction layer for HW implementation of Concat.
     Only supports concatenating along the last axis."""

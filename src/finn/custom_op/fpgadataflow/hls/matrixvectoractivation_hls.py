@@ -30,7 +30,7 @@ import math
 import numpy as np
 import os
 from qonnx.core.datatype import DataType
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 from finn.custom_op.fpgadataflow.matrixvectoractivation import MVAU
@@ -45,7 +45,7 @@ from finn.util.data_packing import npy_to_rtlsim_input, rtlsim_output_to_npy
 # the ... here can be any shape (representing groups of vectors)
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="MVAU_hls")
+@register_custom_op
 class MVAU_hls(MVAU, HLSBackend):
     """Corresponds to finn-hlslib MatrixVectorActivation_Batch function."""
 

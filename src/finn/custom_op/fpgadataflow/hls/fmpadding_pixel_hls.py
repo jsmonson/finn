@@ -29,10 +29,10 @@
 from finn.custom_op.fpgadataflow.fmpadding_pixel import FMPadding_Pixel
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="FMPadding_Pixel_hls")
+@register_custom_op
 class FMPadding_Pixel_hls(FMPadding_Pixel, HLSBackend):
     def __init__(self, onnx_node, **kwargs):
         super().__init__(onnx_node, **kwargs)

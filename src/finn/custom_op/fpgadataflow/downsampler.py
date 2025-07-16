@@ -33,12 +33,12 @@ from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.registry import getCustomOp
 from qonnx.util.basic import qonnx_make_model
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 
 
-@register_op(domain="finn.custom_op.fpgadataflow", op_type="DownSampler")
+@register_custom_op
 class DownSampler(HWCustomOp):
     """Abstraction layer for HW implementation of DownSampling
     Basically performs a down sampling of the image removing rows and columns."""

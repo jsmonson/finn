@@ -34,7 +34,7 @@ import textwrap
 import warnings
 from qonnx.core.datatype import DataType
 from qonnx.custom_op.general.multithreshold import multithreshold
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 from qonnx.util.basic import (
     calculate_matvec_accumulator_range,
     interleave_matrix_outer_dim_from_partitions,
@@ -52,7 +52,7 @@ from finn.util.data_packing import numpy_to_hls_code, pack_innermost_dim_as_hex_
 # the ... here can be any shape (representing groups of vectors)
 
 
-@register_op(domain="finn.custom_op.fpgadataflow", op_type="MVAU")
+@register_custom_op
 class MVAU(HWCustomOp):
     """Abstraction layer for HW implementation of MatrixVectorActivation layers."""
 

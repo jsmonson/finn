@@ -29,13 +29,13 @@
 
 import numpy as np
 
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.concat import StreamingConcat
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="StreamingConcat_hls")
+@register_custom_op
 class StreamingConcat_hls(StreamingConcat, HLSBackend):
     """Streaming concatenation node with dynamically generated HLS.
     Only supports concatenating along the last axis."""

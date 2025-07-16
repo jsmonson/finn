@@ -27,13 +27,13 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from qonnx.custom_op.general.maxpoolnhwc import compute_pool_output_dim
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 from finn.custom_op.fpgadataflow.streamingmaxpool import StreamingMaxPool
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="StreamingMaxPool_hls")
+@register_custom_op
 class StreamingMaxPool_hls(StreamingMaxPool, HLSBackend):
     """Class that corresponds to finn-hlslib StreamingMaxPool_batch function."""
 

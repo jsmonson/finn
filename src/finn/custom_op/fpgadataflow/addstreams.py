@@ -29,12 +29,12 @@
 import numpy as np
 import warnings
 from qonnx.core.datatype import DataType
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 
 
-@register_op(domain="finn.custom_op.fpgadataflow", op_type="AddStreams")
+@register_custom_op
 class AddStreams(HWCustomOp):
     """Abstraction layer for HW implementation of AddStreams."""
 

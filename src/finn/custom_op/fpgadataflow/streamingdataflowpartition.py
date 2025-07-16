@@ -28,14 +28,14 @@
 
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.base import CustomOp
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.core.onnx_exec import execute_onnx
 
 # TODO move StreamingDataflowPartition to HLSCustomOp base class
 
 
-@register_op(domain="finn.custom_op.fpgadataflow", op_type="StreamingDataflowPartition")
+@register_custom_op
 class StreamingDataflowPartition(CustomOp):
     """Class that corresponds to the meta/container node StreamingDataflowPartition
     which is a placeholder for a group of fpgadataflow nodes that have been separated

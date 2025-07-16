@@ -32,7 +32,7 @@ import os
 import shutil
 from qonnx.core.datatype import DataType
 from qonnx.util.basic import roundup_to_integer_multiple
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.rtlbackend import RTLBackend
 from finn.custom_op.fpgadataflow.thresholding import Thresholding
@@ -44,7 +44,7 @@ from finn.util.data_packing import (
 )
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.rtl", op_type="Thresholding_rtl")
+@register_custom_op
 class Thresholding_rtl(Thresholding, RTLBackend):
     """Class that corresponds to finn-rtllib 'thresholding' function."""
 

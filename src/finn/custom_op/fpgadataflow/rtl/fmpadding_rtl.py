@@ -30,13 +30,13 @@ import math
 import os
 import shutil
 from qonnx.util.basic import roundup_to_integer_multiple
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 from finn.custom_op.fpgadataflow.fmpadding import FMPadding
 from finn.custom_op.fpgadataflow.rtlbackend import RTLBackend
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.rtl", op_type="FMPadding_rtl")
+@register_custom_op
 class FMPadding_rtl(FMPadding, RTLBackend):
     """CustomOp wrapper for the finn-rtllib fmpadding_axi component
     Supports adjusting the padding amount and spatial feature sizes at

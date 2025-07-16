@@ -29,10 +29,10 @@
 from finn.custom_op.fpgadataflow.duplicatestreams import DuplicateStreams
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 
-from qonnx.custom_op.registry import register_op
+from qonnx.custom_op.registry import register_custom_op
 
 
-@register_op(domain="finn.custom_op.fpgadataflow.hls", op_type="DuplicateStreams_hls")
+@register_custom_op
 class DuplicateStreams_hls(DuplicateStreams, HLSBackend):
     """Class that corresponds to finn-hlslib function of the same name."""
 
