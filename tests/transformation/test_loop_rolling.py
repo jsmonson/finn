@@ -6,7 +6,8 @@ from onnxscript.utils import graph_view_utils as gvu
 from onnxscript.rewriter import pattern
 from onnxscript.rewriter import pattern_builder_jsm as pb
 from onnxscript.rewriter import rewrite
-
+from qonnx.transformation.fold_constants import FoldConstants
+import qonnx.core.modelwrapper
 
 
 class SimpleSubModule(torch.nn.Module):
@@ -25,27 +26,13 @@ class SimpleModule(torch.nn.Module):
     def __init__(self, input_size=10, hidden_size=20, num_layers=4, mul_val=200, output_size=None):
         super(SimpleModule, self).__init__()
         self.mul_val = mul_val
-        if output_size is None:
-            output_size = hidden_size + (num_layers - 1) * 10
         
         self.num_layers = num_layers
         self.layers = torch.nn.ModuleList()
-        
+               
         # Create the linear layers
         for i in range(num_layers):
-            if i == 0:
-                # First layer: input_size -> hidden_size
-                in_features = input_size
-                out_features = hidden_size
-            elif i == num_layers - 1:
-                # Last layer: previous_size -> output_size
-                in_features = hidden_size + (i - 1) * 10
-                out_features = output_size
-            else:
-                # Middle layers: increase by 10 each time
-                in_features = hidden_size + (i - 1) * 10
-                out_features = hidden_size + i * 10
-            self.layers.append(SimpleSubModule(in_features, out_features, mul_val=self.mul_val))
+            self.layers.append(SimpleSubModule(input_size, hidden_size, mul_val=self.mul_val))
 
     def forward(self, x):
         for layer in self.layers:
@@ -58,18 +45,26 @@ def export_model_to_onnx(input_size=10, hidden_size=20, num_layers=4, output_siz
     model = SimpleModule(input_size=input_size, hidden_size=hidden_size, 
                         num_layers=num_layers, output_size=output_size, mul_val=150)
     model.eval()
-    
     # Create a dummy input tensor
-    dummy_input = torch.randn(1, input_size)
+    dummy_input = torch.randn(hidden_size, input_size)
     
     # Export the model to ONNX format
     onnx_path = f"simple_module_{num_layers}layers.onnx"
     torch.onnx.export(model, dummy_input, onnx_path, opset_version=18, dynamo=True)
-    
-    # Load the ONNX model to verify
+
     onnx_model = onnx.load(onnx_path)
     onnx.checker.check_model(onnx_model)
     
+    # Add finn_datatype Quantization Annotation for all tensors
+    onnx_ir = onnxscript.ir.serde.deserialize_model(onnx_model)
+    for node in onnx_ir.graph._nodes:
+        for tensor in node.inputs + node.outputs:
+            if "finn_datatype" not in tensor.meta.get("quant_parameter_tensor_names", {}):
+                tensor.meta["quant_parameter_tensor_names"] = {"finn_datatype": "FLOAT32"}
+    onnx_model = onnxscript.ir.serde.serialize_model(onnx_ir)
+    onnx.save(onnx_model, onnx_path)
+
+    # Load the ONNX model to verify    
     print(f"Model exported successfully to {onnx_path}")
     print(f"Model has {num_layers} layers with input size {input_size}")
     return onnx_path
@@ -140,19 +135,19 @@ def build_loop_replace_pattern(graph, LoopBody):
         loop_outputs.append(output)
         graph_outputs.append(output)
     
-    #g_loop_body = LoopBody.function._graph
-    #odt = g_loop_body.outputs[0].meta["quant_parameter_tensor_names"]["finn_datatype"]
-    #idt = odt
+    g_loop_body = LoopBody.function._graph
+    odt = g_loop_body.outputs[0].meta["quant_parameter_tensor_names"]["finn_datatype"]
+    idt = odt
     body_attr = ir.Attr(name='body', type=ir.AttributeType.GRAPH, value=LoopBody.function._graph)
     backend_attr = ir.Attr(name='backend', type=ir.AttributeType.STRING, value='fpgadataflow')
     iteration = ir.Attr(name='iteration', type=ir.AttributeType.INT, value=iterations)
-    #inputdatatype_attr = ir.Attr(name='inputDataType', type=ir.AttributeType.STRING, value=idt)
-    #outputdatatype_attr = ir.Attr(name='outputDataType', type=ir.AttributeType.STRING, value=odt)
+    inputdatatype_attr = ir.Attr(name='inputDataType', type=ir.AttributeType.STRING, value=idt)
+    outputdatatype_attr = ir.Attr(name='outputDataType', type=ir.AttributeType.STRING, value=odt)
 
     finn_loop_node = ir.Node("finn.custom_op.fpgadataflow.rtl", 
                              'FINNLoop', 
                              inputs=loop_inputs, 
-                             attributes=[body_attr, backend_attr, iteration], 
+                             attributes=[body_attr, backend_attr, iteration, inputdatatype_attr, outputdatatype_attr], 
                              outputs=loop_outputs, 
                              graph=None)
 
@@ -185,7 +180,7 @@ def same_values(inputs):
 
 
 def test_export_model():
-    input_size = 10
+    input_size = 20
     hidden_size = 20
     num_layers = 6
     output_size = None
@@ -315,8 +310,6 @@ def test_export_model():
     
     loop_replace_pattern = build_loop_replace_pattern(model_layers_replaced.graph, LoopBody)
 
-
-
     change_function_calls_to_loop = pattern.RewriteRule(
         LoopMatchPattern,
         loop_replace_pattern
@@ -326,9 +319,12 @@ def test_export_model():
     print(f"Rolled {count} function calls into a loop operator")
     
     model = onnxscript.ir.serde.serialize_model(model_layers_replaced)
-    onnx.save(model, 'simple_module_layers_replaced_loop.onnx')
     
-    #model = model.transform(FoldConstants())
+    model_wrapper = qonnx.core.modelwrapper.ModelWrapper(model)
+
+    model = model_wrapper.transform(FoldConstants())
+    
+    model.save('simple_module_layers_replaced_loop.onnx')
     
     
     # Check the number of nodes in the graph
