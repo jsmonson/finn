@@ -20,6 +20,17 @@ import onnxscript
 import onnx
 import qonnx
 
+def get_constant_from_value(value):
+    """
+    Get the constant value of a tensor.
+    """
+    # Handle input and/or inititalizer values
+    if value.producer() is None:
+        return value.const_value.numpy()
+    elif value.producer().op_type == "Constant":
+        return value.producer().attributes['value'].value.numpy()
+
+
 def same_values(inputs):
     """
     Check if all inputs have the same constant value.
@@ -27,10 +38,10 @@ def same_values(inputs):
     if not inputs:
         return False
     
-    first_value = inputs[0].const_value.numpy()
+    first_value = get_constant_from_value(inputs[0])
     
     for inp in inputs[1:]:
-        if not np.array_equal(first_value, inp.const_value.numpy()):
+        if not np.array_equal(first_value, get_constant_from_value(inp)):
             return False
             
     return True
@@ -133,7 +144,8 @@ class LoopExtraction(Transformation):
         assert isinstance(hierarchy_list, list), "Hierarchy list must be a list of strings"
         assert all(isinstance(item, str) for item in hierarchy_list), "All items in hierarchy list must be strings"
         self.hierarchy_list = hierarchy_list
-        
+        self.loop_body_template = None
+               
     def apply(self, model: ModelWrapper) -> Tuple[ModelWrapper, bool]:
         # Apply the loop extraction transformation
         # Extract the Loop Body from ONNX metadata
@@ -156,27 +168,13 @@ class LoopExtraction(Transformation):
         loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=10)
         proto = onnxscript.ir.serde.serialize_model(loop_body_model)
         onnx.save(proto, 'loop-body-template.onnx')        
-        
-        return (model, False)
-
-
-class LoopRolling(Transformation):
-    """Boilerplate Transformation for loop rolling in fpgadataflow."""
-
-    def __init__(self):
-        super().__init__()
-        
-    def apply(self, model: ModelWrapper) -> Tuple[ModelWrapper, bool]:
-        
-        model_ir = onnxscript.ir.serde.deserialize_model(model.model)
-        graph = model_ir.graph
         print("Load Loop Body Template")
-        LoopBody = pb.LoopBodyTemplate('loop-body-template.onnx')
+        self.loop_body_template = pb.LoopBodyTemplate('loop-body-template.onnx')
         
         # Replace instances of the loop body with a function call to the loop body
         change_layers_to_function_calls = pattern.RewriteRule(
-        LoopBody.pattern,
-        LoopBody.function_replace
+        self.loop_body_template.pattern,
+        self.loop_body_template.function_replace
         )
         print("Replacing layers with function calls")
         
@@ -184,14 +182,31 @@ class LoopRolling(Transformation):
             model_ir,
             pattern_rewrite_rules = [change_layers_to_function_calls]
         )
-        
-        model_layers_replaced.functions[LoopBody.function.identifier()] = LoopBody.function
+
+        model_layers_replaced.functions[self.loop_body_template.function.identifier()] = self.loop_body_template.function
         model_layers_replaced.graph.opset_imports['loop']=0
 
         model_proto = onnxscript.ir.serde.serialize_model(model_layers_replaced)
-
+        model.model = model_proto
         onnx.save(model_proto, 'simple_module_layers_replaced.onnx')
         
+        
+        return (model, False)
+
+
+class LoopRolling(Transformation):
+    """Boilerplate Transformation for loop rolling in fpgadataflow."""
+
+    def __init__(self, loop_body_template):
+        super().__init__()
+        self.loop_body_template = loop_body_template
+        
+    def apply(self, model: ModelWrapper) -> Tuple[ModelWrapper, bool]:
+        
+        model_ir = onnxscript.ir.serde.deserialize_model(model.model)
+        graph = model_ir.graph
+        LoopBody = self.loop_body_template
+                     
         #################################
         ## I/O Normalization for Loop Body
         #################################
@@ -201,7 +216,7 @@ class LoopRolling(Transformation):
         # TODO: write a check to ensure that there is only one
         #       set of consecutive nodes.
         nodes = pb.find_nodes_of_optype(graph, LoopBody.function.name)
-
+        
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
         input_swaps = []
@@ -248,10 +263,11 @@ class LoopRolling(Transformation):
         # Skip the (all) Activation inputs (have been swapped to beginning of the list)
         for index in range(activations, len(nodes[0].inputs)):
             inputs    = []
-            producers = []
             for node in nodes:
+                print(f"Node {node.name} {node.inputs[index]}")
                 cinput = node.inputs[index]
                 inputs.append(cinput)
+            
             if pb.same(inputs) or same_values(inputs):
                 # Constant with Respect to Loop
                 LoopBody.signature[index] = pb.LoopBodyInputType.CONSTANT
@@ -264,19 +280,19 @@ class LoopRolling(Transformation):
         ## End I/O Normalization for Loop Body
         ###################################################
         
-        LoopMatchPattern,nodes = LoopBody.build_function_match_pattern(model_layers_replaced.graph, use_iteration_ext=False)
+        LoopMatchPattern,nodes = LoopBody.build_function_match_pattern(model_ir.graph, use_iteration_ext=False)
         
-        loop_replace_pattern = build_loop_replace_pattern(model_layers_replaced.graph, LoopBody)
+        loop_replace_pattern = build_loop_replace_pattern(model_ir.graph, LoopBody)
 
         change_function_calls_to_loop = pattern.RewriteRule(
             LoopMatchPattern,
             loop_replace_pattern
         )
         rewrite_set = pattern.RewriteRuleSet([change_function_calls_to_loop])
-        count = rewrite_set.apply_to_model(model_layers_replaced, verbose=None)
+        count = rewrite_set.apply_to_model(model_ir, verbose=None)
         print(f"Rolled {count} function calls into a loop operator")
         
-        model = onnxscript.ir.serde.serialize_model(model_layers_replaced)
+        model = onnxscript.ir.serde.serialize_model(model_ir)
         
         model_wrapper = qonnx.core.modelwrapper.ModelWrapper(model)
 
