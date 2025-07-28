@@ -368,6 +368,11 @@ class DataflowBuildConfig:
     #: If set to commit hash specified version will be used
     cpp_driver_version: Optional[str] = "latest"
 
+    #: (Optional) List of (kernel_name, backend_name) tuples specifying which
+    #: hardware backends to use for each kernel type during hardware inference.
+    #: Used by BrainSmith integration for kernel-specific hardware mapping.
+    kernel_selections: Optional[List[tuple]] = None
+
     def _resolve_hls_clk_period(self):
         if self.hls_clk_period_ns is None:
             # use same clk for synth and hls if not explicitly specified

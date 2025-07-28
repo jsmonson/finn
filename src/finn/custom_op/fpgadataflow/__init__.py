@@ -36,6 +36,29 @@ from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 
 # Import all custom ops - they will be discovered automatically via namespace
 import finn.custom_op.fpgadataflow.elementwise_binary
+# Also import ElementwiseBinary variants explicitly
+from finn.custom_op.fpgadataflow.elementwise_binary import (
+    ElementwiseAdd,
+    ElementwiseAnd,
+    ElementwiseBinaryOperation,
+    ElementwiseBitwiseAnd,
+    ElementwiseBitwiseOr,
+    ElementwiseBitwiseXor,
+    ElementwiseDiv,
+    ElementwiseEqual,
+    ElementwiseFloat2Int,
+    ElementwiseFloatCast,
+    ElementwiseGreater,
+    ElementwiseGreaterOrEqual,
+    ElementwiseLess,
+    ElementwiseLessOrEqual,
+    ElementwiseMaximum,
+    ElementwiseMinimum,
+    ElementwiseMul,
+    ElementwiseOr,
+    ElementwiseSub,
+    ElementwiseXor,
+)
 from finn.custom_op.fpgadataflow.addstreams import AddStreams
 from finn.custom_op.fpgadataflow.channelwise_op import ChannelwiseOp
 from finn.custom_op.fpgadataflow.concat import StreamingConcat
