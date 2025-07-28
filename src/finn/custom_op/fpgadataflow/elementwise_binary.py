@@ -22,8 +22,6 @@ from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.general.quant import max_int, min_int
 
-# Utility for registering HWCustomOp implementations into the module scope
-
 # Derive custom operators form the FINN base custom op
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 

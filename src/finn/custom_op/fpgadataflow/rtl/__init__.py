@@ -29,7 +29,7 @@
 # flake8: noqa
 # Disable linting from here, as all import will be flagged E402 and maybe F401
 
-# Import all RTL custom ops - they will auto-register via @register_op decorator
+# Import all RTL custom ops - they will be discovered automatically via namespace
 from finn.custom_op.fpgadataflow.rtl.convolutioninputgenerator_rtl import (
     ConvolutionInputGenerator_rtl,
 )
