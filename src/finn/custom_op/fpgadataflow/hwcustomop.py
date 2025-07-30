@@ -220,14 +220,14 @@ class HWCustomOp(CustomOp):
         back to one"""
         finnxsi.reset_rtlsim(sim)
 
-    def rtlsim_multi_io(self, sim, io_dict):
+    def rtlsim_multi_io(self, sim, io_dict, sname="_V"):
         "Run rtlsim for this node, supports multiple i/o streams."
         num_out_values = self.get_number_output_values()
         total_cycle_count = finnxsi.rtlsim_multi_io(
             sim,
             io_dict,
             num_out_values,
-            sname="_V",
+            sname=sname,
             liveness_threshold=get_liveness_threshold_cycles(),
         )
 
@@ -245,12 +245,11 @@ class HWCustomOp(CustomOp):
         by every node that needs to generate parameters."""
         pass
 
-    @abstractmethod
     def get_number_output_values(self):
         """Function to get the number of expected output values,
         is member function of HWCustomOp class but has to be filled
         by every node."""
-        pass
+        return np.prod(self.get_folded_output_shape()[:-1])
 
     @abstractmethod
     def get_input_datatype(self, ind=0):

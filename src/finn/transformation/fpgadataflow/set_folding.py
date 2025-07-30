@@ -27,6 +27,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import functools
 import numpy as np
 import warnings
 from qonnx.custom_op.registry import getCustomOp
@@ -42,6 +43,15 @@ def divisors(num):
     for x in range(1, num + 1):
         if (num % x) == 0:
             yield x
+
+
+def common_divisors(numbers):
+    separate_divisors = []
+    for num in numbers:
+        individual_divisors = list(divisors(num))
+        separate_divisors.append(individual_divisors)
+
+    return functools.reduce(np.intersect1d, separate_divisors)
 
 
 class SetFolding(Transformation):
@@ -108,18 +118,18 @@ class SetFolding(Transformation):
             "Thresholding_rtl",
         ]
         # these ops use SIMD parallelism, up to a max value of NumChannels
-        # ConvolutionInputGenerator* has a special case when depthwise=1
+        # ConvolutionInputGenerator has a special case when depthwise=1
         # ConvolutionInputGenerator_rtl supports additional parallelism by
         # setting parallel_window=1 mode after maxing out SIMD
         simd_ops = [
-            "DownSampler_hls",
-            "FMPadding_hls",
+            "FMPadding_rtl",
             "FMPadding_Pixel_hls",
-            "ConvolutionInputGenerator_hls",
             "ConvolutionInputGenerator_rtl",
             "QuantSoftmax_hls",
             "Shuffle_hls",
             "LayerNorm_hls",
+            "StreamingSplit_hls",
+            "StreamingConcat_hls",
         ]
         # these ops are preceded by depthwise SWG and have special behavior,
         # as explained in the SetFolding docstring
@@ -217,6 +227,14 @@ class SetFolding(Transformation):
                     else:
                         # depthwise SWGs are handled separately
                         continue
+                elif op_type == "StreamingConcat_hls" or op_type == "StreamingSplit_hls":
+                    node_inst.set_nodeattr("SIMD", 1)
+                    channels_per_stream = node_inst.get_nodeattr("ChannelsPerStream")
+                    for simd_val in common_divisors(channels_per_stream):
+                        node_inst.set_nodeattr("SIMD", simd_val)
+                        cyc = node_inst.get_exp_cycles()
+                        if cyc < self.target_cycles_per_frame:
+                            break
                 else:
                     max_simd = node_inst.get_nodeattr("NumChannels")
                     self.optimize_attribute_val(node_inst, max_simd, "SIMD")

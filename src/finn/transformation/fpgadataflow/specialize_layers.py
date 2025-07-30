@@ -26,36 +26,28 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import importlib
 import numpy as np
 import warnings
 from onnx import helper
-from qonnx.custom_op.registry import getCustomOp
+from qonnx.custom_op.registry import getCustomOp, hasCustomOp
 from qonnx.transformation.base import Transformation
 
-from finn.custom_op.fpgadataflow.hls import custom_op as hls_variants
-from finn.custom_op.fpgadataflow.rtl import custom_op as rtl_variants
 from finn.util.basic import get_dsp_block, is_versal
 
 
 def _determine_impl_style(node, fpgapart, model):
     optype = node.op_type
 
-    try:
-        domain_module = importlib.import_module(f"{node.domain}.hls")
-        hls_variant_registry = hls_variants | domain_module.custom_op
-    except ModuleNotFoundError:
-        hls_variant_registry = hls_variants
+    # Use new hasCustomOp API to check for HLS/RTL variants
+    # First check in the node's domain
+    hls_variant = hasCustomOp(f"{node.domain}.hls", f"{optype}_hls")
+    rtl_variant = hasCustomOp(f"{node.domain}.rtl", f"{optype}_rtl")
 
-    try:
-        domain_module = importlib.import_module(f"{node.domain}.rtl")
-        rtl_variant_registry = rtl_variants | domain_module.custom_op
-    except ModuleNotFoundError:
-        rtl_variant_registry = rtl_variants
-
-    # check if there is an HLS or RTL variant or both
-    hls_variant = optype + "_hls" in hls_variant_registry.keys()
-    rtl_variant = optype + "_rtl" in rtl_variant_registry.keys()
+    # If not found in node's domain, check in FINN's default domains
+    if not hls_variant:
+        hls_variant = hasCustomOp("finn.custom_op.fpgadataflow.hls", f"{optype}_hls")
+    if not rtl_variant:
+        rtl_variant = hasCustomOp("finn.custom_op.fpgadataflow.rtl", f"{optype}_rtl")
 
     # check if user has specified a preferred_impl_style
     node_inst = getCustomOp(node)
@@ -101,18 +93,6 @@ def _determine_impl_style(node, fpgapart, model):
     # check if user setting can be fulfilled
     # otherwise change impl_style
     elif impl_style == "hls":
-        if optype == "ConvolutionInputGenerator":
-            if not _swg_hls_possible(node):
-                warn_str = (
-                    """Settings are not supported in HLS. Node %s will automatically be
-                        set to RTL variant."""
-                    % node.name
-                )
-                warnings.warn(warn_str)
-                return "rtl"
-            else:
-                return "hls"
-
         if hls_variant:
             return "hls"
         elif rtl_variant:
@@ -207,40 +187,6 @@ def _dwc_determine_impl_style(node):
         return "hls"
 
 
-def _swg_hls_possible(node):
-    # there are some constraints to
-    # the HLS variant of the SWG
-    # first constraint to check is
-    # if user has set dynamic_mode to 1
-    # this is only supported in rtl variant
-    swg = getCustomOp(node)
-    if swg.get_nodeattr("dynamic_mode"):
-        return False
-    # the 2D HLS implementation for SWG
-    # can only be used for square inputs
-    # and no dilation
-    if swg.get_nodeattr("is1D"):
-        return True
-    else:
-        # extract all attributes to check
-        k = swg.get_nodeattr("ConvKernelDim")
-        ifm_dim = swg.get_nodeattr("IFMDim")
-        ofm_dim = swg.get_nodeattr("OFMDim")
-        s = swg.get_nodeattr("Stride")
-        d = swg.get_nodeattr("Dilation")
-        # check if square and dilation=1
-        if (
-            k[0] == k[1]
-            and ifm_dim[0] == ifm_dim[1]
-            and ofm_dim[0] == ofm_dim[1]
-            and s[0] == s[1]
-            and d[0] == d[1] == 1
-        ):
-            return True
-        else:
-            return False
-
-
 def _mvu_rtl_possible(n, fpgapart, model):
     # Checks whether RTL-based MVU is supported
     # Currently, for DSP48 we only support computations up to
@@ -317,7 +263,13 @@ class SpecializeLayers(Transformation):
         graph_modified = False
         for node in graph.node:
             # Skip nodes that are not hw layers
-            if not node.domain.endswith(".custom_op.fpgadataflow"):
+            if not (
+                node.domain.endswith(".custom_op.fpgadataflow")
+                or (
+                    node.domain.startswith("brainsmith.kernels")
+                    and not (node.domain.endswith(".hls") or node.domain.endswith(".rtl"))
+                )
+            ):
                 continue
             node_ind += 1
             impl_style = _determine_impl_style(node, self.fpgapart, model)

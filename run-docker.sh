@@ -69,14 +69,17 @@ SCRIPT=$(readlink -f "$0")
 # Absolute path this script is in, thus /home/user/bin
 SCRIPTPATH=$(dirname "$SCRIPT")
 
+if [ -z "$FINN_DEPS_DIR" ];then
+  FINN_DEPS_DIR="$SCRIPTPATH/deps"
+fi
+
 # the settings below will be taken from environment variables if available,
-# otherwise the defaults below will be used
+# otherwise the defaults below will be used (only works when variables are unset)
 : ${JUPYTER_PORT=8888}
 : ${JUPYTER_PASSWD_HASH=""}
 : ${NETRON_PORT=8081}
 : ${LOCALHOST_URL="localhost"}
 : ${NUM_DEFAULT_WORKERS=4}
-: ${FINN_DEPS_DIR="$SCRIPTPATH/deps"}
 : ${FINN_SSH_KEY_DIR="$SCRIPTPATH/ssh_keys"}
 : ${PLATFORM_REPO_PATHS="/opt/xilinx/platforms"}
 : ${XRT_DEB_VERSION="xrt_202220.2.14.354_22.04-amd64-xrt"}
@@ -88,7 +91,7 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 : ${FINN_DOCKER_BUILD_EXTRA=""}
 : ${FINN_SKIP_DEP_REPOS="0"}
 : ${FINN_SKIP_BOARD_FILES="0"}
-: ${OHMYXILINX="${SCRIPTPATH}/deps/oh-my-xilinx"}
+: ${OHMYXILINX="$FINN_DEPS_DIR/oh-my-xilinx"}
 : ${NVIDIA_VISIBLE_DEVICES=""}
 : ${DOCKER_BUILDKIT="1"}
 : ${FINN_SINGULARITY=""}
@@ -222,9 +225,26 @@ if [ ! -z "$IMAGENET_VAL_PATH" ];then
   DOCKER_EXEC+="-e IMAGENET_VAL_PATH=$IMAGENET_VAL_PATH "
 fi
 if [ ! -z "$FINN_XILINX_PATH" ];then
-  VIVADO_PATH="$FINN_XILINX_PATH/Vivado/$FINN_XILINX_VERSION"
-  VITIS_PATH="$FINN_XILINX_PATH/Vitis/$FINN_XILINX_VERSION"
-  HLS_PATH="$FINN_XILINX_PATH/Vitis_HLS/$FINN_XILINX_VERSION"
+  if [[ "$FINN_XILINX_VERSION" =~ ^20([0-9]{2})\.(1|2)$ ]]; then
+    year="${BASH_REMATCH[1]}"
+    minor="${BASH_REMATCH[2]}"
+
+    # Convert to integers for comparison
+    year=$((10#$year))
+    minor=$((10#$minor))
+
+    if (( year > 24 )) || { (( year == 24 )) && (( minor > 2 )); }; then
+      VIVADO_PATH="$FINN_XILINX_PATH/$FINN_XILINX_VERSION/Vivado"
+      VITIS_PATH="$FINN_XILINX_PATH/$FINN_XILINX_VERSION/Vitis"
+      HLS_PATH="$FINN_XILINX_PATH/$FINN_XILINX_VERSION/Vitis"
+    else
+      VIVADO_PATH="$FINN_XILINX_PATH/Vivado/$FINN_XILINX_VERSION"
+      VITIS_PATH="$FINN_XILINX_PATH/Vitis/$FINN_XILINX_VERSION"
+      HLS_PATH="$FINN_XILINX_PATH/Vitis_HLS/$FINN_XILINX_VERSION"
+    fi
+  else
+    echo "FINN_XILINX_VERSION ($FINN_XILINX_VERSION) is not in the correct format (YYYY.1 or YYYY.2)"
+  fi
   DOCKER_EXEC+="-v $FINN_XILINX_PATH:$FINN_XILINX_PATH "
   if [ -d "$VIVADO_PATH" ];then
     DOCKER_EXEC+="-e "XILINX_VIVADO=$VIVADO_PATH" "

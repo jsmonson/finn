@@ -28,7 +28,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-QONNX_COMMIT="66b4c68e238c7b63d225496821cf0b8fd9ec42ee"
+QONNX_COMMIT="9153395712b5617d38b058900c873c6fc522b343"
 FINN_EXP_COMMIT="0724be21111a21f0d81a072fccc1c446e053f851"
 BREVITAS_COMMIT="4617f7bd136e96fa21c7f76e3c7e2e37fe563837"
 CNPY_COMMIT="8c82362372ce600bbd1cf11d64661ab69d38d7de"
@@ -62,20 +62,25 @@ XIL_BDF_DIR="xil-bdf"
 RFSOC4x2_BDF_DIR="rfsoc4x2-bdf"
 KV260_SOM_BDF_DIR="kv260-som-bdf"
 
-# absolute path to this script, e.g. /home/user/bin/foo.sh
-SCRIPT=$(readlink -f "$0")
-# absolute path this script is in, thus /home/user/bin
-SCRIPTPATH=$(dirname "$SCRIPT")
+# if FINN_DEPS_DIR is set, use that variable to pull dependencies
+# otherwise default to scriptpath + /deps
+if [ -z "$FINN_DEPS_DIR" ];then
+    # absolute path to this script, e.g. /home/user/bin/foo.sh
+    SCRIPT=$(readlink -f "$0")
+    # absolute path this script is in, thus /home/user/bin
+    SCRIPTPATH=$(dirname "$SCRIPT")
+    FINN_DEPS_DIR="$SCRIPTPATH/deps"
+fi
 
 fetch_repo() {
     # URL for git repo to be cloned
     REPO_URL=$1
     # commit hash for repo
     REPO_COMMIT=$2
-    # directory to clone to under deps/
+    # directory to clone to under $FINN_DEPS_DIR
     REPO_DIR=$3
     # absolute path for the repo local copy
-    CLONE_TO=$SCRIPTPATH/deps/$REPO_DIR
+    CLONE_TO=$FINN_DEPS_DIR/$REPO_DIR
 
     # clone repo if dir not found
     if [ ! -d "$CLONE_TO" ]; then
@@ -99,17 +104,17 @@ fetch_repo() {
 
 fetch_board_files() {
     echo "Downloading and extracting board files..."
-    mkdir -p "$SCRIPTPATH/deps/board_files"
+    mkdir -p "$FINN_DEPS_DIR/board_files"
     OLD_PWD=$(pwd)
-    cd "$SCRIPTPATH/deps/board_files"
+    cd "$FINN_DEPS_DIR/board_files"
     wget -q https://github.com/cathalmccabe/pynq-z1_board_files/raw/master/pynq-z1.zip
     wget -q https://dpoauwgwqsy2x.cloudfront.net/Download/pynq-z2.zip
     unzip -q pynq-z1.zip
     unzip -q pynq-z2.zip
-    cp -r $SCRIPTPATH/deps/$AVNET_BDF_DIR/* $SCRIPTPATH/deps/board_files/
-    cp -r $SCRIPTPATH/deps/$XIL_BDF_DIR/boards/Xilinx/rfsoc2x2 $SCRIPTPATH/deps/board_files/;
-    cp -r $SCRIPTPATH/deps/$RFSOC4x2_BDF_DIR/board_files/rfsoc4x2 $SCRIPTPATH/deps/board_files/;
-    cp -r $SCRIPTPATH/deps/$KV260_SOM_BDF_DIR/boards/Xilinx/kv260_som $SCRIPTPATH/deps/board_files/;
+    cp -r $FINN_DEPS_DIR/$AVNET_BDF_DIR/* $FINN_DEPS_DIR/board_files/
+    cp -r $FINN_DEPS_DIR/$XIL_BDF_DIR/boards/Xilinx/rfsoc2x2 $FINN_DEPS_DIR/board_files/;
+    cp -r $FINN_DEPS_DIR/$RFSOC4x2_BDF_DIR/board_files/rfsoc4x2 $FINN_DEPS_DIR/board_files/;
+    cp -r $FINN_DEPS_DIR/$KV260_SOM_BDF_DIR/boards/Xilinx/kv260_som $FINN_DEPS_DIR/board_files/;
     cd $OLD_PWD
 }
 
@@ -129,17 +134,17 @@ if [ "$FINN_SKIP_BOARD_FILES" = "1" ]; then
     echo "Skipping download and verification of board files"
 else
     # download extra board files and extract if needed
-    if [ ! -d "$SCRIPTPATH/deps/board_files" ]; then
+    if [ ! -d "$FINN_DEPS_DIR/board_files" ]; then
         fetch_board_files
     else
-        cd $SCRIPTPATH
-        BOARD_FILES_MD5=$(find deps/board_files/ -type f -exec md5sum {} \; | sort -k 2 | md5sum | cut -d' ' -f 1)
+        cd $FINN_DEPS_DIR
+        BOARD_FILES_MD5=$(find board_files/ -type f -exec md5sum {} \; | sort -k 2 | md5sum | cut -d' ' -f 1)
         if [ "$BOARD_FILES_MD5" = "$EXP_BOARD_FILES_MD5" ]; then
             echo "Verified board files folder content md5: $BOARD_FILES_MD5"
         else
             echo "Board files folder md5: expected $BOARD_FILES_MD5 found $EXP_BOARD_FILES_MD5"
             echo "Board files folder content mismatch, removing and re-downloading"
-            rm -rf deps/board_files/
+            rm -rf board_files/
             fetch_board_files
         fi
     fi

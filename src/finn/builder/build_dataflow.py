@@ -68,12 +68,12 @@ def resolve_build_steps(cfg: DataflowBuildConfig, partial: bool = True):
         steps = default_build_dataflow_steps
     steps_as_fxns = []
     for transform_step in steps:
-        if type(transform_step) is str:
-            # lookup step function from step name
-            steps_as_fxns.append(build_dataflow_step_lookup[transform_step])
-        elif callable(transform_step):
+        if callable(transform_step):
             # treat step as function to be called as-is
             steps_as_fxns.append(transform_step)
+        elif type(transform_step) is str:
+            # lookup step function from step name
+            steps_as_fxns.append(build_dataflow_step_lookup[transform_step])
         else:
             raise Exception("Could not resolve build step: " + str(transform_step))
     if partial:
