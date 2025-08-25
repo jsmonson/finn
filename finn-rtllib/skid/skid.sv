@@ -29,6 +29,15 @@ module skid #(
 
 	typedef logic [DATA_WIDTH-1:0]  dat_t;
 
+	// Required SRL Capacity
+	localparam int unsigned  CAP = 2*FEED_STAGES + 2;
+	initial begin // Check Capacity limit of SRL16
+		if(CAP > 16) begin
+			$error("%m: Requested number of %0d FEED_STAGES exceeds SRL capacity.");
+			$finish;
+		end
+	end
+
 	uwire  aload;
 	uwire dat_t  adat;
 	uwire [3:0]  aptr;
@@ -60,23 +69,13 @@ module skid #(
 	end : genNoFeedStages
 	else begin : genFeedStages
 
-		// Credit-based Input Throttling
-		localparam int unsigned  CAP = 2*FEED_STAGES + 2;
-
-		// Check Capacity limit of SRL16
-		initial begin
-			if(CAP > 16) begin
-				$error("%m: Requested number of %0d FEED_STAGES exceeds SRL capacity.");
-				$finish;
-			end
-		end
-
-		// Dumb input stages to ease long-distance routing
 		if(1) begin : blkInputFeed
 
+			// Credit-based Input Throttling
 			logic signed [$clog2(CAP):0]  ICnt = -CAP;  // -CAP, ..., -1, 0
 			assign	irdy = ICnt[$left(ICnt)];
 
+			// Dumb input stages to ease long-distance routing
 			(* SHREG_EXTRACT = "no" *) dat_t  IDat[FEED_STAGES] = '{ default: 'x };
 			(* SHREG_EXTRACT = "no" *) logic  IVld[FEED_STAGES] = '{ default: 0 };
 			(* SHREG_EXTRACT = "no" *) logic  IInc[FEED_STAGES] = '{ default: 0 };
@@ -134,33 +133,48 @@ module skid #(
 	// Buffer Memory: SRL:CAP + Reg (no reset)
 
 	// Elastic SRL
+	localparam bit  BEHAVIORAL =
+// synthesis translate_off
+		1 ||
+// synthesis translate_on
+		0;
+
 	uwire dat_t  bdat;
-	for(genvar  i = 0; i < DATA_WIDTH; i++) begin : genSRL
-		SRL16E srl (
-			.CLK(clk),
-			.CE(aload),
-			.D(adat[i]),
-			.A3(aptr[3]), .A2(aptr[2]), .A1(aptr[1]), .A0(aptr[0]),
-			.Q(bdat[i])
-		);
+	if(BEHAVIORAL) begin : genBehav
+		(* SHREG_EXTRACT = "yes" *) dat_t  SRL[CAP];
+		always_ff @(posedge clk) begin
+			if(aload)  SRL <= { adat, SRL[0:CAP-2] };
+		end
+		assign	bdat = SRL[aptr];
+	end : genBehav
+	else begin : genSRL
+		for(genvar  i = 0; i < DATA_WIDTH; i++) begin : genBit
+			SRL16E srl (
+				.CLK(clk),
+				.CE(aload),
+				.D(adat[i]),
+				.A3(aptr[3]), .A2(aptr[2]), .A1(aptr[1]), .A0(aptr[0]),
+				.Q(bdat[i])
+			);
+		end : genBit
 	end : genSRL
 
 	// Output Register
-	logic  BVld = 0;
-	assign	ovld = BVld;
-	assign	bload = !BVld || ordy;
-
-	always_ff @(posedge clk) begin
-		if(rst)  BVld <= 0;
-		else     BVld <= bvld || !bload;
-	end
-
-	(* EXTRACT_ENABLE = "true" *)
+	(* EXTRACT_ENABLE = "yes" *)
 	dat_t  B = 'x;
-	assign	odat = B;
-
+	logic  BVld = 0;
 	always_ff @(posedge clk) begin
-		if(bload)  B <= bdat;
+		if(rst) begin
+			BVld <= 0;
+			B <= 'x;
+		end
+		else begin
+			BVld <= bvld || !bload;
+			if(bload)  B <= bdat;
+		end
 	end
+	assign	bload = !BVld || ordy;
+	assign	odat = B;
+	assign	ovld = BVld;
 
 endmodule : skid
