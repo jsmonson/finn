@@ -60,57 +60,78 @@ module skid #(
 	end : genNoFeedStages
 	else begin : genFeedStages
 
-		//- Allow up to 7 plain-forward FEED_STAGES
+		// Credit-based Input Throttling
+		localparam int unsigned  CAP = 2*FEED_STAGES + 2;
+
+		// Check Capacity limit of SRL16
 		initial begin
-			if(FEED_STAGES > 7) begin
-				$error("%m: Requested %0d FEED_STAGES exceeds support for up to 7.", FEED_STAGES);
+			if(CAP > 16) begin
+				$error("%m: Requested number of %0d FEED_STAGES exceeds SRL capacity.");
 				$finish;
 			end
 		end
 
 		// Dumb input stages to ease long-distance routing
-		uwire  ardy;
 		if(1) begin : blkInputFeed
-			dat_t  IDat[FEED_STAGES] = '{ default: 'x };
-			logic  IVld[FEED_STAGES] = '{ default: 0 };
-			logic  IRdy[FEED_STAGES] = '{ default: 1 };
+
+			logic signed [$clog2(CAP):0]  ICnt = -CAP;  // -CAP, ..., -1, 0
+			assign	irdy = ICnt[$left(ICnt)];
+
+			(* SHREG_EXTRACT = "no" *) dat_t  IDat[FEED_STAGES] = '{ default: 'x };
+			(* SHREG_EXTRACT = "no" *) logic  IVld[FEED_STAGES] = '{ default: 0 };
+			(* SHREG_EXTRACT = "no" *) logic  IInc[FEED_STAGES] = '{ default: 0 };
+
 			always_ff @(posedge clk) begin
 				if(rst) begin
+					ICnt <= -CAP;
+
 					IDat <= '{ default: 'x };
 					IVld <= '{ default: 0 };
-					IRdy <= '{ default: 1 };
+					IInc <= '{ default: 0 };
 				end
 				else begin
+					automatic logic  iload = ivld && irdy;
+
+					ICnt <= ICnt + $signed(IInc[0] == iload? 0 : IInc[0]? -1 : 1);
+					assert((ICnt > -$signed(CAP)) || !IInc[0]) else begin
+						$error("%m: Credit increment request beyond buffer capacity.");
+						$stop;
+					end
+
 					for(int unsigned  i = 0; i < FEED_STAGES-1; i++) begin
 						IDat[i] <= IDat[i+1];
 						IVld[i] <= IVld[i+1];
-						IRdy[i] <= IRdy[i+1];
+						IInc[i] <= IInc[i+1];
 					end
 					IDat[FEED_STAGES-1] <= idat;
-					IVld[FEED_STAGES-1] <= ivld && irdy;
-					IRdy[FEED_STAGES-1] <= ardy;
+					IVld[FEED_STAGES-1] <= iload;
+					IInc[FEED_STAGES-1] <= bload && bvld;
 				end
 			end
 			assign	aload = IVld[0];
 			assign	adat = IDat[0];
-			assign	irdy = IRdy[0];
 		end : blkInputFeed
 
 		// Elasticity Control Logic
-		logic signed [$clog2(2*FEED_STAGES+2):0]  APtr = '1;
-		assign	ardy = APtr < 1;
+		logic signed [$clog2(CAP):0]  APtr = '1;  // -1, 0, 1, ..., CAP-1
 		assign	bvld = !APtr[$left(APtr)];
 
 		always_ff @(posedge clk) begin
 			if(rst)  APtr <= '1;
-			else     APtr <= APtr + $signed((aload == (bload && bvld))? 0 : aload? 1 : -1);
+			else begin
+				APtr <= APtr + $signed((aload == (bload && bvld))? 0 : aload? 1 : -1);
+				assert((APtr < $signed(CAP-1)) || !aload) else begin
+					$error("%m: Unexpected SRL load request.");
+					$stop;
+				end
+			end
 		end
 		assign	aptr = $unsigned(APtr[$left(APtr)-1:0]);
 
 	end : genFeedStages
 
 	//-----------------------------------------------------------------------
-	// Buffer Memory: SRL:2+2*FEED_STAGES + Reg (no reset)
+	// Buffer Memory: SRL:CAP + Reg (no reset)
 
 	// Elastic SRL
 	uwire dat_t  bdat;

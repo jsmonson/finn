@@ -48,7 +48,8 @@ module skid_tb;
 		);
 
 		//- Stimulus Feed ---------------
-		dat_t  Q[$];
+		dat_t         Q[$];            // Refernce Output
+		int unsigned  BackCycles = 0;  // Track induced Backpressure
 		initial begin
 			idat = 'x;
 			ivld = 0;
@@ -58,15 +59,40 @@ module skid_tb;
 				automatic dat_t  dat;
 
 				if($urandom()%237 == 0) begin
-					repeat(2*FEED_STAGES + 4) @(posedge clk);
+					repeat(2*FEED_STAGES + 4) begin
+						@(posedge clk);
+						if(!irdy) begin
+							if(BackCycles > 0)  BackCycles--;
+							else begin
+								$error("Test #%0d: Encountered unwarranted backpressure.", test);
+								$stop;
+							end
+						end
+					end
 				end
-				while($urandom()%53 == 0) @(posedge clk);
+				while($urandom()%53 == 0) begin
+					@(posedge clk);
+					if(!irdy) begin
+						if(BackCycles > 0)  BackCycles--;
+						else begin
+							$error("Test #%0d: Encountered unwarranted backpressure.", test);
+							$stop;
+						end
+					end
+				end
 
 				void'(std::randomize(dat));
 				idat <= dat;
 				ivld <= 1;
 				Q.push_back(dat);
-				@(posedge clk iff irdy);
+				forever @(posedge clk) begin
+					if(irdy)  break;
+					if(BackCycles > 0)  BackCycles--;
+					else begin
+						$error("Test #%0d: Encountered unwarranted backpressure.", test);
+						$stop;
+					end
+				end
 				idat <= 'x;
 				ivld <= 0;
 			end
@@ -81,9 +107,15 @@ module skid_tb;
 				automatic dat_t  exp;
 
 				if($urandom()%173 == 0) begin
-					repeat(2 * FEED_STAGES + 5) @(posedge clk);
+					repeat(2 * FEED_STAGES + 5) begin
+						@(posedge clk);
+						BackCycles++;
+					end
 				end
-				while($urandom()%19 == 0) @(posedge clk);
+				while($urandom()%19 == 0) begin
+					@(posedge clk);
+					BackCycles++;
+				end
 				ordy <= 1;
 				@(posedge clk iff ovld);
 				assert(Q.size > 0) else begin
