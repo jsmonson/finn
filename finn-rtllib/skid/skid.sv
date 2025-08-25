@@ -141,6 +141,7 @@ module skid #(
 
 	uwire dat_t  bdat;
 	if(BEHAVIORAL) begin : genBehav
+		// This does not infer an SRL reliably for small sizes.
 		(* SHREG_EXTRACT = "yes" *) dat_t  SRL[CAP];
 		always_ff @(posedge clk) begin
 			if(aload)  SRL <= { adat, SRL[0:CAP-2] };
