@@ -345,13 +345,14 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 loop_body.set_tensor_datatype(loop_tensor, param_dtype)
                 inst = getCustomOp(param_node)
                 inst.generate_params(loop_body, path)
-                # if param_node.op_type.startswith("MVAU"):
                 param_file = "{}/memblock.dat".format(path)
-                new_param_file = "{}/memblock_{}.dat".format(path, iter)
-                if param_node.op_type.startswith("MVAU"):
+                new_param_file = "{}/{}_memblock_{}.dat".format(path, param_node.op_type, iter)
+                if param_node.op_type.startswith("MVAU") or param_node.op_type.startswith(
+                    "Elementwise"
+                ):
                     # rename so it doesn't get overwritten
                     shutil.move(param_file, new_param_file)
-                else:
+                elif param_node.op_type.startswith("Thresholding"):
                     # get all generated Thresholding dat files
                     pe = inst.get_nodeattr("PE")
                     output_data_type = inst.get_nodeattr("outputDataType")
@@ -374,12 +375,19 @@ class FINNLoop(HWCustomOp, RTLBackend):
                             param_path.stem + "_i" + str(iter) + param_path.suffix
                         )
                         shutil.move(param_path, new_param_file)
-            if param_node.op_type.startswith("MVAU"):
+                else:
+                    raise Exception
+
+            if param_node.op_type.startswith("MVAU") or param_node.op_type.startswith(
+                "Elementwise"
+            ):
                 # concatinate all .dat files together
-                param_file = "{}/memblock_MVAU_id_{}.dat".format(path, i + 1)
+                param_file = "{}/memblock_{}_id_{}.dat".format(path, param_node.op_type, i + 1)
                 with open(param_file, "w") as outfile:
                     for iter in range(iteration):
-                        memblock_file = "{}/memblock_{}.dat".format(path, iter)
+                        memblock_file = "{}/{}_memblock_{}.dat".format(
+                            path, param_node.op_type, iter
+                        )
                         with open(memblock_file, "r") as infile:
                             for line in infile:
                                 outfile.write(line)

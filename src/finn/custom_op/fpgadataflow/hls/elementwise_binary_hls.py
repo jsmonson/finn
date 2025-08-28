@@ -79,9 +79,13 @@ class ElementwiseBinaryOperation_hls(
     def code_generation_ipgen(self, model, fpgapart, clk):
         """Generates c++ code and tcl script for ip generation."""
         super().code_generation_ipgen(model, fpgapart, clk)
-        mem_mode = self.get_nodeattr("mem_mode")
-        if mem_mode == "internal_decoupled":
-            self.generate_hdl_memstream(fpgapart)
+        mlo = self.get_nodeattr("mlo_max_iter")
+        if mlo:
+            self.generate_hdl_fetch_weights(fpgapart)
+        else:
+            mem_mode = self.get_nodeattr("mem_mode")
+            if mem_mode == "internal_decoupled":
+                self.generate_hdl_memstream(fpgapart)
 
     # Generates list of C++ includes to be placed at the top of the generated
     # code
@@ -175,7 +179,9 @@ class ElementwiseBinaryOperation_hls(
             rhs_shape = (len(out_shape) - len(rhs_shape)) * (1,) + rhs_shape
             # Reshape the input to align with the output shape
             rhs = rhs.reshape(*rhs_shape)
-            if self.get_nodeattr("mem_mode") == "internal_embedded":
+            if self.get_nodeattr("mem_mode") == "internal_embedded" and not self.get_nodeattr(
+                "mlo_max_iter"
+            ):
                 # Generate C++ array initialization code
                 # Note: no packing, but with variable name/type declaration
                 rhs_code = numpy_to_hls_code(rhs, self.rhs_dtype, "rhs", False, False)
