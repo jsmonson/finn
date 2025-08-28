@@ -1,4 +1,4 @@
-# Copyright (C) 2023, Advanced Micro Devices, Inc.
+# Copyright (C) 2024, Advanced Micro Devices, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,24 +28,28 @@
 
 import numpy as np
 import warnings
+from onnx import helper
 from qonnx.core.datatype import DataType
+from qonnx.util.basic import roundup_to_integer_multiple
 
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 
 
-class GlobalAccPool(HWCustomOp):
-    """Abstraction layer for HW implementation of GlobalAccPool"""
+class StreamingSplit(HWCustomOp):
+    """Abstraction layer for HW implementation of Split.
+    Only supports splitting along the last (channel) axis."""
 
     def __init__(self, onnx_node, **kwargs):
         super().__init__(onnx_node, **kwargs)
 
     def get_nodeattr_types(self):
         my_attrs = {
-            "NumChannels": ("i", True, 0),
-            "PE": ("i", True, 0),
-            # FINN DataTypes for input
+            "SIMD": ("i", True, 0),
+            # number of elements of each output streams
+            "ChannelsPerStream": ("ints", True, []),
+            # FINN DataTypes for input; output datatypes inferred from input
             "inputDataType": ("s", True, ""),
-            # number of input vectors, examples:
+            # number of input vectors for non-split axes, examples:
             # [1] is a single vector (like a FC layer with batch=1)
             # [4] is four vectors (like a FC layer with batch=4)
             # [1, 4, 4] is four * four vectors (like a conv layer with batch=1)
@@ -54,94 +58,99 @@ class GlobalAccPool(HWCustomOp):
         my_attrs.update(super().get_nodeattr_types())
         return my_attrs
 
+    def get_n_outputs(self):
+        return len(self.get_nodeattr("ChannelsPerStream"))
+
+    def get_total_elems(self):
+        elems_per_stream = self.get_nodeattr("ChannelsPerStream")
+        return int(np.sum(elems_per_stream))
+
     def get_normal_input_shape(self, ind=0):
-        ch = self.get_nodeattr("NumChannels")
+        total_elems = self.get_total_elems()
         vecs = list(self.get_nodeattr("numInputVectors"))
-        ishape = tuple(vecs + [ch])
+        ishape = tuple(vecs + [total_elems])
         return ishape
 
     def get_folded_input_shape(self, ind=0):
-        ch = self.get_nodeattr("NumChannels")
-        pe = self.get_nodeattr("PE")
+        simd = self.get_nodeattr("SIMD")
+        folds = self.get_total_elems() // simd
         vecs = list(self.get_nodeattr("numInputVectors"))
-        assert ch % pe == 0, "PE must divide NumChannels"
-        folds = int(ch / pe)
-        folded_ishape = tuple(vecs + [folds, pe])
-        return folded_ishape
+        return tuple(vecs + [folds, simd])
 
     def get_normal_output_shape(self, ind=0):
-        ch = self.get_nodeattr("NumChannels")
+        elems = self.get_nodeattr("ChannelsPerStream")[ind]
         vecs = list(self.get_nodeattr("numInputVectors"))
-        if len(vecs) == 1:
-            oshape = tuple(vecs + [ch])
-        elif len(vecs) == 3:
-            oshape = tuple([vecs[0]] + [1, 1, ch])
-        return oshape
+        return tuple(vecs + [elems])
 
     def get_folded_output_shape(self, ind=0):
-        ch = self.get_nodeattr("NumChannels")
-        pe = self.get_nodeattr("PE")
-        unfolded_shape = list(self.get_normal_output_shape())
-        assert ch % pe == 0, "PE must divide NumChannels"
-        folds = int(ch / pe)
-        oshape = tuple(unfolded_shape[:-1] + [folds, pe])
-        return oshape
+        elems = self.get_nodeattr("ChannelsPerStream")[ind]
+        simd = self.get_nodeattr("SIMD")
+        folds = elems // simd
+        vecs = list(self.get_nodeattr("numInputVectors"))
+        return tuple(vecs + [folds, simd])
+
+    def make_shape_compatible_op(self, model):
+        # check input shape
+        exp_ishape = self.get_normal_input_shape()
+        ishape = tuple(model.get_tensor_shape(self.onnx_node.input[0]))
+        assert ishape == exp_ishape, "Unexpected input shape"
+
+        assert len(self.onnx_node.output) == self.get_n_outputs(), "Unexpected number of outputs"
+        ret = helper.make_node("Split", self.onnx_node.input, self.onnx_node.output, axis=-1)
+        return ret
 
     def infer_node_datatype(self, model):
-        node = self.onnx_node
-        idt = model.get_tensor_datatype(node.input[0])
+        # check input datatype
+        inp = self.onnx_node.input[0]
+        idt = model.get_tensor_datatype(inp)
         if idt != self.get_input_datatype():
             warn_str = "inputDataType changing for %s: %s -> %s " % (
-                node.name,
+                self.onnx_node.name,
                 str(self.get_input_datatype()),
                 str(idt),
             )
             warnings.warn(warn_str)
-        self.set_nodeattr("inputDataType", idt.name)
+            self.set_nodeattr("inputDataType", idt.name)
         odt = self.get_output_datatype()
-        model.set_tensor_datatype(self.onnx_node.output[0], odt)
+        for out in self.onnx_node.output:
+            model.set_tensor_datatype(out, odt)
+
+    def verify_node(self):
+        pass
 
     def get_input_datatype(self, ind=0):
-        """Returns FINN DataType of input."""
         return DataType[self.get_nodeattr("inputDataType")]
 
     def get_output_datatype(self, ind=0):
-        """Returns FINN DataType of output."""
-        # determine data type from image size and input type
-        idt = DataType[self.get_nodeattr("inputDataType")]
-        vecs = list(self.get_nodeattr("numInputVectors"))
-        npixels = vecs[-1] * vecs[-2]
-        if idt.signed():
-            extreme_value = npixels * idt.min()
-        else:
-            extreme_value = npixels * idt.max()
-        return DataType.get_smallest_possible(extreme_value)
+        # all output datatypes are the same as the input datatype
+        return self.get_input_datatype()
 
     def get_instream_width(self, ind=0):
-        """Returns input stream width."""
         ibits = self.get_input_datatype().bitwidth()
-        pe = self.get_nodeattr("PE")
-        in_width = pe * ibits
-        return in_width
+        return ibits * self.get_nodeattr("SIMD")
 
     def get_outstream_width(self, ind=0):
-        """Returns output stream width."""
         obits = self.get_output_datatype().bitwidth()
-        pe = self.get_nodeattr("PE")
-        out_width = pe * obits
+        out_width = obits * self.get_nodeattr("SIMD")
         return out_width
 
+    def get_number_output_values(self):
+        out_val = {}
+        for i in range(len(self.onnx_node.output)):
+            out_val["out%s" % i] = np.prod(self.get_folded_output_shape(i)[1:-1])
+        return out_val
+
     def get_exp_cycles(self):
-        # Channels/PE * batch size * idim * idim + Channels/PE
-        ch = self.get_nodeattr("NumChannels")
-        pe = self.get_nodeattr("PE")
-        folds = int(ch / pe)
-        return int(np.prod(self.get_folded_input_shape()[:-1]) + folds)
+        return np.prod(self.get_folded_input_shape()[:-1])
 
     def execute_node(self, context, graph):
-        # simulate behavior with Python functionality
         node = self.onnx_node
-        inp_values = context[node.input[0]]
-        oshape = context[node.output[0]].shape
-        result = np.apply_over_axes(np.sum, inp_values, [1, 2])
-        context[node.output[0]] = np.asarray(result, dtype=np.float32).reshape(oshape)
+        split = self.get_nodeattr("ChannelsPerStream")
+        np_split_param = np.cumsum(split[:-1])
+        np_result = np.split(context[node.input[0]], np_split_param, axis=-1)
+        for i, out in enumerate(node.output):
+            context[out] = np_result[i]
+
+    def get_instream_width_padded(self, ind=0):
+        in_width = self.get_instream_width()
+        return roundup_to_integer_multiple(in_width, 8)

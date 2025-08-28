@@ -61,9 +61,9 @@ pip install --user -e ${FINN_DEPS_DIR}/qonnx
 mv ${FINN_DEPS_DIR}/qonnx/pyproject.tmp ${FINN_DEPS_DIR}/qonnx/pyproject.toml
 
 # finn-experimental
-pip install --user -e ${FINN_ROOT}/deps/finn-experimental
+pip install --user -e ${FINN_DEPS_DIR}/finn-experimental
 # brevitas
-pip install --user -e ${FINN_ROOT}/deps/brevitas
+pip install --user -e ${FINN_DEPS_DIR}/brevitas
 
 if [ -f "${FINN_ROOT}/setup.py" ];then
   # run pip install for finn

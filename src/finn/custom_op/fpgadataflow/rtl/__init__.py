@@ -26,6 +26,10 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# flake8: noqa
+# Disable linting from here, as all import will be flagged E402 and maybe F401
+
+# Import all RTL custom ops - they will be discovered automatically via namespace
 from finn.custom_op.fpgadataflow.rtl.convolutioninputgenerator_rtl import (
     ConvolutionInputGenerator_rtl,
 )
@@ -38,16 +42,3 @@ from finn.custom_op.fpgadataflow.rtl.streamingdatawidthconverter_rtl import (
 from finn.custom_op.fpgadataflow.rtl.streamingfifo_rtl import StreamingFIFO_rtl
 from finn.custom_op.fpgadataflow.rtl.thresholding_rtl import Thresholding_rtl
 from finn.custom_op.fpgadataflow.rtl.vectorvectoractivation_rtl import VVAU_rtl
-
-custom_op = dict()
-
-# make sure new HLSCustomOp subclasses are imported here so that they get
-# registered and plug in correctly into the infrastructure
-custom_op["ConvolutionInputGenerator_rtl"] = ConvolutionInputGenerator_rtl
-custom_op["FMPadding_rtl"] = FMPadding_rtl
-custom_op["StreamingDataWidthConverter_rtl"] = StreamingDataWidthConverter_rtl
-custom_op["StreamingFIFO_rtl"] = StreamingFIFO_rtl
-custom_op["MVAU_rtl"] = MVAU_rtl
-custom_op["VVAU_rtl"] = VVAU_rtl
-custom_op["Thresholding_rtl"] = Thresholding_rtl
-custom_op["FINNLoop"] = FINNLoop

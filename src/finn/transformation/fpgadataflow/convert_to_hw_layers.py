@@ -46,9 +46,6 @@ from qonnx.util.onnx import nchw_to_nhwc
 # Module containing specializations of elementwise binary operations
 import finn.custom_op.fpgadataflow.elementwise_binary as elementwise_binary
 
-# Base class for all FINN custom ops, here just used for type-hinting
-from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
-
 
 class InferConvInpGen(Transformation):
     """Convert Im2Col layers to ConvolutionInputGenerator layers."""
@@ -131,56 +128,26 @@ class InferConvInpGen(Transformation):
                         padding_node.metadata_props.extend(n.metadata_props)
                     graph.node.insert(node_ind, padding_node)
 
-                is_kernel_pointwise = k_h == 1 and k_w == 1
-                is_square_image = ConvInpGen_idim_h == ConvInpGen_idim_w
-                is_equal_stride = stride_h == stride_w
-
                 is_1D = (ifm_dim_h == 1) or (ifm_dim_w == 1)
-                if (stride_h > 1 or stride_w > 1) and is_kernel_pointwise:
-                    downsample_1D = is_1D
-                    is1D_unitx = ifm_dim_w == 1
-                    downsample_2D = (not downsample_1D) and is_square_image and is_equal_stride
-                    if not (downsample_1D or downsample_2D):
-                        warnings.warn(f"Couldn't infer Downsample from {n.name},check config.")
-                        continue
-                    ConvInpGen_idim = max(ConvInpGen_idim_h, ConvInpGen_idim_w)
-                    stride = max(stride_h, stride_w)
-                    # create DownSampler node
-                    ConvInpGen_node = helper.make_node(
-                        "DownSampler",
-                        [ConvInpGen_input],
-                        [i2c_output],
-                        domain="finn.custom_op.fpgadataflow",
-                        backend="fpgadataflow",
-                        ImgDim=ConvInpGen_idim,
-                        NumChannels=ifm_ch,
-                        SIMD=ifm_ch,
-                        Stride=stride,
-                        inputDataType=dt.name,
-                        name="DownSampler_" + n.name,
-                        is1D=downsample_1D,
-                        is1D_unitx=is1D_unitx,
-                    )
-                else:
-                    ConvInpGen_node = helper.make_node(
-                        "ConvolutionInputGenerator",
-                        [ConvInpGen_input],
-                        [i2c_output],
-                        domain="finn.custom_op.fpgadataflow",
-                        backend="fpgadataflow",
-                        ConvKernelDim=[k_h, k_w],
-                        IFMChannels=ifm_ch,
-                        IFMDim=[ConvInpGen_idim_h, ConvInpGen_idim_w],
-                        OFMDim=[ofm_dim_h, ofm_dim_w],
-                        SIMD=ifm_ch,
-                        Stride=[stride_h, stride_w],
-                        Dilation=[dilation_h, dilation_w],
-                        inputDataType=dt.name,
-                        outputDataType=dt.name,
-                        depthwise=depthwise,
-                        is1D=is_1D,
-                        name="ConvolutionInputGenerator_" + n.name,
-                    )
+                ConvInpGen_node = helper.make_node(
+                    "ConvolutionInputGenerator",
+                    [ConvInpGen_input],
+                    [i2c_output],
+                    domain="finn.custom_op.fpgadataflow",
+                    backend="fpgadataflow",
+                    ConvKernelDim=[k_h, k_w],
+                    IFMChannels=ifm_ch,
+                    IFMDim=[ConvInpGen_idim_h, ConvInpGen_idim_w],
+                    OFMDim=[ofm_dim_h, ofm_dim_w],
+                    SIMD=ifm_ch,
+                    Stride=[stride_h, stride_w],
+                    Dilation=[dilation_h, dilation_w],
+                    inputDataType=dt.name,
+                    outputDataType=dt.name,
+                    depthwise=depthwise,
+                    is1D=is_1D,
+                    name="ConvolutionInputGenerator_" + n.name,
+                )
                 if hasattr(n, "metadata_props"):
                     ConvInpGen_node.metadata_props.extend(n.metadata_props)
                 graph.node.insert(ConvInpGen_node_idx, ConvInpGen_node)
@@ -324,33 +291,19 @@ class InferUpsample(Transformation):
                 )
 
                 # Assumes nhwc layout for scales and input
-                is_scale_square_2d = scales[1] == scales[2]
-                is_scale_1d = scales[1] > 1 and scales[2] == 1
-                assert is_scale_square_2d or is_scale_1d, (
-                    "%s: Upsampling only supported for 1D H, or 2D square scaling" % n.name
-                )
                 assert scales[0] == scales[3] == 1, (
                     n.name + ": Upsampling is only supported for scales with "
                     "the first and last dimensions being 1 in NHWC."
                 )
-                spatial_scale = scales[1]
-                assert spatial_scale == int(spatial_scale), (
-                    "%s: Upsampling is only supported for integer scales." % n.name
-                )
-                is_shape_square_2d = in_shape[1] == in_shape[2]
-                is_shape_1d = in_shape[1] > 1 and in_shape[2] == 1
-
-                assert is_shape_square_2d or is_shape_1d, (
-                    "%s: Upsampling is only supported for 1D H or 2D square inputs." % n.name
-                )
 
                 # Extract information for HW node
-                IFMDim = in_shape[1]
-                OFMDim = int(round(in_shape[1] * spatial_scale))
+                HI = in_shape[1]
+                WI = in_shape[2]
+                HO = int(round(HI * scales[1]))
+                WO = int(round(WI * scales[2]))
                 NumChannels = in_shape[-1]
-                numInputVectors = in_shape[0]
+                batchSize = in_shape[0]
                 inputDataType = dt.name
-                dim_mode = 0 if is_shape_square_2d else 1
 
                 # Insert the HWCustomOp node
                 Upsample_HW_node = helper.make_node(
@@ -359,13 +312,17 @@ class InferUpsample(Transformation):
                     [n.output[0]],
                     domain="finn.custom_op.fpgadataflow",
                     backend="fpgadataflow",
-                    OFMDim=OFMDim,
-                    IFMDim=IFMDim,
+                    SIMD=1,
+                    HO=HO,
+                    WO=WO,
+                    HI=HI,
+                    WI=WI,
                     NumChannels=NumChannels,
                     inputDataType=inputDataType,
-                    numInputVectors=numInputVectors,
-                    DimMode=dim_mode,
+                    batchSize=batchSize,
                     name="UpsampleNearestNeighbour_" + n.name,
+                    cpp_interface="hls_vector",
+                    hls_style="freerunning",
                 )
                 if hasattr(n, "metadata_props"):
                     Upsample_HW_node.metadata_props.extend(n.metadata_props)
@@ -1164,21 +1121,24 @@ class InferConcatLayer(Transformation):
                 if (axis != -1) and (axis != last_axis):
                     continue
                 # check datatype coherence
-                dt0 = model.get_tensor_datatype(node.input[0])
-                if dt0 is None:
-                    continue
-                dt_coherent = all([model.get_tensor_datatype(x) == dt0 for x in node.input])
-                if not dt_coherent:
+                if any([model.get_tensor_datatype(x) is None for x in node.input]):
+                    warnings.warn(
+                        "Inputs with undefined datatype detected, skipping InferConcatLayer()"
+                    )
                     continue
                 # skip conversion if any inputs are static
-                all_static = all([model.get_initializer(x) is None for x in node.input])
-                if not all_static:
+                any_static = any([model.get_initializer(x) is not None for x in node.input])
+                if any_static:
                     continue
                 # skip conversion if inputs are not integers
-                if not dt0.is_integer():
+                all_integer = all([model.get_tensor_datatype(x).is_integer() for x in node.input])
+                if not all_integer:
+                    warnings.warn(
+                        "Inputs with non-integer datatype detected, skipping InferConcatLayer()"
+                    )
                     continue
                 # ready for conversion
-                elems_per_stream = [model.get_tensor_shape(x)[-1] for x in node.input]
+                channels_per_stream = [model.get_tensor_shape(x)[-1] for x in node.input]
                 inp_vec = list(model.get_tensor_shape(node.input[0])[:-1])
                 new_node = helper.make_node(
                     "StreamingConcat",
@@ -1186,11 +1146,83 @@ class InferConcatLayer(Transformation):
                     node.output,
                     domain="finn.custom_op.fpgadataflow",
                     backend="fpgadataflow",
-                    name="Concat_" + node.name,
-                    ElemsPerStream=elems_per_stream,
-                    inputDataType=dt0.name,
+                    name="StreamingConcat_" + node.name,
+                    SIMD=1,
+                    ChannelsPerStream=channels_per_stream,
+                    inputDataTypes=[model.get_tensor_datatype(x).name for x in node.input],
                     numInputVectors=inp_vec,
                     inFIFODepths=[2] * len(node.input),
+                    cpp_interface="hls_vector",
+                    hls_style="freerunning",
+                )
+                graph.node.insert(node_ind, new_node)
+                # remove old node
+                graph.node.remove(node)
+                graph_modified = True
+
+        if graph_modified:
+            model = model.transform(InferShapes())
+            model = model.transform(InferDataTypes())
+        return (model, graph_modified)
+
+
+class InferSplitLayer(Transformation):
+    """Convert suitable Split nodes (operating on last/-1 axis)
+    into StreamingConcat HW layers."""
+
+    def apply(self, model):
+        graph = model.graph
+        node_ind = 0
+        graph_modified = False
+        for node in graph.node:
+            node_ind += 1
+            if node.op_type == "Split":
+                split_param = node.input[1]
+                if model.get_initializer(split_param) is None:
+                    warnings.warn("Split param not constant, skipping InferSplitLayer()")
+                    continue
+                ishape = model.get_tensor_shape(node.input[0])
+                axis = get_by_name(node.attribute, "axis")
+                if (axis is None) or (ishape is None):
+                    continue
+                axis = axis.i
+                last_axis = len(ishape) - 1
+                # skip conversion if not using last axis
+                if (axis != -1) and (axis != last_axis):
+                    warnings.warn(
+                        "StreamingSplit supports only last axis, skipping InferSplitLayer()"
+                    )
+                    continue
+                # only one input allowed (two including split_param)
+                if len(node.input) != 2:
+                    warnings.warn("Only one input allowed, skipping InferSplitLayer()")
+                    continue
+                # skip conversion if the input is static
+                if model.get_initializer(node.input[0]) is not None:
+                    warnings.warn("Static input detected, skipping InferSplitLayer()")
+                    continue
+                # skip conversion if inputs are not integers
+                if not model.get_tensor_datatype(node.input[0]).is_integer():
+                    warnings.warn("Non-integer input detected, skipping InferSplitLayer()")
+                    continue
+                # ready for conversion
+                channels_per_stream = [model.get_tensor_shape(x)[-1] for x in node.output]
+                inp_vec = list(model.get_tensor_shape(node.input[0])[:-1])
+                # when creating the fpgadataflow node we remove the second parameter input
+                new_node = helper.make_node(
+                    "StreamingSplit",
+                    [node.input[0]],
+                    node.output,
+                    domain="finn.custom_op.fpgadataflow",
+                    backend="fpgadataflow",
+                    name="StreamingSplit_" + node.name,
+                    SIMD=1,
+                    cpp_interface="hls_vector",
+                    hls_style="freerunning",
+                    ChannelsPerStream=channels_per_stream,
+                    inputDataType=model.get_tensor_datatype(node.input[0]).name,
+                    numInputVectors=inp_vec,
+                    outFIFODepths=[2] * len(node.output),
                 )
                 graph.node.insert(node_ind, new_node)
                 # remove old node
@@ -1744,24 +1776,9 @@ class InferElementwiseBinaryOperation(Transformation):
         # The operator must be a Mul and have no successor nodes
         if node.op_type == "Mul" and not model.find_direct_successors(node):
             # If the output is a floating-point tensors, reject this
-            if model.get_tensor_datatype(node.output[0]) in ["FLOAT32", "FLOAT16"]:
+            if model.get_tensor_datatype(node.output[0]) == "FLOAT32":
                 # Filter False rejects this node
                 return False
-        # Filter True accepts this node
-        return True
-
-    # Filter function to filter out any operation involving any floating-point
-    # tensor
-    @staticmethod
-    def reject_floats(model: ModelWrapper, node: NodeProto):
-        # Check for any input being floating-point
-        if any(model.get_tensor_datatype(x).is_integer() is False for x in node.input):
-            # Filter False rejects this node
-            return False
-        # Check for any output being floating-point
-        if any(model.get_tensor_datatype(x).is_integer() is False for x in node.output):
-            # Filter False rejects this node
-            return False
         # Filter True accepts this node
         return True
 
@@ -1786,52 +1803,43 @@ class InferElementwiseBinaryOperation(Transformation):
             # If a custom operation with corresponding name is implemented in
             # the module, this operator is supported for conversion
             if f"Elementwise{node.op_type}" in dir(elementwise_binary):
-                # Transplant this operator into our FINN domain
-                node.domain = "finn.custom_op.fpgadataflow"
-                # Adapt the op-type prefixing it with Elementwise
-                # TODO: Consider dropping the prefix?
-                node.op_type = f"Elementwise{node.op_type}"
-                # Now we can get the CustomOp wrapper instance providing easier
-                # attribute access
-                inst: HWCustomOp = getCustomOp(node)
-                # Set the backend attribute to mark this an operation supported
-                # to be implemented on an FPGA by FINN
-                inst.set_nodeattr("backend", "fpgadataflow")
+                in0 = node.input[0]
+                in1 = node.input[1]
+                # if both inputs are constant, throw an error and
+                # ask user to run FoldConstants transform first
+                assert (
+                    model.get_initializer(in0) is None or model.get_initializer(in1) is None
+                ), """Both inputs are constant,
+                    please run FoldConstants from qonnx.transformation.fold_constants first."""
+                result = node.output[0]
+
                 # Need to "lift" potential scalar inputs to rank-1 tensors
-                lift_to_rank1(node.input[0], model)
-                lift_to_rank1(node.input[1], model)
+                lift_to_rank1(in0, model)
+                lift_to_rank1(in1, model)
 
-                # fmt: off
-                # Disable formatter. This is deliberately formatted to stay
-                # within 80 characters per line. Black, however, formats some
-                # lines going beyond this.
+                in0_shape = model.get_tensor_shape(in0)
+                in1_shape = model.get_tensor_shape(in1)
+                out_shape = model.get_tensor_shape(result)
 
-                # Insert data type attributes from "context" into the CustomOp
-                # node
-                # TODO: Find a way to handle this via data type inference?
-                inst.set_nodeattr(
-                    "lhs_dtype", str(model.get_tensor_datatype(node.input[0]))
-                )
-                inst.set_nodeattr(
-                    "rhs_dtype", str(model.get_tensor_datatype(node.input[1]))
-                )
-                odt_name = str(model.get_tensor_datatype(node.output[0]))
-                inst.set_nodeattr(
-                    "out_dtype", odt_name
-                )
-                # Insert shape attributes from "context" into the CustomOp node
-                # TODO: Find a way to handle this via shape inference?
-                inst.set_nodeattr(
-                    "lhs_shape", model.get_tensor_shape(node.input[0])
-                )
-                inst.set_nodeattr(
-                    "rhs_shape", model.get_tensor_shape(node.input[1])
-                )
-                inst.set_nodeattr(
-                    "out_shape", model.get_tensor_shape(node.output[0])
-                )
+                idt0 = model.get_tensor_datatype(in0)
+                idt1 = model.get_tensor_datatype(in1)
+                odt0 = model.get_tensor_datatype(result)
 
-                # fmt: on
+                new_node = helper.make_node(
+                    f"Elementwise{node.op_type}",
+                    [in0, in1],
+                    [result],
+                    domain="finn.custom_op.fpgadataflow",
+                    backend="fpgadataflow",
+                    lhs_shape=in0_shape,
+                    rhs_shape=in1_shape,
+                    out_shape=out_shape,
+                    lhs_dtype=str(idt0),
+                    rhs_dtype=str(idt1),
+                    out_dtype=str(odt0),
+                )
+                graph.node.insert(index + 1, new_node)
+                graph.node.remove(node)
 
                 # Consider the graph to be modified, triggering exhaustive
                 # re-application of this transformation

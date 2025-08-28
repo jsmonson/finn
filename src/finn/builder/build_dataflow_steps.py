@@ -615,13 +615,16 @@ def step_set_fifo_depths(model: ModelWrapper, cfg: DataflowBuildConfig):
     else:
         # assume folding cfg json contains FIFO sizes too
         # insert DWCs, FIFOs and run ApplyConfig once more
-        model = model.transform(InsertDWC())
+        model = model.transform(InsertDWC(), apply_to_subgraphs=True)
         # need to make sure all FIFOs are created so that their depth can be
         # set by ApplyConfig, so create_shallow_fifos=True
-        model = model.transform(InsertFIFO(create_shallow_fifos=True))
-        model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()))
-        model = model.transform(GiveUniqueNodeNames())
-        model = model.transform(GiveReadableTensorNames())
+        model = model.transform(InsertFIFO(create_shallow_fifos=True), apply_to_subgraphs=True)
+        model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()), apply_to_subgraphs=True)
+        model = model.transform(GiveUniqueNodeNames(), apply_to_subgraphs=True)
+        model = model.transform(
+            GiveReadableTensorNames(),
+            apply_to_subgraphs=True,
+        )
         if cfg.folding_config_file is not None:
             model = model.transform(ApplyConfig(cfg.folding_config_file))
 
