@@ -1,8 +1,9 @@
 import onnx
 import onnxscript
-import torch 
+import torch
 import pytest
 import qonnx.core.modelwrapper
+import qonnx.util.basic as util
 
 from finn.transformation.fpgadataflow.loop_rolling import LoopRolling, LoopExtraction
 
@@ -23,10 +24,10 @@ class SimpleModule(torch.nn.Module):
     def __init__(self, input_size=10, hidden_size=20, num_layers=4, mul_val=200, output_size=None):
         super(SimpleModule, self).__init__()
         self.mul_val = mul_val
-        
+
         self.num_layers = num_layers
         self.layers = torch.nn.ModuleList()
-               
+
         # Create the linear layers
         for i in range(num_layers):
             self.layers.append(SimpleSubModule(input_size, hidden_size, mul_val=self.mul_val))
@@ -35,23 +36,23 @@ class SimpleModule(torch.nn.Module):
         for layer in self.layers:
             x = layer(x)
         return x
-    
-    
+
+
 # export the model to ONNX format using dynamo
 def export_model_to_onnx(input_size=10, hidden_size=20, num_layers=4, output_size=None):
-    model = SimpleModule(input_size=input_size, hidden_size=hidden_size, 
+    model = SimpleModule(input_size=input_size, hidden_size=hidden_size,
                         num_layers=num_layers, output_size=output_size, mul_val=150)
     model.eval()
     # Create a dummy input tensor
     dummy_input = torch.randn(hidden_size, input_size)
-    
+
     # Export the model to ONNX format
     onnx_path = f"simple_module_{num_layers}layers.onnx"
     torch.onnx.export(model, dummy_input, onnx_path, opset_version=18, dynamo=True)
 
     onnx_model = onnx.load(onnx_path)
     onnx.checker.check_model(onnx_model)
-    
+
     # Add finn_datatype Quantization Annotation for all tensors
     onnx_ir = onnxscript.ir.serde.deserialize_model(onnx_model)
     for node in onnx_ir.graph._nodes:
@@ -61,7 +62,7 @@ def export_model_to_onnx(input_size=10, hidden_size=20, num_layers=4, output_siz
     onnx_model = onnxscript.ir.serde.serialize_model(onnx_ir)
     onnx.save(onnx_model, onnx_path)
 
-    # Load the ONNX model to verify    
+    # Load the ONNX model to verify
     print(f"Model exported successfully to {onnx_path}")
     print(f"Model has {num_layers} layers with input size {input_size}")
     return onnx_path
@@ -73,21 +74,38 @@ def test_export_model():
     hidden_size = 20
     num_layers = 6
     output_size = None
-    
+
     onnx_path = export_model_to_onnx(input_size, hidden_size, num_layers, output_size)
-    
+
     model_wrapper = qonnx.core.modelwrapper.ModelWrapper(onnx_path)
-    
-    loop_extraction = LoopExtraction(hierarchy_list=['', 'layers.0'])   
+
+    m_input_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.input[0].name)
+    m_output_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.output[0].name)
+
+    loop_extraction = LoopExtraction(hierarchy_list=['', 'layers.0'])
     model_wrapper = model_wrapper.transform(loop_extraction)
-    model_wrapper.save("output_with_loop_extraction.onnx")
+
+    model_wrapper.save("moutput_with_loop_extraction.onnx")
+
+    # should be one constant node and one loop-body node per layer
+    assert len(model_wrapper.model.graph.node) == 2 * num_layers, "Loop extraction did not find expected number of loop bodies"
+
     model_wrapper = model_wrapper.transform(LoopRolling(loop_extraction.loop_body_template))
 
-    model_wrapper.save("output_with_loop_rolling.onnx")    
-    
-    # Check the number of nodes in the graph
-    #assert len(onnx_model.graph.node) == num_layers, "Number of layers in ONNX model does not match expected"
-    
-    # Check input and output sizes
-    #assert onnx_model.graph.input[0].type.tensor_type.shape.dim[1].dim_value == input_size, "Input size mismatch"
-    #assert onnx_model.graph.output[0].type.tensor_type.shape.dim[1].dim_value == (hidden_size + (num_layers - 1) * 10), "Output size mismatch"
+    model_wrapper.save("moutput_with_loop_rolling.onnx")
+
+    assert len(model_wrapper.model.graph.node) == 1, "Should Roll into a Single FinnLoop Node"
+    loop_node = model_wrapper.model.graph.node[0]
+
+    assert loop_node.op_type == "FINNLoop", "Node should be op_type FinnLoop"
+
+    assert util.get_by_name(loop_node.attribute, "iteration").i == num_layers
+    assert util.get_by_name(loop_node.attribute, "backend").s.decode('utf-8') == "fpgadataflow"
+    assert util.get_by_name(loop_node.attribute, "inputDataType").s.decode('utf-8') == m_input_dt
+    assert util.get_by_name(loop_node.attribute, "outputDataType").s.decode('utf-8') == m_output_dt
+
+    assert model_wrapper.get_tensor_shape(loop_node.input[0]) == [input_size, hidden_size] # original input shape
+    assert model_wrapper.get_tensor_shape(loop_node.input[1]) == []  # scaler with no shape
+    assert model_wrapper.get_tensor_shape(loop_node.input[2])[0] == num_layers # initializer is not one for each layer
+    assert model_wrapper.get_tensor_shape(loop_node.input[3])[0] == num_layers # initializer is not one for each layer
+    assert model_wrapper.get_tensor_shape(loop_node.output[0]) == [input_size, hidden_size] # original output shape
