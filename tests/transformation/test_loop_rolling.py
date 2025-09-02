@@ -75,7 +75,7 @@ def check_tensor_shape(model_wrapper, name, expected_shape):
     actual_shape = model_wrapper.get_tensor_shape(name)
     assert actual_shape == expected_shape, f"Shape mismatch for {name}: expected {expected_shape}, got {actual_shape}"
 
-def test_export_model():
+def test_finn_loop():
     input_size = 20
     hidden_size = 20
     num_layers = 6
