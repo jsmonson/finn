@@ -67,7 +67,9 @@ def export_model_to_onnx(input_size=10, hidden_size=20, num_layers=4, output_siz
     print(f"Model has {num_layers} layers with input size {input_size}")
     return onnx_path
 
-
+def check_tensor_shape(model_wrapper, name, expected_shape):
+    actual_shape = model_wrapper.get_tensor_shape(name)
+    assert actual_shape == expected_shape, f"Shape mismatch for {name}: expected {expected_shape}, got {actual_shape}"
 
 def test_export_model():
     input_size = 20
@@ -100,8 +102,9 @@ def test_export_model():
     assert util.get_by_name(loop_node.attribute, "inputDataType").s.decode('utf-8') == m_input_dt
     assert util.get_by_name(loop_node.attribute, "outputDataType").s.decode('utf-8') == m_output_dt
 
-    assert model_wrapper.get_tensor_shape(loop_node.input[0]) == [input_size, hidden_size] # original input shape
-    assert model_wrapper.get_tensor_shape(loop_node.input[1]) == []  # scaler with no shape
-    assert model_wrapper.get_tensor_shape(loop_node.input[2])[0] == num_layers # initializer is not one for each layer
-    assert model_wrapper.get_tensor_shape(loop_node.input[3])[0] == num_layers # initializer is not one for each layer
-    assert model_wrapper.get_tensor_shape(loop_node.output[0]) == [input_size, hidden_size] # original output shape
+    # Check tensor shapes by name since loop rolling may reorder inputs
+    check_tensor_shape(model_wrapper, 'x', [input_size, hidden_size]) # activation input shape should remain the same
+    check_tensor_shape(model_wrapper, 'mul_5', [input_size, hidden_size]) # activation output shape should remain the same
+    check_tensor_shape(model_wrapper, 'val_0', []) # should be scalar
+    check_tensor_shape(model_wrapper, 'val_3', [num_layers, input_size]) # bias for each layer
+    check_tensor_shape(model_wrapper, 'val_6', [num_layers, input_size, hidden_size]) # weights for each layer
