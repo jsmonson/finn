@@ -37,13 +37,13 @@ def same_values(inputs):
     """
     if not inputs:
         return False
-    
+
     first_value = get_constant_from_value(inputs[0])
-    
+
     for inp in inputs[1:]:
         if not np.array_equal(first_value, get_constant_from_value(inp)):
             return False
-            
+
     return True
 
 
@@ -51,11 +51,12 @@ def build_loop_replace_pattern(graph, LoopBody):
 
     nodes = pb.find_nodes_of_optype(graph, LoopBody.function.name)
     iterations = len(nodes)
-    
+
     graph_nodes = []
     loop_inputs = []
-    
+
     graph_inputs  = []
+    const_indexes = []
     for i, LoopInputType in enumerate(LoopBody.signature):
 
         if LoopInputType == pb.LoopBodyInputType.PARAMETER:
@@ -87,18 +88,39 @@ def build_loop_replace_pattern(graph, LoopBody):
             graph_nodes.append(reshape_node)
             loop_inputs.append(reshape_node.outputs[0])
         elif LoopInputType == pb.LoopBodyInputType.CONSTANT:
-            constant_input = nodes[0].inputs[i]
-            constant_node  = constant_input.producer()
-            constant_value  = constant_node.attributes['value'].value.numpy()
-            n_constant_node = pb.build_constant_from_tensor(constant_input.name+"_const_val", ir.Tensor(constant_value))
-            graph_nodes.append(n_constant_node)
-            loop_inputs.append(n_constant_node.outputs[0])
+            const_indexes.append(i)
+
+            # if input is constant push down into loop body graph
+            constant_producer       = nodes[0].inputs[i].producer()
+            constant_producer_value = constant_producer.outputs[0]
+
+            # build new node and value for the loop body graph
+            new_const_prod_value    = ir.Value(name=constant_producer_value.name + "_push_down",
+                                                type=constant_producer_value.type,
+                                                shape=constant_producer_value.shape)
+            new_const_prod_node     = ir.Node(name=constant_producer.name + "_push_down",
+                                               domain=constant_producer.domain,
+                                               inputs=constant_producer.inputs,
+                                               op_type="Constant",
+                                               attributes=constant_producer.attributes.values(),
+                                               outputs=[new_const_prod_value])
+            # add new nodes to loop body
+            LoopBody.function.append(new_const_prod_node)
+            LoopBody.function.sort()
+
+            for usage in LoopBody.function.inputs[i].uses():
+                usage.node.replace_input_with(usage.idx, new_const_prod_value)
+
+            LoopBody.function.sort()
+
         elif LoopInputType == pb.LoopBodyInputType.ACTIVATION:
             cinp = pb.vdisconnect(copy.copy(LoopBody.function.inputs[i]))
             graph_inputs.append(cinp)
             loop_inputs.append(cinp)
 
-
+    for i in reversed(const_indexes):
+        del LoopBody.function.inputs[i]
+        del LoopBody.signature[i]
 
     loop_outputs = []
     graph_outputs = []
@@ -106,7 +128,7 @@ def build_loop_replace_pattern(graph, LoopBody):
         output = pb.vdisconnect(copy.copy(out))
         loop_outputs.append(output)
         graph_outputs.append(output)
-    
+
     g_loop_body = LoopBody.function._graph
     odt = g_loop_body.outputs[0].meta["quant_parameter_tensor_names"]["finn_datatype"]
     idt = odt
@@ -116,11 +138,11 @@ def build_loop_replace_pattern(graph, LoopBody):
     inputdatatype_attr = ir.Attr(name='inputDataType', type=ir.AttributeType.STRING, value=idt)
     outputdatatype_attr = ir.Attr(name='outputDataType', type=ir.AttributeType.STRING, value=odt)
 
-    finn_loop_node = ir.Node("finn.custom_op.fpgadataflow.rtl", 
-                             'FINNLoop', 
-                             inputs=loop_inputs, 
-                             attributes=[body_attr, backend_attr, iteration, inputdatatype_attr, outputdatatype_attr], 
-                             outputs=loop_outputs, 
+    finn_loop_node = ir.Node("finn.custom_op.fpgadataflow.rtl",
+                             'FINNLoop',
+                             inputs=loop_inputs,
+                             attributes=[body_attr, backend_attr, iteration, inputdatatype_attr, outputdatatype_attr],
+                             outputs=loop_outputs,
                              graph=None)
 
     graph_nodes.append(finn_loop_node)
@@ -145,7 +167,7 @@ class LoopExtraction(Transformation):
         assert all(isinstance(item, str) for item in hierarchy_list), "All items in hierarchy list must be strings"
         self.hierarchy_list = hierarchy_list
         self.loop_body_template = None
-               
+
     def apply(self, model: ModelWrapper) -> Tuple[ModelWrapper, bool]:
         # Apply the loop extraction transformation
         # Extract the Loop Body from ONNX metadata
@@ -167,17 +189,17 @@ class LoopExtraction(Transformation):
         print(f"Layer 0 graph view: {len(loop_body_graph_view._nodes)}")
         loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=10)
         proto = onnxscript.ir.serde.serialize_model(loop_body_model)
-        onnx.save(proto, 'loop-body-template.onnx')        
+        onnx.save(proto, 'loop-body-template.onnx')
         print("Load Loop Body Template")
         self.loop_body_template = pb.LoopBodyTemplate('loop-body-template.onnx')
-        
+
         # Replace instances of the loop body with a function call to the loop body
         change_layers_to_function_calls = pattern.RewriteRule(
         self.loop_body_template.pattern,
         self.loop_body_template.function_replace
         )
         print("Replacing layers with function calls")
-        
+
         model_layers_replaced = rewrite(
             model_ir,
             pattern_rewrite_rules = [change_layers_to_function_calls]
@@ -189,8 +211,8 @@ class LoopExtraction(Transformation):
         model_proto = onnxscript.ir.serde.serialize_model(model_layers_replaced)
         model.model = model_proto
         onnx.save(model_proto, 'simple_module_layers_replaced.onnx')
-        
-        
+
+
         return (model, False)
 
 
@@ -200,13 +222,13 @@ class LoopRolling(Transformation):
     def __init__(self, loop_body_template):
         super().__init__()
         self.loop_body_template = loop_body_template
-        
+
     def apply(self, model: ModelWrapper) -> Tuple[ModelWrapper, bool]:
-        
+
         model_ir = onnxscript.ir.serde.deserialize_model(model.model)
         graph = model_ir.graph
         LoopBody = self.loop_body_template
-                     
+
         #################################
         ## I/O Normalization for Loop Body
         #################################
@@ -216,7 +238,7 @@ class LoopRolling(Transformation):
         # TODO: write a check to ensure that there is only one
         #       set of consecutive nodes.
         nodes = pb.find_nodes_of_optype(graph, LoopBody.function.name)
-        
+
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
         input_swaps = []
@@ -257,7 +279,7 @@ class LoopRolling(Transformation):
             LoopBody.signature[swap[0]] = pb.LoopBodyInputType.ACTIVATION
             activations+=1
 
-        # Next Inputs according to how they are produced.
+        # Next Label Inputs according to how they are produced.
         # Indexable inputs will have different constant or none producers
         # Constant values broadcast to all nodes will have the same producer
         # Skip the (all) Activation inputs (have been swapped to beginning of the list)
@@ -267,21 +289,20 @@ class LoopRolling(Transformation):
                 print(f"Node {node.name} {node.inputs[index]}")
                 cinput = node.inputs[index]
                 inputs.append(cinput)
-            
+
             if pb.same(inputs) or same_values(inputs):
                 # Constant with Respect to Loop
                 LoopBody.signature[index] = pb.LoopBodyInputType.CONSTANT
             else:
                 # Must be Indexed
                 LoopBody.signature[index] = pb.LoopBodyInputType.PARAMETER
-        
-                
+
         ###################################################
         ## End I/O Normalization for Loop Body
         ###################################################
-        
+
         LoopMatchPattern,nodes = LoopBody.build_function_match_pattern(model_ir.graph, use_iteration_ext=False)
-        
+
         loop_replace_pattern = build_loop_replace_pattern(model_ir.graph, LoopBody)
 
         change_function_calls_to_loop = pattern.RewriteRule(
@@ -291,13 +312,13 @@ class LoopRolling(Transformation):
         rewrite_set = pattern.RewriteRuleSet([change_function_calls_to_loop])
         count = rewrite_set.apply_to_model(model_ir, verbose=None)
         print(f"Rolled {count} function calls into a loop operator")
-        
+
         model = onnxscript.ir.serde.serialize_model(model_ir)
-        
+
         model_wrapper = qonnx.core.modelwrapper.ModelWrapper(model)
 
         model = model_wrapper.transform(FoldConstants())
-        
+
         model.save('simple_module_layers_replaced_loop.onnx')
-            
+
         return (model, False)
