@@ -85,14 +85,10 @@ def test_export_model():
     loop_extraction = LoopExtraction(hierarchy_list=['', 'layers.0'])
     model_wrapper = model_wrapper.transform(loop_extraction)
 
-    model_wrapper.save("moutput_with_loop_extraction.onnx")
-
     # should be one constant node and one loop-body node per layer
     assert len(model_wrapper.model.graph.node) == 2 * num_layers, "Loop extraction did not find expected number of loop bodies"
 
     model_wrapper = model_wrapper.transform(LoopRolling(loop_extraction.loop_body_template))
-
-    model_wrapper.save("moutput_with_loop_rolling.onnx")
 
     assert len(model_wrapper.model.graph.node) == 1, "Should Roll into a Single FinnLoop Node"
     loop_node = model_wrapper.model.graph.node[0]
