@@ -2,16 +2,20 @@ import onnx
 import onnxscript
 import torch
 import pytest
+import onnxruntime as ort
 import qonnx.core.modelwrapper
 import qonnx.util.basic as util
+import finn.core.onnx_exec as oxe
 
+from qonnx.core.datatype import DataType
+from qonnx.util.basic import gen_finn_dt_tensor
 from finn.transformation.fpgadataflow.loop_rolling import LoopRolling, LoopExtraction
-
+from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
 
 class SimpleSubModule(torch.nn.Module):
     def __init__(self, in_features, out_features, mul_val=200):
         super(SimpleSubModule, self).__init__()
-        self.mul_val = mul_val
+        self.mul_val = torch.tensor([mul_val])
         self.linear = torch.nn.Linear(in_features, out_features, bias=True)
 
     def forward(self, x):
@@ -44,7 +48,7 @@ def export_model_to_onnx(input_size=10, hidden_size=20, num_layers=4, output_siz
                         num_layers=num_layers, output_size=output_size, mul_val=150)
     model.eval()
     # Create a dummy input tensor
-    dummy_input = torch.randn(hidden_size, input_size)
+    dummy_input = torch.randn(input_size, hidden_size)
 
     # Export the model to ONNX format
     onnx_path = f"simple_module_{num_layers}layers.onnx"
@@ -91,7 +95,6 @@ def test_export_model():
     assert len(model_wrapper.model.graph.node) == 2 * num_layers, "Loop extraction did not find expected number of loop bodies"
 
     model_wrapper = model_wrapper.transform(LoopRolling(loop_extraction.loop_body_template))
-
     assert len(model_wrapper.model.graph.node) == 1, "Should Roll into a Single FinnLoop Node"
     loop_node = model_wrapper.model.graph.node[0]
 
@@ -105,6 +108,21 @@ def test_export_model():
     # Check tensor shapes by name since loop rolling may reorder inputs
     check_tensor_shape(model_wrapper, 'x', [input_size, hidden_size]) # activation input shape should remain the same
     check_tensor_shape(model_wrapper, 'mul_5', [input_size, hidden_size]) # activation output shape should remain the same
-    check_tensor_shape(model_wrapper, 'val_0', []) # should be scalar
-    check_tensor_shape(model_wrapper, 'val_3', [num_layers, input_size]) # bias for each layer
-    check_tensor_shape(model_wrapper, 'val_6', [num_layers, input_size, hidden_size]) # weights for each layer
+    model_wrapper.get_tensor_shape(loop_node.input[1])[0] == num_layers # loop iteration count should match number of layers
+    model_wrapper.get_tensor_shape(loop_node.input[2])[0] == num_layers # loop condition count should match number of layers
+
+    # execute original model and rolled model using onnx runtime
+    # ensure results match
+    ort_sess = ort.InferenceSession(onnx_path)
+
+    # Create an input tensor
+    dummy_input = gen_finn_dt_tensor(DataType["FLOAT32"], [hidden_size, input_size])
+
+    ort_inputs = {ort_sess.get_inputs()[0].name: dummy_input}
+    ort_outputs = ort_sess.run(None, ort_inputs)
+
+    model_wrapper = model_wrapper.transform(SetExecMode("cppsim"))
+    finn_outputs = oxe.execute_onnx(model_wrapper, ort_inputs)
+
+    assert (ort_outputs[0] == finn_outputs['mul_5']).all()
+
