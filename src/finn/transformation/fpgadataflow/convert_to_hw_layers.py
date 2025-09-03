@@ -1838,6 +1838,8 @@ class InferElementwiseBinaryOperation(Transformation):
                     rhs_dtype=str(idt1),
                     out_dtype=str(odt0),
                 )
+                if hasattr(node, "metadata_props"):
+                    new_node.metadata_props.extend(node.metadata_props)
                 graph.node.insert(index + 1, new_node)
                 graph.node.remove(node)
 
