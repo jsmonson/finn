@@ -183,13 +183,26 @@ class LoopExtraction(Transformation):
         P.print_hierarchy()
         print(f"Total nodes: {len(graph._nodes)}")
         print(f"Unadded nodes: {len(unadded_nodes)}")
-        # Handle the unadded Transpose nodes as a special case for BERT
-        # Todo: Make this more robust in the future
+        # Handle the nodes that have no metadata from PyTorch
+        # by finding a neighboring node and using its metadata
+        # use predecessor first than successor nodes
+        # probably should provide a more robust selection method
+        # in the future
         for node in unadded_nodes:
+            print(f"adding metadata for node {node.name}...")
+            preds = node.predecessors()
+            succs = node.successors()
+            if len(preds) > 0:
+                mnode = preds[0]
+            elif len(succs) > 0:
+                mnode = succs[0]
+            else:
+                print("error: could not find metadata for node")
+                exit(1)
+            node.metadata_props['pkg.torch.onnx.name_scopes'] = mnode.metadata_props['pkg.torch.onnx.name_scopes']
+            node.metadata_props['pkg.torch.onnx.class_hierarchy'] = mnode.metadata_props['pkg.torch.onnx.class_hierarchy']
             print(f"added metadata for node {node.name}")
-            pred_node = node.predecessors()[0]
-            node.metadata_props['pkg.torch.onnx.name_scopes'] = pred_node.metadata_props['pkg.torch.onnx.name_scopes']
-            node.metadata_props['pkg.torch.onnx.class_hierarchy'] = pred_node.metadata_props['pkg.torch.onnx.class_hierarchy']
+
             assert(P.add_node(node))
 
         nodes = P.get_nodes(self.hierarchy_list)
