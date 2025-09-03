@@ -183,6 +183,15 @@ class LoopExtraction(Transformation):
         P.print_hierarchy()
         print(f"Total nodes: {len(graph._nodes)}")
         print(f"Unadded nodes: {len(unadded_nodes)}")
+        # Handle the unadded Transpose nodes as a special case for BERT
+        # Todo: Make this more robust in the future
+        for node in unadded_nodes:
+            print(f"added metadata for node {node.name}")
+            pred_node = node.predecessors()[0]
+            node.metadata_props['pkg.torch.onnx.name_scopes'] = pred_node.metadata_props['pkg.torch.onnx.name_scopes']
+            node.metadata_props['pkg.torch.onnx.class_hierarchy'] = pred_node.metadata_props['pkg.torch.onnx.class_hierarchy']
+            assert(P.add_node(node))
+
         nodes = P.get_nodes(self.hierarchy_list)
         print(f"Nodes in layer 0: {len(nodes)}")
         loop_body_graph_view = gvu.bGraphView(f'loop-body', nodes)
