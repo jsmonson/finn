@@ -6,6 +6,8 @@ import onnxruntime as ort
 import qonnx.core.modelwrapper
 import qonnx.util.basic as util
 import finn.core.onnx_exec as oxe
+import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
+
 
 from qonnx.core.datatype import DataType
 from qonnx.util.basic import gen_finn_dt_tensor
@@ -87,6 +89,8 @@ def test_finn_loop():
 
     m_input_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.input[0].name)
     m_output_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.output[0].name)
+
+    model_wrapper = model_wrapper.transform(to_hw.InferElementwiseBinaryOperation())
 
     loop_extraction = LoopExtraction(hierarchy_list=['', 'layers.0'])
     model_wrapper = model_wrapper.transform(loop_extraction)
