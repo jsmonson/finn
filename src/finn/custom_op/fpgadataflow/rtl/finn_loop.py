@@ -765,7 +765,8 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 "create_bd_intf_pin -mode Master "
                 "-vlnv xilinx.com:interface:axis_rtl:1.0 /%s/m_axis_%d" % (bd_name, id + 1)
             )
-        # get stream tap components
+        # get stream tap (+ skid)  components
+        skid_file = os.path.join(os.environ["FINN_ROOT"], "finn-rtllib/skid/skid.sv")
         stream_tap_dir = os.path.join(os.environ["FINN_ROOT"], "finn-rtllib/stream_tap/hdl/")
         file_suffix = "_stream_tap_wrapper.v"
         # automatically find stream tap verilog components in code generation directory
@@ -775,9 +776,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
             if fname.endswith(file_suffix):
                 st_verilog_files.append(os.path.join(code_gen_dir, fname))
                 st_tmpl_names.append(fname[:-2])
-        sourcefiles = st_verilog_files + [
-            stream_tap_dir + "stream_tap.sv",
-        ]
+        sourcefiles = st_verilog_files + [stream_tap_dir + "stream_tap.sv", skid_file]
         for f in sourcefiles:
             cmd += ["add_files -copy_to %s -norecurse %s" % (source_target, f)]
 
