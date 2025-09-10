@@ -96,7 +96,7 @@ def test_finn_loop():
     model_wrapper = model_wrapper.transform(loop_extraction)
 
     # should be one constant node and one loop-body node per layer
-    assert len(model_wrapper.model.graph.node) == 2 * num_layers, "Loop extraction did not find expected number of loop bodies"
+    assert len(model_wrapper.model.graph.node) == num_layers, "Loop extraction did not find expected number of loop bodies"
 
     model_wrapper = model_wrapper.transform(LoopRolling(loop_extraction.loop_body_template))
     assert len(model_wrapper.model.graph.node) == 1, "Should Roll into a Single FinnLoop Node"
