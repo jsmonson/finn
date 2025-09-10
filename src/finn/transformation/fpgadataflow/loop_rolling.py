@@ -87,22 +87,36 @@ def build_loop_replace_pattern(graph, LoopBody):
             graph_nodes.append(reshape_shape_const)
             graph_nodes.append(reshape_node)
             loop_inputs.append(reshape_node.outputs[0])
+
+            # Add mlo_max_iter attribute to loop input consumers
+            # assuming that each input only has a single consumer
+            inp = LoopBody.function.inputs[i]
+            assert len(inp.consumers()) == 1
+            consumer = inp.consumers()[0]
+            consumer.attributes["mlo_max_iter"] = ir.Attr(
+                "mlo_max_iter", ir.AttributeType.INT, iterations
+            )
+            consumer.attributes["inFIFODepths"] = ir.Attr(
+                "inFIFODepths", ir.AttributeType.INTS, [2, 2]
+            )
         elif LoopInputType == pb.LoopBodyInputType.CONSTANT:
             const_indexes.append(i)
 
             # if input is constant push down into loop body graph
-            constant_producer       = nodes[0].inputs[i].producer()
-            constant_producer_value = constant_producer.outputs[0]
+            #constant_producer       = nodes[0].inputs[i].producer()
+            constant_producer_value = nodes[0].inputs[i]
 
             # build new node and value for the loop body graph
             new_const_prod_value    = ir.Value(name=constant_producer_value.name + "_push_down",
                                                 type=constant_producer_value.type,
-                                                shape=constant_producer_value.shape)
-            new_const_prod_node     = ir.Node(name=constant_producer.name + "_push_down",
-                                               domain=constant_producer.domain,
-                                               inputs=constant_producer.inputs,
+                                                shape=constant_producer_value.shape,
+                                                const_value=constant_producer_value.const_value
+                                                )
+            new_const_prod_node     = ir.Node(name=constant_producer_value.name + "_push_down_node",
+                                               domain='',
+                                               inputs=[],
                                                op_type="Constant",
-                                               attributes=constant_producer.attributes.values(),
+                                               attributes = [ir.Attr(name='value', type=ir.AttributeType.TENSOR, value=new_const_prod_value.const_value)],
                                                outputs=[new_const_prod_value])
             # add new nodes to loop body
             LoopBody.function.append(new_const_prod_node)
@@ -199,6 +213,7 @@ class LoopExtraction(Transformation):
             else:
                 print("error: could not find metadata for node")
                 exit(1)
+
             node.metadata_props['pkg.torch.onnx.name_scopes'] = mnode.metadata_props['pkg.torch.onnx.name_scopes']
             node.metadata_props['pkg.torch.onnx.class_hierarchy'] = mnode.metadata_props['pkg.torch.onnx.class_hierarchy']
             print(f"added metadata for node {node.name}")
