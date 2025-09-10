@@ -14,15 +14,24 @@ from qonnx.util.basic import gen_finn_dt_tensor
 from finn.transformation.fpgadataflow.loop_rolling import LoopRolling, LoopExtraction
 from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
 
+from brevitas.quant import Int8ActPerTensorFloat
+from brevitas.quant import Int8WeightPerTensorFloat
+from brevitas.quant import Int8Bias
+from brevitas.nn import QuantLinear
+
+
 class SimpleSubModule(torch.nn.Module):
     def __init__(self, in_features, out_features, mul_val=200):
         super(SimpleSubModule, self).__init__()
-        self.mul_val = torch.tensor([mul_val])
-        self.linear = torch.nn.Linear(in_features, out_features, bias=True)
+        #self.mul_val = torch.tensor([mul_val])
+        self.linear = QuantLinear(in_features, out_features, bias=True,
+                                  weight_quant=Int8WeightPerTensorFloat,
+                                  input_quant=Int8ActPerTensorFloat,
+                                  bias_quant=Int8Bias)
 
     def forward(self, x):
-        return self.mul_val * self.linear(x)
-
+        #return self.mul_val * self.linear(x)
+        return self.linear(x)
 
 
 # Simple Torch Module with parameterizable number of linear layers
@@ -42,7 +51,6 @@ class SimpleModule(torch.nn.Module):
         for layer in self.layers:
             x = layer(x)
         return x
-
 
 # export the model to ONNX format using dynamo
 def export_model_to_onnx(input_size=10, hidden_size=20, num_layers=4, output_size=None):
