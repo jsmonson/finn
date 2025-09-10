@@ -14,6 +14,8 @@ from qonnx.util.basic import gen_finn_dt_tensor
 from finn.transformation.fpgadataflow.loop_rolling import LoopRolling, LoopExtraction
 from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
 
+import brevitas.onnx as bo
+
 from brevitas.quant import Int8ActPerTensorFloat
 from brevitas.quant import Int8WeightPerTensorFloat
 from brevitas.quant import Int8Bias
@@ -62,7 +64,17 @@ def export_model_to_onnx(input_size=10, hidden_size=20, num_layers=4, output_siz
 
     # Export the model to ONNX format
     onnx_path = f"simple_module_{num_layers}layers.onnx"
-    torch.onnx.export(model, dummy_input, onnx_path, opset_version=18, dynamo=True)
+    with torch.no_grad():
+        bo.export_qonnx(
+            model,
+            (dummy_input),
+            onnx_path,
+            do_constant_folding=True,
+            input_names=['x'],
+            opset_version=18,
+            dynamo=True,
+            optimize=True
+        )
 
     onnx_model = onnx.load(onnx_path)
     onnx.checker.check_model(onnx_model)
