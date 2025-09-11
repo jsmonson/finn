@@ -1,23 +1,17 @@
 import copy
-
-from typing import List, Tuple
-from onnxscript import ir
-
 import numpy as np
-
+import onnx
+import onnxscript
+import qonnx
+from onnxscript import ir
+from onnxscript.rewriter import pattern, rewrite
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.fold_constants import FoldConstants
+from typing import List, Tuple
 
 from finn.util import onnxscript_helpers as osh
-from onnxscript.rewriter import pattern
-from onnxscript.rewriter import rewrite
 
-
-
-import onnxscript
-import onnx
-import qonnx
 
 def get_constant_from_value(value):
     """
@@ -27,7 +21,7 @@ def get_constant_from_value(value):
     if value.producer() is None:
         return value.const_value.numpy()
     elif value.producer().op_type == "Constant":
-        return value.producer().attributes['value'].value.numpy()
+        return value.producer().attributes["value"].value.numpy()
 
 
 def same_values(inputs):
@@ -47,20 +41,18 @@ def same_values(inputs):
 
 
 def build_loop_replace_pattern(graph, LoopBody):
-
     nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)
     iterations = len(nodes)
 
     graph_nodes = []
     loop_inputs = []
 
-    graph_inputs  = []
+    graph_inputs = []
     const_indexes = []
     for i, LoopInputType in enumerate(LoopBody.signature):
-
         if LoopInputType == osh.LoopBodyInputType.PARAMETER:
             # Build Concat Node
-            concat_inputs  = []
+            concat_inputs = []
             for node in nodes:
                 nvalue = osh.vdisconnect(copy.copy(node.inputs[i]))
                 graph_inputs.append(nvalue)
@@ -70,19 +62,29 @@ def build_loop_replace_pattern(graph, LoopBody):
             if len(concat_inputs[0].shape.dims) == 0:
                 const_values_as_numpy = np.array([x.const_value.numpy() for x in concat_inputs])
                 const_values_as_tensor = ir.Tensor(const_values_as_numpy)
-                const_values_as_const_node = osh.build_constant_from_tensor(f'concat_{i}', const_values_as_tensor)
+                const_values_as_const_node = osh.build_constant_from_tensor(
+                    f"concat_{i}", const_values_as_tensor
+                )
                 graph_nodes.append(const_values_as_const_node)
 
-                reshape_shape_const = osh.build_constant_from_tensor(f'reshape_shape_const_{i}',
-                                                             ir.Tensor(np.array([len(concat_inputs), 1])))
-                reshape_node  = osh.build_reshape_node(const_values_as_const_node.outputs[0], reshape_shape_const.outputs[0])
+                reshape_shape_const = osh.build_constant_from_tensor(
+                    f"reshape_shape_const_{i}", ir.Tensor(np.array([len(concat_inputs), 1]))
+                )
+                reshape_node = osh.build_reshape_node(
+                    const_values_as_const_node.outputs[0], reshape_shape_const.outputs[0]
+                )
             else:
                 concat_node = osh.build_concat_node_from_inputs(concat_inputs)
                 graph_nodes.append(concat_node)
                 # Build Reshape Node
-                reshape_shape_const = osh.build_constant_from_tensor(f'reshape_shape_const_{i}', ir.Tensor(np.array([len(nodes),*concat_inputs[0].shape.dims])))
+                reshape_shape_const = osh.build_constant_from_tensor(
+                    f"reshape_shape_const_{i}",
+                    ir.Tensor(np.array([len(nodes), *concat_inputs[0].shape.dims])),
+                )
 
-                reshape_node = osh.build_reshape_node(concat_node.outputs[0], reshape_shape_const.outputs[0])
+                reshape_node = osh.build_reshape_node(
+                    concat_node.outputs[0], reshape_shape_const.outputs[0]
+                )
             graph_nodes.append(reshape_shape_const)
             graph_nodes.append(reshape_node)
             loop_inputs.append(reshape_node.outputs[0])
@@ -102,21 +104,30 @@ def build_loop_replace_pattern(graph, LoopBody):
             const_indexes.append(i)
 
             # if input is constant push down into loop body graph
-            #constant_producer       = nodes[0].inputs[i].producer()
+            # constant_producer       = nodes[0].inputs[i].producer()
             constant_producer_value = nodes[0].inputs[i]
 
             # build new node and value for the loop body graph
-            new_const_prod_value    = ir.Value(name=constant_producer_value.name + "_push_down",
-                                                type=constant_producer_value.type,
-                                                shape=constant_producer_value.shape,
-                                                const_value=constant_producer_value.const_value
-                                                )
-            new_const_prod_node     = ir.Node(name=constant_producer_value.name + "_push_down_node",
-                                               domain='',
-                                               inputs=[],
-                                               op_type="Constant",
-                                               attributes = [ir.Attr(name='value', type=ir.AttributeType.TENSOR, value=new_const_prod_value.const_value)],
-                                               outputs=[new_const_prod_value])
+            new_const_prod_value = ir.Value(
+                name=constant_producer_value.name + "_push_down",
+                type=constant_producer_value.type,
+                shape=constant_producer_value.shape,
+                const_value=constant_producer_value.const_value,
+            )
+            new_const_prod_node = ir.Node(
+                name=constant_producer_value.name + "_push_down_node",
+                domain="",
+                inputs=[],
+                op_type="Constant",
+                attributes=[
+                    ir.Attr(
+                        name="value",
+                        type=ir.AttributeType.TENSOR,
+                        value=new_const_prod_value.const_value,
+                    )
+                ],
+                outputs=[new_const_prod_value],
+            )
             # add new nodes to loop body
             LoopBody.function.append(new_const_prod_node)
             LoopBody.function.sort()
@@ -145,22 +156,26 @@ def build_loop_replace_pattern(graph, LoopBody):
     g_loop_body = LoopBody.function._graph
     odt = g_loop_body.outputs[0].meta["quant_parameter_tensor_names"]["finn_datatype"]
     idt = odt
-    body_attr = ir.Attr(name='body', type=ir.AttributeType.GRAPH, value=LoopBody.function._graph)
-    backend_attr = ir.Attr(name='backend', type=ir.AttributeType.STRING, value='fpgadataflow')
-    iteration = ir.Attr(name='iteration', type=ir.AttributeType.INT, value=iterations)
-    inputdatatype_attr = ir.Attr(name='inputDataType', type=ir.AttributeType.STRING, value=idt)
-    outputdatatype_attr = ir.Attr(name='outputDataType', type=ir.AttributeType.STRING, value=odt)
+    body_attr = ir.Attr(name="body", type=ir.AttributeType.GRAPH, value=LoopBody.function._graph)
+    backend_attr = ir.Attr(name="backend", type=ir.AttributeType.STRING, value="fpgadataflow")
+    iteration = ir.Attr(name="iteration", type=ir.AttributeType.INT, value=iterations)
+    inputdatatype_attr = ir.Attr(name="inputDataType", type=ir.AttributeType.STRING, value=idt)
+    outputdatatype_attr = ir.Attr(name="outputDataType", type=ir.AttributeType.STRING, value=odt)
 
-    finn_loop_node = ir.Node("finn.custom_op.fpgadataflow.rtl",
-                             'FINNLoop',
-                             inputs=loop_inputs,
-                             attributes=[body_attr, backend_attr, iteration, inputdatatype_attr, outputdatatype_attr],
-                             outputs=loop_outputs,
-                             graph=None)
+    finn_loop_node = ir.Node(
+        "finn.custom_op.fpgadataflow.rtl",
+        "FINNLoop",
+        inputs=loop_inputs,
+        attributes=[body_attr, backend_attr, iteration, inputdatatype_attr, outputdatatype_attr],
+        outputs=loop_outputs,
+        graph=None,
+    )
 
     graph_nodes.append(finn_loop_node)
 
-    graph = ir.Graph(name='loop_replace',nodes=graph_nodes, inputs=graph_inputs, outputs=graph_outputs)
+    graph = ir.Graph(
+        name="loop_replace", nodes=graph_nodes, inputs=graph_inputs, outputs=graph_outputs
+    )
 
     graph.sort()
 
@@ -169,22 +184,22 @@ def build_loop_replace_pattern(graph, LoopBody):
     return osh.ReplacementPatternGraph(graph)
 
 
-
-
 class LoopExtraction(Transformation):
-    def __init__(self, hierarchy_list : List[str]):
+    def __init__(self, hierarchy_list: List[str]):
         super().__init__()
 
         assert isinstance(hierarchy_list, list), "Hierarchy list must be a list of strings"
-        assert all(isinstance(item, str) for item in hierarchy_list), "All items in hierarchy list must be strings"
+        assert all(
+            isinstance(item, str) for item in hierarchy_list
+        ), "All items in hierarchy list must be strings"
         self.hierarchy_list = hierarchy_list
         self.loop_body_template = None
 
     def apply(self, model: ModelWrapper) -> Tuple[ModelWrapper, bool]:
         # Apply the loop extraction transformation
         # Extract the Loop Body from ONNX metadata
-        model_ir    = onnxscript.ir.serde.deserialize_model(model.model)
-        graph       = model_ir.graph
+        model_ir = onnxscript.ir.serde.deserialize_model(model.model)
+        graph = model_ir.graph
 
         P = osh.PytorchHierarchyNode()
         unadded_nodes = []
@@ -212,36 +227,40 @@ class LoopExtraction(Transformation):
                 print("error: could not find metadata for node")
                 exit(1)
 
-            node.metadata_props['pkg.torch.onnx.name_scopes'] = mnode.metadata_props['pkg.torch.onnx.name_scopes']
-            node.metadata_props['pkg.torch.onnx.class_hierarchy'] = mnode.metadata_props['pkg.torch.onnx.class_hierarchy']
+            node.metadata_props["pkg.torch.onnx.name_scopes"] = mnode.metadata_props[
+                "pkg.torch.onnx.name_scopes"
+            ]
+            node.metadata_props["pkg.torch.onnx.class_hierarchy"] = mnode.metadata_props[
+                "pkg.torch.onnx.class_hierarchy"
+            ]
             print(f"added metadata for node {node.name}")
 
-            assert(P.add_node(node))
+            assert P.add_node(node)
 
         nodes = P.get_nodes(self.hierarchy_list)
         print(f"Nodes in layer 0: {len(nodes)}")
-        loop_body_graph_view = osh.bGraphView(f'loop-body', nodes)
+        loop_body_graph_view = osh.bGraphView(f"loop-body", nodes)
         print(f"Layer 0 graph view: {len(loop_body_graph_view._nodes)}")
         loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=10)
         proto = onnxscript.ir.serde.serialize_model(loop_body_model)
-        onnx.save(proto, 'loop-body-template.onnx')
+        onnx.save(proto, "loop-body-template.onnx")
         print("Load Loop Body Template")
-        self.loop_body_template = osh.LoopBodyTemplate('loop-body-template.onnx')
+        self.loop_body_template = osh.LoopBodyTemplate("loop-body-template.onnx")
 
         # Replace instances of the loop body with a function call to the loop body
         change_layers_to_function_calls = pattern.RewriteRule(
-        self.loop_body_template.pattern,
-        self.loop_body_template.function_replace
+            self.loop_body_template.pattern, self.loop_body_template.function_replace
         )
         print("Replacing layers with function calls")
 
         model_layers_replaced = rewrite(
-            model_ir,
-            pattern_rewrite_rules = [change_layers_to_function_calls]
+            model_ir, pattern_rewrite_rules=[change_layers_to_function_calls]
         )
 
-        model_layers_replaced.functions[self.loop_body_template.function.identifier()] = self.loop_body_template.function
-        model_layers_replaced.graph.opset_imports['loop']=0
+        model_layers_replaced.functions[
+            self.loop_body_template.function.identifier()
+        ] = self.loop_body_template.function
+        model_layers_replaced.graph.opset_imports["loop"] = 0
 
         model_proto = onnxscript.ir.serde.serialize_model(model_layers_replaced)
         model.model = model_proto
@@ -257,7 +276,6 @@ class LoopRolling(Transformation):
         self.loop_body_template = loop_body_template
 
     def apply(self, model: ModelWrapper) -> Tuple[ModelWrapper, bool]:
-
         model_ir = onnxscript.ir.serde.deserialize_model(model.model)
         graph = model_ir.graph
         LoopBody = self.loop_body_template
@@ -275,14 +293,14 @@ class LoopRolling(Transformation):
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
         input_swaps = []
-        for i in range(len(nodes)-1):
+        for i in range(len(nodes) - 1):
             a_node = nodes[i]
-            b_node = nodes[i+1]
+            b_node = nodes[i + 1]
 
             for a_out in a_node.outputs:
                 # Require that outputs of a have a single use of b_node
-                assert(len(a_out.uses()) == 1)
-                assert(a_out.uses()[0][0] is b_node)
+                assert len(a_out.uses()) == 1
+                assert a_out.uses()[0][0] is b_node
 
                 a_use_index = a_out.uses()[0][1]
                 input_swap = (a_out.index(), a_use_index)
@@ -291,7 +309,7 @@ class LoopRolling(Transformation):
                     input_swaps.append(input_swap)
                 else:
                     # check that they are the same in the rest
-                    assert(input_swap in input_swaps)
+                    assert input_swap in input_swaps
 
         # apply the input swaps to each nodes
         for node in nodes:
@@ -310,14 +328,14 @@ class LoopRolling(Transformation):
             LoopBody.function.inputs[swap[0]] = b
             LoopBody.function.inputs[swap[1]] = a
             LoopBody.signature[swap[0]] = osh.LoopBodyInputType.ACTIVATION
-            activations+=1
+            activations += 1
 
         # Next Label Inputs according to how they are produced.
         # Indexable inputs will have different constant or none producers
         # Constant values broadcast to all nodes will have the same producer
         # Skip the (all) Activation inputs (have been swapped to beginning of the list)
         for index in range(activations, len(nodes[0].inputs)):
-            inputs    = []
+            inputs = []
             for node in nodes:
                 print(f"Node {node.name} {node.inputs[index]}")
                 cinput = node.inputs[index]
@@ -334,14 +352,13 @@ class LoopRolling(Transformation):
         ## End I/O Normalization for Loop Body
         ###################################################
 
-        LoopMatchPattern,nodes = LoopBody.build_function_match_pattern(model_ir.graph, use_iteration_ext=False)
+        LoopMatchPattern, nodes = LoopBody.build_function_match_pattern(
+            model_ir.graph, use_iteration_ext=False
+        )
 
         loop_replace_pattern = build_loop_replace_pattern(model_ir.graph, LoopBody)
 
-        change_function_calls_to_loop = pattern.RewriteRule(
-            LoopMatchPattern,
-            loop_replace_pattern
-        )
+        change_function_calls_to_loop = pattern.RewriteRule(LoopMatchPattern, loop_replace_pattern)
         rewrite_set = pattern.RewriteRuleSet([change_function_calls_to_loop])
         count = rewrite_set.apply_to_model(model_ir, verbose=None)
         print(f"Rolled {count} function calls into a loop operator")
