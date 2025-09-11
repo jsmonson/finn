@@ -7,6 +7,7 @@ ipython==8.12.2
 numpy==1.24.1
 onnx==1.17.0
 onnxoptimizer
+onnxscript==0.4.0
 onnxruntime==1.18.1
 pre-commit==3.3.2
 protobuf==3.20.3
