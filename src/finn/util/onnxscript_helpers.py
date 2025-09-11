@@ -287,13 +287,20 @@ import onnx
 
 from onnxscript import ir
 from onnxscript.rewriter.pattern import (
-    RewriterContext, MatchResult, ValuePattern, GraphPattern, OpsetPatternBuilder, pattern_builder, NodeOutputPattern, ReplacementSubgraph, ReplacementPatternFunction
+    RewriterContext, MatchResult,  OpsetPatternBuilder, pattern_builder
+)
+
+from onnxscript.rewriter._rewrite_rule import (
+    ReplacementSubgraph, ReplacementPatternFunction
+)
+
+from onnxscript.rewriter._pattern_ir import (
+    ValuePattern, NodeOutputPattern, GraphPattern
 )
 
 
-
 from collections.abc import Iterable
-from onnxscript.utils.graph_view_utils import bGraphView
+from finn.util.onnxscript_helpers import bGraphView
 
 #print("**************************************")
 #print("********* Pattern Builder ************")
