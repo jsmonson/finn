@@ -457,9 +457,6 @@ class LoopBodyTemplate:
 
         ir_model = ir.Model(bGraphView('inlined_pipe_pattern', nodes), ir_version=10)
 
-        model = ir.serde.serialize_model(ir_model)
-        onnx.save(model, 'pipeline_match_pattern.onnx')
-
         pattern  = direct_convert_ir_graph_to_pattern(ir_model.graph)
 
         return (pattern, nodes)
@@ -738,7 +735,6 @@ def build_layer_pipeline_pattern(graph, layername):
     ir_model = ir.Model(bGraphView('inlined_pipe_pattern', nodes), ir_version=10)
 
     model = ir.serde.serialize_model(ir_model)
-    onnx.save(model, 'pipeline_match_pattern.onnx')
 
     pattern  = direct_convert_ir_graph_to_pattern(ir_model.graph)
 
@@ -842,8 +838,5 @@ def build_loop_replace_pattern(graph, LoopBody):
     graph = ir.Graph(name='loop_replace',nodes=graph_nodes, inputs=graph_inputs, outputs=graph_outputs)
 
     graph.sort()
-
-    model = ir.serde.serialize_model(ir.Model(graph, ir_version=10))
-    onnx.save(model, 'replacementgraph.onnx')
 
     return ReplacementPatternGraph(graph)

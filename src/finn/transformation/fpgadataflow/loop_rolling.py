@@ -165,7 +165,6 @@ def build_loop_replace_pattern(graph, LoopBody):
     graph.sort()
 
     model = ir.serde.serialize_model(ir.Model(graph, ir_version=10))
-    onnx.save(model, 'replacementgraph.onnx')
 
     return osh.ReplacementPatternGraph(graph)
 
@@ -246,8 +245,6 @@ class LoopExtraction(Transformation):
 
         model_proto = onnxscript.ir.serde.serialize_model(model_layers_replaced)
         model.model = model_proto
-        onnx.save(model_proto, 'simple_module_layers_replaced.onnx')
-
 
         return (model, False)
 
@@ -354,7 +351,5 @@ class LoopRolling(Transformation):
         model_wrapper = qonnx.core.modelwrapper.ModelWrapper(model)
 
         model = model_wrapper.transform(FoldConstants())
-
-        model.save('simple_module_layers_replaced_loop.onnx')
 
         return (model, False)
