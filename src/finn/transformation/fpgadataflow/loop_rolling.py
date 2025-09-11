@@ -9,9 +9,8 @@ from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.fold_constants import FoldConstants
 
-from onnxscript.utils import graph_view_utils as gvu
+from finn.util import onnxscript_helpers as osh
 from onnxscript.rewriter import pattern
-from onnxscript.rewriter import pattern_builder_jsm as pb
 from onnxscript.rewriter import rewrite
 
 
@@ -49,7 +48,7 @@ def same_values(inputs):
 
 def build_loop_replace_pattern(graph, LoopBody):
 
-    nodes = pb.find_nodes_of_optype(graph, LoopBody.function.name)
+    nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)
     iterations = len(nodes)
 
     graph_nodes = []
@@ -59,11 +58,11 @@ def build_loop_replace_pattern(graph, LoopBody):
     const_indexes = []
     for i, LoopInputType in enumerate(LoopBody.signature):
 
-        if LoopInputType == pb.LoopBodyInputType.PARAMETER:
+        if LoopInputType == osh.LoopBodyInputType.PARAMETER:
             # Build Concat Node
             concat_inputs  = []
             for node in nodes:
-                nvalue = pb.vdisconnect(copy.copy(node.inputs[i]))
+                nvalue = osh.vdisconnect(copy.copy(node.inputs[i]))
                 graph_inputs.append(nvalue)
                 concat_inputs.append(nvalue)
 
@@ -71,19 +70,19 @@ def build_loop_replace_pattern(graph, LoopBody):
             if len(concat_inputs[0].shape.dims) == 0:
                 const_values_as_numpy = np.array([x.const_value.numpy() for x in concat_inputs])
                 const_values_as_tensor = ir.Tensor(const_values_as_numpy)
-                const_values_as_const_node = pb.build_constant_from_tensor(f'concat_{i}', const_values_as_tensor)
+                const_values_as_const_node = osh.build_constant_from_tensor(f'concat_{i}', const_values_as_tensor)
                 graph_nodes.append(const_values_as_const_node)
 
-                reshape_shape_const = pb.build_constant_from_tensor(f'reshape_shape_const_{i}',
+                reshape_shape_const = osh.build_constant_from_tensor(f'reshape_shape_const_{i}',
                                                              ir.Tensor(np.array([len(concat_inputs), 1])))
-                reshape_node  = pb.build_reshape_node(const_values_as_const_node.outputs[0], reshape_shape_const.outputs[0])
+                reshape_node  = osh.build_reshape_node(const_values_as_const_node.outputs[0], reshape_shape_const.outputs[0])
             else:
-                concat_node = pb.build_concat_node_from_inputs(concat_inputs)
+                concat_node = osh.build_concat_node_from_inputs(concat_inputs)
                 graph_nodes.append(concat_node)
                 # Build Reshape Node
-                reshape_shape_const = pb.build_constant_from_tensor(f'reshape_shape_const_{i}', ir.Tensor(np.array([len(nodes),*concat_inputs[0].shape.dims])))
+                reshape_shape_const = osh.build_constant_from_tensor(f'reshape_shape_const_{i}', ir.Tensor(np.array([len(nodes),*concat_inputs[0].shape.dims])))
 
-                reshape_node = pb.build_reshape_node(concat_node.outputs[0], reshape_shape_const.outputs[0])
+                reshape_node = osh.build_reshape_node(concat_node.outputs[0], reshape_shape_const.outputs[0])
             graph_nodes.append(reshape_shape_const)
             graph_nodes.append(reshape_node)
             loop_inputs.append(reshape_node.outputs[0])
@@ -99,7 +98,7 @@ def build_loop_replace_pattern(graph, LoopBody):
             consumer.attributes["inFIFODepths"] = ir.Attr(
                 "inFIFODepths", ir.AttributeType.INTS, [2, 2]
             )
-        elif LoopInputType == pb.LoopBodyInputType.CONSTANT:
+        elif LoopInputType == osh.LoopBodyInputType.CONSTANT:
             const_indexes.append(i)
 
             # if input is constant push down into loop body graph
@@ -127,8 +126,8 @@ def build_loop_replace_pattern(graph, LoopBody):
 
             LoopBody.function.sort()
 
-        elif LoopInputType == pb.LoopBodyInputType.ACTIVATION:
-            cinp = pb.vdisconnect(copy.copy(LoopBody.function.inputs[i]))
+        elif LoopInputType == osh.LoopBodyInputType.ACTIVATION:
+            cinp = osh.vdisconnect(copy.copy(LoopBody.function.inputs[i]))
             graph_inputs.append(cinp)
             loop_inputs.append(cinp)
 
@@ -139,7 +138,7 @@ def build_loop_replace_pattern(graph, LoopBody):
     loop_outputs = []
     graph_outputs = []
     for out in LoopBody.function.outputs:
-        output = pb.vdisconnect(copy.copy(out))
+        output = osh.vdisconnect(copy.copy(out))
         loop_outputs.append(output)
         graph_outputs.append(output)
 
@@ -168,7 +167,7 @@ def build_loop_replace_pattern(graph, LoopBody):
     model = ir.serde.serialize_model(ir.Model(graph, ir_version=10))
     onnx.save(model, 'replacementgraph.onnx')
 
-    return pb.ReplacementPatternGraph(graph)
+    return osh.ReplacementPatternGraph(graph)
 
 
 
@@ -188,7 +187,7 @@ class LoopExtraction(Transformation):
         model_ir    = onnxscript.ir.serde.deserialize_model(model.model)
         graph       = model_ir.graph
 
-        P = gvu.PytorchHierarchyNode()
+        P = osh.PytorchHierarchyNode()
         unadded_nodes = []
         for node in graph._nodes:
             added = P.add_node(node)
@@ -222,13 +221,13 @@ class LoopExtraction(Transformation):
 
         nodes = P.get_nodes(self.hierarchy_list)
         print(f"Nodes in layer 0: {len(nodes)}")
-        loop_body_graph_view = gvu.bGraphView(f'loop-body', nodes)
+        loop_body_graph_view = osh.bGraphView(f'loop-body', nodes)
         print(f"Layer 0 graph view: {len(loop_body_graph_view._nodes)}")
         loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=10)
         proto = onnxscript.ir.serde.serialize_model(loop_body_model)
         onnx.save(proto, 'loop-body-template.onnx')
         print("Load Loop Body Template")
-        self.loop_body_template = pb.LoopBodyTemplate('loop-body-template.onnx')
+        self.loop_body_template = osh.LoopBodyTemplate('loop-body-template.onnx')
 
         # Replace instances of the loop body with a function call to the loop body
         change_layers_to_function_calls = pattern.RewriteRule(
@@ -274,7 +273,7 @@ class LoopRolling(Transformation):
         # get the consecutive node layers
         # TODO: write a check to ensure that there is only one
         #       set of consecutive nodes.
-        nodes = pb.find_nodes_of_optype(graph, LoopBody.function.name)
+        nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)
 
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
@@ -313,7 +312,7 @@ class LoopRolling(Transformation):
             b = LoopBody.function.inputs[swap[1]]
             LoopBody.function.inputs[swap[0]] = b
             LoopBody.function.inputs[swap[1]] = a
-            LoopBody.signature[swap[0]] = pb.LoopBodyInputType.ACTIVATION
+            LoopBody.signature[swap[0]] = osh.LoopBodyInputType.ACTIVATION
             activations+=1
 
         # Next Label Inputs according to how they are produced.
@@ -327,12 +326,12 @@ class LoopRolling(Transformation):
                 cinput = node.inputs[index]
                 inputs.append(cinput)
 
-            if pb.same(inputs) or same_values(inputs):
+            if osh.same(inputs) or same_values(inputs):
                 # Constant with Respect to Loop
-                LoopBody.signature[index] = pb.LoopBodyInputType.CONSTANT
+                LoopBody.signature[index] = osh.LoopBodyInputType.CONSTANT
             else:
                 # Must be Indexed
-                LoopBody.signature[index] = pb.LoopBodyInputType.PARAMETER
+                LoopBody.signature[index] = osh.LoopBodyInputType.PARAMETER
 
         ###################################################
         ## End I/O Normalization for Loop Body
