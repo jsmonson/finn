@@ -27,15 +27,14 @@ from qonnx.transformation.infer_shapes import InferShapes
 class SimpleSubModule(torch.nn.Module):
     def __init__(self, in_features, out_features, mul_val=200):
         super(SimpleSubModule, self).__init__()
-        #self.mul_val = torch.tensor([mul_val])
+        self.mul_val = torch.tensor([mul_val])
         self.linear = QuantLinear(in_features, out_features, bias=True,
                                   weight_quant=Int8WeightPerTensorFloat,
                                   input_quant=Int8ActPerTensorFloat,
                                   bias_quant=Int8Bias)
 
     def forward(self, x):
-        #return self.mul_val * self.linear(x)
-        return self.linear(x)
+        return self.mul_val * self.linear(x)
 
 
 # Simple Torch Module with parameterizable number of linear layers
@@ -133,7 +132,7 @@ def test_finn_loop():
 
     # Check tensor shapes by name since loop rolling may reorder inputs
     check_tensor_shape(model_wrapper, 'x', [input_size, hidden_size]) # activation input shape should remain the same
-    check_tensor_shape(model_wrapper, 'linear_5', [input_size, hidden_size]) # activation output shape should remain the same
+    check_tensor_shape(model_wrapper, 'mul_5', [input_size, hidden_size]) # activation output shape should remain the same
     model_wrapper.get_tensor_shape(loop_node.input[1])[0] == num_layers # loop iteration count should match number of layers
     model_wrapper.get_tensor_shape(loop_node.input[2])[0] == num_layers # loop condition count should match number of layers
 
