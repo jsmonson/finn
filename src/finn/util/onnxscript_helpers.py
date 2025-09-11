@@ -669,6 +669,7 @@ def vdisconnect(value):
     value._uses = {}
     value._producer = None
     value._index = None
+    value._graph = None
     return value
 
 
