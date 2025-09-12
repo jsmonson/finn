@@ -921,10 +921,13 @@ def step_loop_rolling(model, cfg):
     """Apply optimizations including folding constraints and pumped compute."""
 
     if cfg.loop_body_hierarchy is not None:
+        print(f"Running Loop Rolling on {cfg.loop_body_hierarchy} hierarchy")
         model = model.transform(FoldConstants())
         loop_extraction = LoopExtraction(cfg.loop_body_hierarchy)
         model = model.transform(loop_extraction)
         model = model.transform(LoopRolling(loop_extraction.loop_body_template))
+    else:
+        print("No loop_body_hierarchy specified, skipping Loop Rolling step")
 
     return model
 
