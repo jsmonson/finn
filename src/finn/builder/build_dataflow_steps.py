@@ -126,6 +126,7 @@ from finn.util.basic import get_liveness_threshold_cycles, get_rtlsim_trace_dept
 from finn.util.mlo_sim import is_mlo, mlo_prehook_func_factory
 from finn.util.test import execute_parent
 
+from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
 
 def verify_step(
     model: ModelWrapper,
@@ -916,6 +917,16 @@ def step_deployment_package(model: ModelWrapper, cfg: DataflowBuildConfig):
         )
     return model
 
+def step_loop_rolling(model, cfg):
+    """Apply optimizations including folding constraints and pumped compute."""
+
+    model = model.transform(FoldConstants())
+    loop_extraction = LoopExtraction(cfg.loop_body_hierarchy)
+    model = model.transform(loop_extraction)
+    model = model.transform(LoopRolling(loop_extraction.loop_body_template))
+
+    return model
+
 
 #: map step name strings to step functions
 build_dataflow_step_lookup = {
@@ -938,4 +949,5 @@ build_dataflow_step_lookup = {
     "step_out_of_context_synthesis": step_out_of_context_synthesis,
     "step_synthesize_bitfile": step_synthesize_bitfile,
     "step_deployment_package": step_deployment_package,
+    "step_loop_rolling": step_loop_rolling,
 }
