@@ -920,10 +920,11 @@ def step_deployment_package(model: ModelWrapper, cfg: DataflowBuildConfig):
 def step_loop_rolling(model, cfg):
     """Apply optimizations including folding constraints and pumped compute."""
 
-    model = model.transform(FoldConstants())
-    loop_extraction = LoopExtraction(cfg.loop_body_hierarchy)
-    model = model.transform(loop_extraction)
-    model = model.transform(LoopRolling(loop_extraction.loop_body_template))
+    if cfg.loop_body_hierarchy is not None:
+        model = model.transform(FoldConstants())
+        loop_extraction = LoopExtraction(cfg.loop_body_hierarchy)
+        model = model.transform(loop_extraction)
+        model = model.transform(LoopRolling(loop_extraction.loop_body_template))
 
     return model
 
