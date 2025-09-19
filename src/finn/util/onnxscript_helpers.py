@@ -1,5 +1,24 @@
 import ast
+import copy
+import numpy as np
+import onnx
+from collections.abc import Iterable
 from onnxscript import ir
+from onnxscript.rewriter._pattern_ir import (
+    GraphPattern,
+    NodeOutputPattern,
+    ValuePattern,
+)
+from onnxscript.rewriter._rewrite_rule import (
+    ReplacementPatternFunction,
+    ReplacementSubgraph,
+)
+from onnxscript.rewriter.pattern import (
+    MatchResult,
+    OpsetPatternBuilder,
+    RewriterContext,
+    pattern_builder,
+)
 
 
 def has_internal_usage(usage):
@@ -280,29 +299,6 @@ def add_metadata_to_unannotated_constant_nodes(graph):
                 node.metadata_props["pkg.torch.onnx.class_hierarchy"] = target_class_str
     return graph
 
-
-import copy
-import numpy as np
-import onnx
-from collections.abc import Iterable
-from onnxscript import ir
-from onnxscript.rewriter._pattern_ir import (
-    GraphPattern,
-    NodeOutputPattern,
-    ValuePattern,
-)
-from onnxscript.rewriter._rewrite_rule import (
-    ReplacementPatternFunction,
-    ReplacementSubgraph,
-)
-from onnxscript.rewriter.pattern import (
-    MatchResult,
-    OpsetPatternBuilder,
-    RewriterContext,
-    pattern_builder,
-)
-
-from finn.util.onnxscript_helpers import bGraphView
 
 # print("**************************************")
 # print("********* Pattern Builder ************")
