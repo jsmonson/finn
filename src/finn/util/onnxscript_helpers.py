@@ -299,12 +299,6 @@ def add_metadata_to_unannotated_constant_nodes(graph):
                 node.metadata_props["pkg.torch.onnx.class_hierarchy"] = target_class_str
     return graph
 
-
-# print("**************************************")
-# print("********* Pattern Builder ************")
-# print("**************************************")
-
-
 def direct_convert_ir_graph_to_pattern(graph):
     # Transform IR values to ValuePatterns
     vmap = {}
