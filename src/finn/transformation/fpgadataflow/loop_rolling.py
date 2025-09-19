@@ -3,6 +3,7 @@ import numpy as np
 import onnx
 import onnxscript
 import qonnx
+from enum import Enum
 from onnxscript import ir
 from onnxscript.rewriter import pattern, rewrite
 from qonnx.core.modelwrapper import ModelWrapper
@@ -50,7 +51,7 @@ def build_loop_replace_pattern(graph, LoopBody):
     graph_inputs = []
     const_indexes = []
     for i, LoopInputType in enumerate(LoopBody.signature):
-        if LoopInputType == osh.LoopBodyInputType.PARAMETER:
+        if LoopInputType == LoopBodyInputType.PARAMETER:
             # Build Concat Node
             concat_inputs = []
             for node in nodes:
@@ -100,7 +101,7 @@ def build_loop_replace_pattern(graph, LoopBody):
             consumer.attributes["inFIFODepths"] = ir.Attr(
                 "inFIFODepths", ir.AttributeType.INTS, [2, 2]
             )
-        elif LoopInputType == osh.LoopBodyInputType.CONSTANT:
+        elif LoopInputType == LoopBodyInputType.CONSTANT:
             const_indexes.append(i)
 
             # if input is constant push down into loop body graph
@@ -137,7 +138,7 @@ def build_loop_replace_pattern(graph, LoopBody):
 
             LoopBody.function.sort()
 
-        elif LoopInputType == osh.LoopBodyInputType.ACTIVATION:
+        elif LoopInputType == LoopBodyInputType.ACTIVATION:
             cinp = osh.vdisconnect(copy.copy(LoopBody.function.inputs[i]))
             graph_inputs.append(cinp)
             loop_inputs.append(cinp)
@@ -245,7 +246,7 @@ class LoopExtraction(Transformation):
         proto = onnxscript.ir.serde.serialize_model(loop_body_model)
         onnx.save(proto, "loop-body-template.onnx")
         print("Load Loop Body Template")
-        self.loop_body_template = osh.LoopBodyTemplate("loop-body-template.onnx")
+        self.loop_body_template = LoopBodyTemplate("loop-body-template.onnx")
 
         # Replace instances of the loop body with a function call to the loop body
         change_layers_to_function_calls = pattern.RewriteRule(
@@ -266,6 +267,87 @@ class LoopExtraction(Transformation):
         model.model = model_proto
 
         return (model, False)
+
+
+class LoopBodyInputType(Enum):
+    UNDEFINED = 0
+    ACTIVATION = 1
+    CONSTANT = 2
+    PARAMETER = 3
+    ITERATOR = 4
+    CONDITION = 5
+
+    def __str__(self):
+        return self.name
+
+
+class LoopBodyTemplate:
+    def __init__(self, filename):
+        self.load(filename)
+        self.pattern = osh.direct_convert_ir_graph_to_pattern(self._ir_graph)
+        self.function = self._build_ir_function()
+        self.function_replace = self._build_function_replace_pattern()
+        self.signature = [LoopBodyInputType.UNDEFINED] * len(self._ir_graph.inputs)
+
+    def _build_ir_function(self):
+        return ir.Function(
+            domain="loop", name="fn_" + self._ir_graph.name, graph=self._ir_graph, attributes=[]
+        )
+
+    def _build_function_replace_pattern(self):
+        inputs = [osh.vdisconnect(copy.copy(x)) for x in self._ir_graph.inputs]
+        outputs = [osh.vdisconnect(copy.copy(x)) for x in self._ir_graph.outputs]
+
+        node = ir.Node(
+            domain=self.function.domain,
+            version=0,
+            op_type=self.function.name,
+            inputs=inputs,
+            outputs=outputs,
+        )
+
+        g = ir.Graph(inputs=inputs, outputs=outputs, nodes=[node])
+
+        return osh.ReplacementPatternGraph(g)
+
+    def get_iterator_index(self):
+        for i in range(len(self.signature)):
+            if self.signature[i] == LoopBodyInputType.ITERATOR:
+                return i
+
+    def build_function_match_pattern(self, graph, use_iteration_ext=True):
+        graph.sort()
+        nodes = osh.find_nodes_of_optype(graph, self.function.name)
+        if use_iteration_ext:
+            nodes.insert(0, graph.node("iteration_ext"))
+            nodes.insert(0, graph.node("condition_ext"))
+
+        ir_model = ir.Model(osh.bGraphView("inlined_pipe_pattern", nodes), ir_version=10)
+
+        pattern = osh.direct_convert_ir_graph_to_pattern(ir_model.graph)
+
+        return (pattern, nodes)
+
+    def load(self, filename):
+        self._model_proto = onnx.load(filename)
+        self._ir_model = ir.serde.deserialize_model(self._model_proto)
+        self._ir_graph = self._ir_model.graph
+
+    def update(self):
+        self._ir_model = ir.Model(self._ir_graph, ir_version=10)
+        self._model_proto = ir.serde.serialize_model(self._ir_model)
+
+    def save(self, filename):
+        self.update()
+        onnx.save(self._model_proto, filename)
+
+    def set_signature_index(self, index, stype):
+        self.signature[index] = stype
+
+    @property
+    def output_signature(self):
+        # The output signature is the same as the input signature but without the iteration input
+        return self.signature[1:]
 
 
 class LoopRolling(Transformation):
@@ -327,7 +409,7 @@ class LoopRolling(Transformation):
             b = LoopBody.function.inputs[swap[1]]
             LoopBody.function.inputs[swap[0]] = b
             LoopBody.function.inputs[swap[1]] = a
-            LoopBody.signature[swap[0]] = osh.LoopBodyInputType.ACTIVATION
+            LoopBody.signature[swap[0]] = LoopBodyInputType.ACTIVATION
             activations += 1
 
         # Next Label Inputs according to how they are produced.
@@ -343,10 +425,10 @@ class LoopRolling(Transformation):
 
             if osh.same(inputs) or same_values(inputs):
                 # Constant with Respect to Loop
-                LoopBody.signature[index] = osh.LoopBodyInputType.CONSTANT
+                LoopBody.signature[index] = LoopBodyInputType.CONSTANT
             else:
                 # Must be Indexed
-                LoopBody.signature[index] = osh.LoopBodyInputType.PARAMETER
+                LoopBody.signature[index] = LoopBodyInputType.PARAMETER
 
         ###################################################
         ## End I/O Normalization for Loop Body
