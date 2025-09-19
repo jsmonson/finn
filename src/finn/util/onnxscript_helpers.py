@@ -1,7 +1,9 @@
 import ast
 import copy
+from enum import Enum
 import numpy as np
 import onnx
+from typing import List
 from collections.abc import Iterable
 from onnxscript import ir
 from onnxscript.rewriter._pattern_ir import (
@@ -118,7 +120,7 @@ def bGraphView(name, nodes):
 # rebuild_pytorch_dynamo_instance_code #
 ########################################
 
-from typing import List
+
 
 
 class PytorchMetadataNode:
@@ -320,12 +322,9 @@ def direct_convert_ir_graph_to_pattern(graph):
             for ninput in node.inputs:
                 ninputs.append(vmap[ninput])
 
-            # if len(node.outputs) > 1:
             vp_outputs = builder.__getattr__(node.op_type)(
                 *ninputs, _domain=node.domain, _outputs=len(node.outputs)
             )
-            # else:
-            #    vp_outputs = builder.__getattr__(node.op_type)(*ninputs)
 
             if isinstance(vp_outputs, NodeOutputPattern):
                 vp_outputs = [vp_outputs]
@@ -344,8 +343,6 @@ def direct_convert_ir_graph_to_pattern(graph):
 
     return GraphPattern(inputs=pinputs, outputs=poutputs, nodes=builder.nodes())
 
-
-from enum import Enum
 
 
 def remove_input_from_node(node, inp):
@@ -398,57 +395,6 @@ class LoopBodyTemplate:
         for i in range(len(self.signature)):
             if self.signature[i] == LoopBodyInputType.ITERATOR:
                 return i
-
-    def insert_gather_nodes(self, loop_iterations):
-        for index, LoopInputType in enumerate(self.signature):
-            if LoopInputType == LoopBodyInputType.PARAMETER:
-                # The Current Input Value will be the output of the gather node
-                gather_index = self.function.inputs[self.get_iterator_index()]
-                squeeze_out = self.function.inputs[index]
-
-                gather_in = ir.Value(
-                    name=squeeze_out.name + "_gather_in",
-                    shape=ir.Shape([loop_iterations, *squeeze_out.shape.dims]),
-                    type=squeeze_out.type,
-                )
-                gather_out = ir.Value(
-                    name=squeeze_out.name + "_gather_out",
-                    shape=ir.Shape([1, *squeeze_out.shape.dims]),
-                    type=squeeze_out.type,
-                )
-                for usage in squeeze_out.uses():
-                    if usage.node.op_type == "Identity":
-                        usage.node.replace_input_with(usage.idx, gather_in)
-                        usage.node.outputs[0].shape = copy.copy(gather_in.shape)
-
-                self.function.inputs[index] = gather_in
-
-                self.function.append(
-                    ir.Node(
-                        domain="",
-                        op_type="Gather",
-                        inputs=[gather_in, gather_index],
-                        outputs=[gather_out],
-                        num_outputs=1,
-                    )
-                )
-                squeeze_out.name += "_squeeze_out"
-                squeeze_axis = build_constant_from_tensor(
-                    f"{gather_out.name}_squeeze_axis", ir.Tensor(np.array([0]))
-                )
-                self.function.append(squeeze_axis)
-                self.function.append(
-                    ir.Node(
-                        domain="",
-                        op_type="Squeeze",
-                        inputs=[gather_out, squeeze_axis.outputs[0]],
-                        outputs=[squeeze_out],
-                        num_outputs=1,
-                        version=13,
-                    )
-                )
-
-                self.function.sort()
 
     def build_function_match_pattern(self, graph, use_iteration_ext=True):
         graph.sort()
@@ -660,9 +606,6 @@ def normalize_io_for_loop_rolling(graph, LoopBody):
 
     graph.sort()
     return graph
-
-
-import copy
 
 
 def vdisconnect(value):
