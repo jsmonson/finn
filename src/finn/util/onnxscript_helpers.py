@@ -2,28 +2,6 @@ import ast
 from onnxscript import ir
 
 
-def is_initializer(value):
-    return input.producer() == None
-
-
-def gather_initializers(inputs):
-    inits = set()
-    for input in inputs:
-        if is_initializer(input):
-            inits.add(input)
-
-
-def is_constant(value):
-    return value.producer.op_type == "Constant"
-
-
-def gather_constants(inputs):
-    consts = set()
-    for input in inputs:
-        if is_constant(input):
-            consts.add(input)
-
-
 def has_internal_usage(usage):
     return "INTERNAL" in usage
 
