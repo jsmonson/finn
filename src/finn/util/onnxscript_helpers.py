@@ -20,97 +20,51 @@ from onnxscript.rewriter.pattern import (
 )
 
 
-def has_internal_usage(usage):
-    return "INTERNAL" in usage
+class SubGraphView(ir.GraphView):
+    def __init__(self, graph, name, nodes):
 
+        self._assert_graph_subset(graph, nodes)
 
-def has_external_usage(usage):
-    return "EXTERNAL" in usage
+        super().__init__(name=name,
+                         inputs=self._identify_inputs(nodes),
+                         initializers=self._identify_initializers(nodes),
+                         outputs=self._identify_outputs(nodes),
+                         nodes=nodes)
 
+    def _assert_graph_subset(self, graph, nodes):
+        for node in nodes:
+            if node.graph != graph:
+                raise ValueError("All nodes must belong to the same graph")
 
-def classify_usage(value, nodes):
-    usage = set()
-    if value in nodes[0].graph.outputs:
-        usage.add("EXTERNAL")
-    for use in value.uses():
-        user_node = use[0]
-        if user_node in nodes:
-            usage.add("INTERNAL")
-        else:
-            usage.add("EXTERNAL")
-    return usage
+    def _identify_inputs(self, nodes):
+        inputs = set()
+        for node in nodes:
+            for input in node.inputs:
+                if input.is_graph_input():
+                    inputs.add(input)
+                elif input.producer() not in nodes:
+                    inputs.add(input)
+        return list(inputs)
 
+    def _identify_initializers(self, nodes):
+        initializers = set()
+        for node in nodes:
+            for input in node.inputs:
+                if input.is_initializer():
+                    initializers.add(input)
+        return list(initializers)
 
-def find_subgraph_inputs(nodes):
-    inputs = set()
-    initializers = set()
-    for node in nodes:
-        for ninput in node.inputs:
-            if ninput in node.graph.inputs:
-                inputs.add(ninput)
-            elif any(ninput is init for init in node.graph.initializers):
-                initializers.add(ninput)
-            elif ninput.producer() == None:
-                inputs.add(ninput)
-            elif ninput.producer() not in nodes:
-                inputs.add(ninput)
-
-    return inputs, initializers
-
-
-def find_subgraph_outputs(nodes):
-    output = set()
-    used_output = set()
-    for node in nodes:
-        for noutput in node.outputs:
-            usage = classify_usage(noutput, nodes)
-            if has_external_usage(usage):
-                if has_internal_usage(usage):
-                    used_output.add(noutput)
+    def _identify_outputs(self, nodes):
+        outputs = set()
+        for node in nodes:
+            for output in node.outputs:
+                if output.is_graph_output():
+                    outputs.add(output)
                 else:
-                    output.add(noutput)
-    return [output, used_output]
-
-
-def build_graph_view(name, nodes):
-    # check that all nodes belong to the same graph
-    for node in nodes:
-        if node.graph != nodes[0].graph:
-            raise ValueError("All nodes must belong to the same graph")
-
-    graph = nodes[0].graph
-
-    print(f"Sorting nodes for GraphView: {name}")
-    # sort the nodes in topological order
-    graph.sort()
-    # add the nodes to the new list in the order they appear in the graph
-    sorted_nodes = []
-    for node in graph._nodes:
-        if node in nodes:
-            sorted_nodes.append(node)
-    nodes = sorted_nodes
-
-    [view_inputs, view_initializers] = find_subgraph_inputs(nodes)
-    [view_outputs, used_outputs] = find_subgraph_outputs(nodes)
-
-    for used_output in used_outputs:
-        producer_node = used_output.producer()
-        nodes.remove(producer_node)
-        for output in producer_node.outputs:
-            usage = classify_usage(output, nodes)
-            if has_internal_usage(usage):
-                view_inputs.add(output)
-            if has_external_usage(usage):
-                if output in view_outputs:
-                    view_outputs.remove(output)
-
-    return ir.GraphView(
-        name=name,
-        inputs=view_inputs,
-        outputs=view_outputs,
-        nodes=nodes,
-        initializers=view_initializers,
-    )
+                    for consumer in output.consumers():
+                        if consumer not in nodes:
+                            outputs.add(output)
+        return list(outputs)
 
 
 class PytorchMetadataNode:
@@ -249,7 +203,7 @@ def direct_convert_ir_graph_to_pattern(graph):
         vmap[input] = ValuePattern(input.name)
 
     for init in graph.initializers:
-        vmap[init] = ValuePattern(init.name)
+        vmap[init] = ValuePattern(init)
 
     for node in graph._nodes:
         if node.op_type == "Constant":
