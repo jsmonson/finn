@@ -240,7 +240,7 @@ class LoopExtraction(Transformation):
 
         nodes = P.get_nodes(self.hierarchy_list)
         print(f"Nodes in layer 0: {len(nodes)}")
-        loop_body_graph_view = osh.bGraphView(f"loop-body", nodes)
+        loop_body_graph_view = osh.build_graph_view(f"loop-body", nodes)
         print(f"Layer 0 graph view: {len(loop_body_graph_view._nodes)}")
         loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=10)
         proto = onnxscript.ir.serde.serialize_model(loop_body_model)
@@ -322,7 +322,7 @@ class LoopBodyTemplate:
             nodes.insert(0, graph.node("iteration_ext"))
             nodes.insert(0, graph.node("condition_ext"))
 
-        ir_model = ir.Model(osh.bGraphView("inlined_pipe_pattern", nodes), ir_version=10)
+        ir_model = ir.Model(osh.build_graph_view("inlined_pipe_pattern", nodes), ir_version=10)
 
         pattern = osh.direct_convert_ir_graph_to_pattern(ir_model.graph)
 

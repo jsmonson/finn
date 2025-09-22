@@ -72,7 +72,7 @@ def find_subgraph_outputs(nodes):
     return [output, used_output]
 
 
-def bGraphView(name, nodes):
+def build_graph_view(name, nodes):
     # check that all nodes belong to the same graph
     for node in nodes:
         if node.graph != nodes[0].graph:
