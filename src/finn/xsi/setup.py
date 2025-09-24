@@ -17,33 +17,94 @@ import os
 import subprocess
 import shutil
 import argparse
+import sysconfig
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
+
+
+def get_build_paths() -> Tuple[List[str], str, List[str]]:
+    """Get include paths and compiler for building the extension.
+    
+    Returns:
+        Tuple of (include_dirs, compiler, extra_compile_args)
+    """
+    include_dirs = []
+    
+    # Get Python include directory
+    python_include = sysconfig.get_path('include')
+    if python_include:
+        include_dirs.append(python_include)
+    
+    # Try to get pybind11 include directory
+    try:
+        import pybind11
+        pybind11_include = pybind11.get_include()
+        include_dirs.append(pybind11_include)
+        
+        # Also get the user-specific include
+        pybind11_user_include = pybind11.get_include(user=True)
+        if pybind11_user_include != pybind11_include:
+            include_dirs.append(pybind11_user_include)
+    except ImportError:
+        # Will be caught later in prerequisites check
+        pass
+    
+    # Get Xilinx Vivado include directory
+    xilinx_vivado = os.environ.get("XILINX_VIVADO")
+    if xilinx_vivado:
+        xilinx_include = os.path.join(xilinx_vivado, "data", "xsim", "include")
+        if os.path.exists(xilinx_include):
+            include_dirs.append(xilinx_include)
+    
+    # Determine compiler
+    compiler = "g++"
+    if not shutil.which("g++") and shutil.which("clang++"):
+        compiler = "clang++"
+    
+    # Compile flags
+    extra_compile_args = [
+        "--std=c++17",
+        "-Wall",
+        "-O3",
+        "-shared",
+        "-fPIC"
+    ]
+    
+    return include_dirs, compiler, extra_compile_args
 
 
 def check_prerequisites() -> List[str]:
     """Check if required tools are available."""
     errors = []
     
-    # Check for make
-    if not shutil.which("make"):
-        errors.append("'make' command not found. Please install build-essential or equivalent.")
+    # Check for C++ compiler
+    if not shutil.which("g++") and not shutil.which("clang++"):
+        errors.append("No C++ compiler found. Please install g++ or clang++.")
     
     # Check for Xilinx tools
     if not shutil.which("vivado"):
         errors.append("'vivado' not found. Ensure Xilinx tools are in PATH.")
     
-    # Check for C++ compiler
-    if not shutil.which("g++") and not shutil.which("clang++"):
-        errors.append("No C++ compiler found. Please install g++ or clang++.")
+    # Check Xilinx Vivado environment variable
+    xilinx_vivado = os.environ.get("XILINX_VIVADO")
+    if not xilinx_vivado:
+        errors.append("XILINX_VIVADO environment variable not set. Please source Vivado settings.")
+    elif not os.path.exists(os.path.join(xilinx_vivado, "data", "xsim", "include")):
+        errors.append(f"Xilinx XSim headers not found at {xilinx_vivado}/data/xsim/include")
+    
+    # Check for pybind11
+    try:
+        import pybind11
+    except ImportError:
+        errors.append("pybind11 not found. Please install it with: pip install pybind11")
     
     return errors
 
 
 def build_xsi(force: bool = False, verbose: bool = True) -> bool:
-    """Build the finn_xsi extension module.
+    """Build the finn_xsi extension module using direct g++ compilation.
     
     Args:
         force: Force rebuild even if already built
@@ -77,27 +138,55 @@ def build_xsi(force: bool = False, verbose: bool = True) -> bool:
     
     print(f"Building finn_xsi in {xsi_path}...")
     
-    # Run make
-    env = os.environ.copy()
+    # Get build configuration
+    include_dirs, compiler, compile_args = get_build_paths()
+    
+    # Source files
+    source_files = ["xsi_bind.cpp", "xsi_finn.cpp"]
+    
+    # Build command
+    cmd = [compiler] + compile_args
+    
+    # Add include directories
+    for inc_dir in include_dirs:
+        cmd.extend(["-I", inc_dir])
+    
+    # Output file
+    cmd.extend(["-o", "xsi.so"])
+    
+    # Source files
+    cmd.extend(source_files)
+    
+    # Link libraries
+    cmd.extend(["-ldl", "-lrt"])
+    
+    if verbose:
+        print(f"Build command: {' '.join(cmd)}")
+    
+    # Run the compilation
     result = subprocess.run(
-        ["make"],
+        cmd,
         cwd=xsi_path,
-        env=env,
-        capture_output=not verbose,
+        capture_output=True,
         text=True
     )
     
     if result.returncode != 0:
         print("Build failed!")
-        if not verbose and result.stderr:
+        if result.stderr:
             print("Error output:", result.stderr)
-        if not verbose and result.stdout:
+        if result.stdout:
             print("Build output:", result.stdout)
+        print("\nBuild command was:")
+        print(" ".join(cmd))
         print("\nCommon issues:")
         print("  - Ensure Xilinx Vivado is properly sourced")
-        print("  - Check that pybind11 is available")
+        print("  - Check that pybind11 is installed in your Python environment")
         print("  - Verify C++ compiler is installed")
         return False
+    
+    if verbose and result.stdout:
+        print(result.stdout)
     
     print("Build completed successfully.")
     return True
@@ -145,8 +234,20 @@ def clean_build() -> bool:
     xsi_path = finn_root / "finn_xsi"
     
     print(f"Cleaning build artifacts in {xsi_path}...")
-    result = subprocess.run(["make", "clean"], cwd=xsi_path)
-    return result.returncode == 0
+    
+    # Remove xsi.so if it exists
+    xsi_so = xsi_path / "xsi.so"
+    if xsi_so.exists():
+        try:
+            xsi_so.unlink()
+            print("Removed xsi.so")
+            return True
+        except Exception as e:
+            print(f"Failed to remove xsi.so: {e}")
+            return False
+    else:
+        print("No artifacts to clean.")
+        return True
 
 
 def main() -> int:
