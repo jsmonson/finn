@@ -154,10 +154,10 @@ def test_finn_loop():
     check_tensor_shape(
         model_wrapper, "mul_5", [input_size, hidden_size]
     )  # activation output shape should remain the same
-    model_wrapper.get_tensor_shape(loop_node.input[1])[
+    assert model_wrapper.get_tensor_shape(loop_node.input[1])[
         0
     ] == num_layers  # loop iteration count should match number of layers
-    model_wrapper.get_tensor_shape(loop_node.input[2])[
+    assert model_wrapper.get_tensor_shape(loop_node.input[2])[
         0
     ] == num_layers  # loop condition count should match number of layers
 
