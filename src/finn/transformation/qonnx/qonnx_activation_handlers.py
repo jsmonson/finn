@@ -148,6 +148,8 @@ class QuantActBaseHandler(ABC):
             domain="qonnx.custom_op.general",
         )
         graph.node.insert(running_node_index, outp_trans_node)
+        if hasattr(n, "metadata_props"):
+            outp_trans_node.metadata_props.extend(n.metadata_props)
         running_node_index += 1
 
         # Get the MultiThreshold node instance to work with
@@ -219,6 +221,8 @@ class QuantActBaseHandler(ABC):
                     [n.output[0]],
                 )
                 graph.node.insert(running_node_index, add_node)
+                if hasattr(n, "metadata_props"):
+                    add_node.metadata_props.extend(n.metadata_props)
                 running_node_index += 1
                 add_node = graph.node[running_node_index - 1]
 
@@ -261,6 +265,8 @@ class QuantActBaseHandler(ABC):
                     [n.output[0]],
                 )
                 graph.node.insert(running_node_index, mul_node)
+                if hasattr(n, "metadata_props"):
+                    mul_node.metadata_props.extend(n.metadata_props)
                 running_node_index += 1
                 mul_node = graph.node[running_node_index - 1]
 

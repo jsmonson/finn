@@ -1,15 +1,16 @@
 import pytest
 
 import brevitas.onnx as bo
+import numpy as np
 import onnx
 import onnxruntime as ort
 import onnxscript
-import qonnx.core.modelwrapper
 import qonnx.util.basic as util
 import torch
 from brevitas.nn import QuantLinear
 from brevitas.quant import Int8ActPerTensorFloat, Int8Bias, Int8WeightPerTensorFloat
 from qonnx.core.datatype import DataType
+from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import gen_finn_dt_tensor
 
@@ -17,6 +18,7 @@ import finn.core.onnx_exec as oxe
 import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
 from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
 from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
+from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
 
 
 class SimpleSubModule(torch.nn.Module):
@@ -97,7 +99,7 @@ def export_model_to_qonnx(input_size=10, hidden_size=20, num_layers=4, output_si
     # Load the ONNX model to verify
     print(f"Model exported successfully to {onnx_path}")
     print(f"Model has {num_layers} layers with input size {input_size}")
-    return onnx_path
+    return onnx_path, model
 
 
 def check_tensor_shape(model_wrapper, name, expected_shape):
@@ -113,9 +115,11 @@ def test_finn_loop():
     num_layers = 6
     output_size = None
 
-    onnx_path = export_model_to_qonnx(input_size, hidden_size, num_layers, output_size)
+    onnx_path, model = export_model_to_qonnx(input_size, hidden_size, num_layers, output_size)
 
-    model_wrapper = qonnx.core.modelwrapper.ModelWrapper(onnx_path)
+    model_wrapper = ModelWrapper(onnx_path)
+
+    model_wrapper = model_wrapper.transform(ConvertQONNXtoFINN())
 
     m_input_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.input[0].name)
     m_output_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.output[0].name)
@@ -170,3 +174,12 @@ def test_finn_loop():
             assert (
                 mlo_attr.i == num_layers
             ), "Loop body max iteration count should match number of layers"
+
+    inp_tensor = np.random.uniform(low=-1.0, high=1.0, size=(input_size, hidden_size)).astype(
+        np.float32
+    )
+    idict = {model_wrapper.graph.input[0].name: inp_tensor}
+    odict = oxe.execute_onnx(model_wrapper, idict)
+    produced = odict[model_wrapper.graph.output[0].name]
+    inp_tensor = torch.from_numpy(inp_tensor).float()
+    expected = model.forward(inp_tensor).detach().numpy()
