@@ -21,10 +21,18 @@ from onnxscript.rewriter.pattern import (
 
 
 class SubGraphView(ir.GraphView):
-    def __init__(self, graph, name, nodes):
+    """Create a read-only view of a subgraph defined by a set of nodes.
 
+    Args:
+        graph (ir.Graph): The parent graph containing the nodes.
+        name (str): Name of the subgraph.
+        nodes (List[ir.Node]): List of nodes that make up the subgraph.
+        include_initializers (bool): Whether to include initializers connected to the subgraph nodes as part of the subgraph.
+    """
+
+    def __init__(self, graph, name, nodes, include_initializers=False):
         self._assert_graph_subset(graph, nodes)
-
+        self.include_initializers = include_initializers
         super().__init__(name=name,
                          inputs=self._identify_inputs(nodes),
                          initializers=self._identify_initializers(nodes),
@@ -48,10 +56,11 @@ class SubGraphView(ir.GraphView):
 
     def _identify_initializers(self, nodes):
         initializers = set()
-        for node in nodes:
-            for input in node.inputs:
-                if input.is_initializer():
-                    initializers.add(input)
+        if self.include_initializers:
+            for node in nodes:
+                for input in node.inputs:
+                    if input.is_initializer():
+                        initializers.add(input)
         return list(initializers)
 
     def _identify_outputs(self, nodes):
