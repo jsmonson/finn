@@ -237,7 +237,7 @@ class LoopExtraction(Transformation):
             print(f"added metadata for node {node.name}")
 
             assert P.add_node(node)
-
+        graph.sort()
         nodes = P.get_nodes(self.hierarchy_list)
         print(f"Nodes in layer 0: {len(nodes)}")
         #loop_body_graph_view = osh.build_graph_view(f"loop-body", nodes)
@@ -285,6 +285,7 @@ class LoopBodyInputType(Enum):
 class LoopBodyTemplate:
     def __init__(self, filename):
         self.load(filename)
+        self._ir_graph.sort()
         self.pattern = osh.direct_convert_ir_graph_to_pattern(self._ir_graph)
         self.function = self._build_ir_function()
         self.function_replace = self._build_function_replace_pattern()
