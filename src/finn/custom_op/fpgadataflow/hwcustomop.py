@@ -27,7 +27,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 try:
-    import finn_xsi.adapter as finnxsi
+    from finn import xsi
+    finnxsi = xsi if xsi.is_available() else None
 except ModuleNotFoundError:
     finnxsi = None
 

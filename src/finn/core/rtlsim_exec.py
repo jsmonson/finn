@@ -26,9 +26,10 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-try:
-    import finn_xsi.adapter as finnxsi
-except ModuleNotFoundError:
+from finn import xsi
+if xsi.is_available():
+    finnxsi = xsi
+else:
     finnxsi = None
 
 import numpy as np
