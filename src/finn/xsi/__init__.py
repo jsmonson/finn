@@ -16,11 +16,6 @@ Usage:
     from finn import xsi
     if xsi.is_available():
         import finn_xsi.adapter
-
-    # Or require XSI support (raises error if not available)
-    from finn.xsi import require
-    require()
-    import finn_xsi.adapter
 """
 
 import os
@@ -43,90 +38,6 @@ def is_available() -> bool:
 
     # Try loading the modules (this will cache them if successful)
     return _load_modules()
-
-
-def require() -> None:
-    """Ensure XSI support is available, raise helpful error if not.
-
-    Raises:
-        ImportError: If finn_xsi is not available with setup instructions
-    """
-    if not is_available():
-        raise ImportError(
-            "FINN XSI (RTL simulation) support not available.\n"
-            "\n"
-            "To set up XSI support:\n"
-            "  1. Ensure Xilinx tools are available in your environment\n"
-            "  2. Run: python -m finn.xsi.setup\n"
-            "\n"
-            "For detailed instructions, see:\n"
-            "  https://finn.readthedocs.io/en/latest/rtl_simulation.html"
-        )
-
-
-def get_adapter() -> Any:
-    """Get the finn_xsi adapter module if available.
-
-    Returns:
-        module: The finn_xsi.adapter module
-
-    Raises:
-        ImportError: If finn_xsi is not available
-    """
-    require()
-    import finn_xsi.adapter
-
-    return finn_xsi.adapter
-
-
-# Optional: Provide status information
-def status() -> None:
-    """Print XSI support status information."""
-    # Show expected path
-    expected_path = Path(os.environ["FINN_ROOT"]) / "finn_xsi"
-    print(f"Expected finn_xsi location: {expected_path}")
-
-    # Check if module exists
-    if expected_path.exists():
-        print("✓ finn_xsi directory exists")
-        xsi_so = expected_path / "xsi.so"
-        if xsi_so.exists():
-            print("✓ xsi.so compiled module found")
-        else:
-            print("✗ xsi.so compiled module NOT found (need to build)")
-    else:
-        print("✗ finn_xsi directory not found")
-
-    # Check if available through finn.xsi
-    if is_available():
-        print("✓ XSI support is available through finn.xsi")
-        print("  No manual PYTHONPATH configuration needed")
-
-        # Show available functions
-        available_funcs = [
-            "compile_sim_obj",
-            "get_simkernel_so",
-            "load_sim_obj",
-            "reset_rtlsim",
-            "close_rtlsim",
-            "rtlsim_multi_io",
-            "SimEngine",
-        ]
-        print("  Available functions:")
-        for func in available_funcs:
-            if hasattr(sys.modules[__name__], func):
-                print(f"    - xsi.{func}")
-    else:
-        print("✗ XSI support not available")
-        print("  Run 'python -m finn.xsi.setup' to build")
-
-    # Check if Xilinx tools are available
-    import shutil
-
-    if shutil.which("vivado"):
-        print("✓ Vivado found in PATH")
-    else:
-        print("✗ Vivado not found in PATH")
 
 
 # Cache for loaded modules
