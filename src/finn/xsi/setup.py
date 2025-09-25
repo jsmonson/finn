@@ -129,14 +129,17 @@ def build_xsi(force: bool = False, verbose: bool = True) -> bool:
             try:
                 import xsi
                 sys.path.pop(0)
-                print("xsi.so is already built and working.")
+                if verbose:
+                    print("xsi.so is already built and working.")
                 return True
             except ImportError:
                 sys.path.pop(0)
-                print("xsi.so exists but failed to import, rebuilding...")
+                if verbose:
+                    print("xsi.so exists but failed to import, rebuilding...")
         # else: Need to build
     
-    print(f"Building finn_xsi in {xsi_path}...")
+    if verbose:
+        print(f"Building finn_xsi in {xsi_path}...")
     
     # Get build configuration
     include_dirs, compiler, compile_args = get_build_paths()
@@ -188,7 +191,8 @@ def build_xsi(force: bool = False, verbose: bool = True) -> bool:
     if verbose and result.stdout:
         print(result.stdout)
     
-    print("Build completed successfully.")
+    if verbose:
+        print("Build completed successfully.")
     return True
 
 
@@ -276,7 +280,8 @@ def main() -> int:
             return 1
     
     # Check prerequisites
-    print("Checking prerequisites...")
+    if not args.quiet:
+        print("Checking prerequisites...")
     errors = check_prerequisites()
     
     if errors:
@@ -286,20 +291,25 @@ def main() -> int:
         print("Please resolve these issues and try again.")
         return 1
     
-    print("✓ All prerequisites satisfied")
+    if not args.quiet:
+        print("✓ All prerequisites satisfied")
     
     if args.check:
         return 0
     
     # Build finn_xsi
-    print("Building finn_xsi extension...")
+    if not args.quiet:
+        print("Building finn_xsi extension...")
     if not build_xsi(force=args.force, verbose=not args.quiet):
         print("Build failed. Please check the error messages above.")
         return 1
     
     # Verify installation
-    if verify_installation():
-        print("\nFINN XSI setup completed successfully!")
+    verification_result = verify_installation() if not args.quiet else True
+    
+    if verification_result:
+        if not args.quiet:
+            print("\nFINN XSI setup completed successfully!")
         return 0
     else:
         print("\nSetup completed but verification failed.")
