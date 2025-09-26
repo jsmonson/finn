@@ -227,3 +227,29 @@ def test_finn_loop():
     atol = 1e-4
     assert np.allclose(produced, expected, rtol=rtol, atol=atol), "Results do not match within tolerance!"
 
+
+#@pytest.mark.xfail(strict=True, raises=Exception, reason="Initializer shape inconsistent with value info shape")
+def test_inconsistant_initializer_shape():
+    # test that if the initializer shape is inconsistent with the value info shape, the transformation fails
+    input_size = 20
+    hidden_size = 20
+    num_layers = 6
+    output_size = None
+
+    onnx_path, model = export_model_to_qonnx(input_size, hidden_size, num_layers, output_size)
+
+    qonnx_cleanup(onnx_path, out_file=onnx_path)
+    model_wrapper = ModelWrapper(onnx_path)
+
+    model_wrapper.save("before_extraction.onnx")
+    # manually change the shape of one of the initializers in the loop body to be inconsistent with the value info
+    param0 = model_wrapper.get_initializer("Mul_0_param0")
+    model_wrapper.set_initializer("Mul_0_param0", np.append(param0, param0))
+
+    loop_extraction = LoopExtraction(hierarchy_list=["", "layers.0"])
+    model_wrapper = model_wrapper.transform(loop_extraction)
+
+    # should throw an error because the initializer shape is inconsistent with the value info shape
+    with pytest.raises(Exception, match="Initializer Inconsistent between Loop Bodies"):
+        model_wrapper = model_wrapper.transform(LoopRolling(loop_extraction.loop_body_template))
+        #raise Exception("Initializer Inconsistent between Loop Bodies")
