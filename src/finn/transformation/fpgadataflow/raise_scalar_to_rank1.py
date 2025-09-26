@@ -28,10 +28,9 @@
 
 from __future__ import annotations
 
-from typing import Iterable
-
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.base import Transformation
+from typing import Iterable
 
 import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
 

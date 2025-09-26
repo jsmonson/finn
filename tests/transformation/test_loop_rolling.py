@@ -18,8 +18,8 @@ from qonnx.util.cleanup import cleanup as qonnx_cleanup
 
 import finn.core.onnx_exec as oxe
 import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
-from finn.transformation.fpgadataflow.raise_scalar_to_rank1 import RaiseScalarToRank1
 from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
+from finn.transformation.fpgadataflow.raise_scalar_to_rank1 import RaiseScalarToRank1
 from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
 from finn.transformation.streamline import Streamline
 from finn.transformation.streamline.collapse_repeated import (
@@ -222,7 +222,9 @@ def test_finn_loop():
     # compare results within a tolerance
     rtol = 1e-4
     atol = 1e-4
-    assert np.allclose(produced, expected, rtol=rtol, atol=atol), "Results do not match within tolerance!"
+    assert np.allclose(
+        produced, expected, rtol=rtol, atol=atol
+    ), "Results do not match within tolerance!"
 
 
 def test_inconsistant_initializer_shape():
@@ -245,5 +247,8 @@ def test_inconsistant_initializer_shape():
     model_wrapper = model_wrapper.transform(loop_extraction)
 
     # should throw an error because the initializer shape is inconsistent with the value info shape
-    with pytest.raises(Exception, match="LoopRolling: all loop-body initializers of the same index must have the same shape"):
+    with pytest.raises(
+        Exception,
+        match="LoopRolling: all loop-body initializers of the same index must have the same shape",
+    ):
         model_wrapper = model_wrapper.transform(LoopRolling(loop_extraction.loop_body_template))

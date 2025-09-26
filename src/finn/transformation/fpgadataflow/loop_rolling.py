@@ -56,8 +56,12 @@ def build_loop_replace_pattern(graph, LoopBody):
             g_shape = nodes[0].inputs[i].shape
             for node in nodes:
                 if node.inputs[i].shape != g_shape:
-                    print(f"LoopRolling: Index {i} expected shape {g_shape}, got {node.inputs[i].shape}.")
-                    raise Exception(f"LoopRolling: all loop-body initializers of the same index must have the same shape.")
+                    print(
+                        f"LoopRolling: Index {i} expected shape {g_shape}, got {node.inputs[i].shape}."
+                    )
+                    raise Exception(
+                        f"LoopRolling: all loop-body initializers of the same index must have the same shape."
+                    )
 
             # Build Concat Node
             concat_inputs = []
@@ -247,7 +251,7 @@ class LoopExtraction(Transformation):
         graph.sort()
         nodes = P.get_nodes(self.hierarchy_list)
         print(f"Nodes in layer 0: {len(nodes)}")
-        #loop_body_graph_view = osh.build_graph_view(f"loop-body", nodes)
+        # loop_body_graph_view = osh.build_graph_view(f"loop-body", nodes)
         loop_body_graph_view = osh.SubGraphView(graph, f"loop-body", nodes)
         print(f"Layer 0 graph view: {len(loop_body_graph_view._nodes)}")
         loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=10)
@@ -318,7 +322,6 @@ class LoopBodyTemplate:
         g = ir.Graph(inputs=inputs, outputs=outputs, nodes=[node])
 
         return osh.ReplacementPatternGraph(g)
-
 
     def build_function_match_pattern(self, graph, use_iteration_ext=True):
         graph.sort()

@@ -1,6 +1,4 @@
 import ast
-
-from typing import List, Optional
 from collections.abc import Iterable
 from onnxscript import ir
 from onnxscript.rewriter._pattern_ir import (
@@ -18,6 +16,7 @@ from onnxscript.rewriter.pattern import (
     RewriterContext,
     pattern_builder,
 )
+from typing import List, Optional
 
 
 class SubGraphView(ir.GraphView):
@@ -33,11 +32,13 @@ class SubGraphView(ir.GraphView):
     def __init__(self, graph, name, nodes, include_initializers=False):
         self._assert_graph_subset(graph, nodes)
         self.include_initializers = include_initializers
-        super().__init__(name=name,
-                         inputs=self._identify_inputs(nodes),
-                         initializers=self._identify_initializers(nodes),
-                         outputs=self._identify_outputs(nodes),
-                         nodes=nodes)
+        super().__init__(
+            name=name,
+            inputs=self._identify_inputs(nodes),
+            initializers=self._identify_initializers(nodes),
+            outputs=self._identify_outputs(nodes),
+            nodes=nodes,
+        )
 
     def _assert_graph_subset(self, graph, nodes):
         for node in nodes:
@@ -130,7 +131,7 @@ class PytorchHierarchyNode:
     Each hierarchy node mirrors a PyTorch module instance captured by the
     exporter. It stores child modules, the onnx nodes associated with the module,
     and utilities for traversing or querying the reconstructed hierarchy.
-    
+
     Example
         Suppose you have an ONNX IR graph whose nodes carry PyTorch exporter metadata
         (metadata_props containing "pkg.torch.onnx.name_scopes" and
@@ -380,6 +381,7 @@ class ReplacementPatternGraph(ReplacementPatternFunction):
     graph inside the active rewrite context while remapping bound values to the
     match result.
     """
+
     def __init__(self, ir_graph):
         self._graph = ir_graph
 

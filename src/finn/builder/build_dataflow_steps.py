@@ -89,6 +89,7 @@ from finn.transformation.fpgadataflow.derive_characteristic import (
 from finn.transformation.fpgadataflow.hlssynth_ip import HLSSynthIP
 from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
 from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
+from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
 from finn.transformation.fpgadataflow.make_driver import MakeCPPDriver, MakePYNQDriver
 from finn.transformation.fpgadataflow.make_zynq_proj import ZynqBuild
 from finn.transformation.fpgadataflow.minimize_accumulator_width import (
@@ -126,7 +127,6 @@ from finn.util.basic import get_liveness_threshold_cycles, get_rtlsim_trace_dept
 from finn.util.mlo_sim import is_mlo, mlo_prehook_func_factory
 from finn.util.test import execute_parent
 
-from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
 
 def verify_step(
     model: ModelWrapper,
@@ -908,7 +908,7 @@ def step_deployment_package(model: ModelWrapper, cfg: DataflowBuildConfig):
 
 def step_loop_rolling(model, cfg):
     """Roll a repeating sequence of layers into a loop. PyTorch metadata node hierarchy
-       is used to indicate the loop structure."""
+    is used to indicate the loop structure."""
 
     if cfg.loop_body_hierarchy is not None:
         print(f"Running Loop Rolling on {cfg.loop_body_hierarchy} hierarchy")
