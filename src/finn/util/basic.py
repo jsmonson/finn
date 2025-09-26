@@ -112,9 +112,12 @@ def get_finn_root():
         return os.environ["FINN_ROOT"]
     except KeyError:
         raise Exception(
-            """Environment variable FINN_ROOT must be set
-        correctly. Please ensure you have launched the Docker contaier correctly.
-        """
+            "Environment variable FINN_ROOT must be set. "
+            "This should happen automatically when importing finn. "
+            "Please ensure:\n"
+            "1. You've installed FINN correctly (pip install -e . or via Docker)\n"
+            "2. You're importing finn before calling this function\n"
+            "3. Or manually set FINN_ROOT to your FINN installation directory"
         )
 
 
@@ -138,9 +141,12 @@ def get_deps_dir():
         return os.environ["FINN_DEPS_DIR"]
     except KeyError:
         raise Exception(
-            """Environment variable FINN_DEPS_DIR must be set
-        correctly. Please ensure you have launched the Docker contaier correctly.
-        """
+            "Environment variable FINN_DEPS_DIR must be set. "
+            "This should happen automatically when importing finn. "
+            "Please ensure:\n"
+            "1. You've installed FINN correctly (pip install -e . or via Docker)\n"
+            "2. You're importing finn before calling this function\n"
+            "3. Or manually set FINN_DEPS_DIR to your FINN deps directory"
         )
 
 
