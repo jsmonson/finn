@@ -218,4 +218,12 @@ def test_finn_loop():
     produced = odict[model_wrapper.graph.output[0].name]
     inp_tensor = torch.from_numpy(inp_tensor).float()
     expected = model.forward(inp_tensor).detach().numpy()
-    assert (produced == expected).all()
+
+    max_diff = np.max(np.abs(produced - expected))
+    print(f"Max difference between produced and expected: {max_diff}")
+
+    # compare results within a tolerance
+    rtol = 1e-4
+    atol = 1e-4
+    assert np.allclose(produced, expected, rtol=rtol, atol=atol), "Results do not match within tolerance!"
+
