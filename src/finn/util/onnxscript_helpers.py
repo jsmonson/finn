@@ -1,6 +1,6 @@
 import ast
 
-from typing import List
+from typing import List, Optional
 from collections.abc import Iterable
 from onnxscript import ir
 from onnxscript.rewriter._pattern_ir import (
@@ -77,6 +77,14 @@ class SubGraphView(ir.GraphView):
 
 
 class PytorchMetadataNode:
+    """Wrap an ONNX IR node and expose PyTorch exporter metadata.
+
+    The Torch ONNX exporter stores per-node metadata describing the originating
+    module instance hierarchy and class names. This helper parses the serialized
+    metadata strings into Python objects and provides convenience accessors for
+    querying instance/class names at different nesting depths.
+    """
+
     def __init__(self, node):
         self._node = node
 
@@ -117,16 +125,52 @@ class PytorchMetadataNode:
 
 
 class PytorchHierarchyNode:
+    """Represent a node in the hierarchical module reconstructed from pytorch metadata
+
+    Each hierarchy node mirrors a PyTorch module instance captured by the
+    exporter. It stores child modules, the onnx nodes associated with the module,
+    and utilities for traversing or querying the reconstructed hierarchy.
+    
+    Example
+        Suppose you have an ONNX IR graph whose nodes carry PyTorch exporter metadata
+        (metadata_props containing "pkg.torch.onnx.name_scopes" and
+        "pkg.torch.onnx.class_hierarchy"). You can reconstruct and query the
+        module hierarchy like this:
+
+            root = PytorchHierarchyNode()
+            for n in graph._nodes:
+                # add_node silently skips nodes without required metadata
+                root.add_node(n)
+
+            # Print every node with its resolved instance path and module type
+            root.print_hierarchy()
+
+            # Retrieve all (ir) nodes that belong to (or are inside) a sub‑module path
+            # e.g. path: top_module/encoder/layer_0
+            target_path = ["top_module", "encoder", "layer_0"]
+            ir_nodes = root.get_nodes(target_path)
+
+
+        Notes
+        - add_node can be called in arbitrary order; it incrementally builds the tree.
+        - get_nodes matches by prefix: supplying ["top_module", "encoder"] returns
+          all descendant nodes under that subtree.
+        - Nodes lacking exporter metadata are ignored (not added).
+        - The hierarchy depth equals the length of the serialized name_scopes list
+          stored per node by the PyTorch exporter.
+    """
+
     def __init__(self):
         self.instance_name = None
         self.module_type = None
         self.children = []
         self.nodes = []
 
-    def print_hierarchy(self, instance_hierarchy: List[str] = None):
+    def print_hierarchy(self, instance_hierarchy: Optional[List[str]] = None):
         if instance_hierarchy is None:
             instance_hierarchy = []
-        instance_hierarchy.append(self.instance_name)
+        if self.instance_name is not None:
+            instance_hierarchy.append(self.instance_name)
 
         for child in self.children:
             child.print_hierarchy(list(instance_hierarchy))
@@ -141,7 +185,11 @@ class PytorchHierarchyNode:
         return [node._node for node in self.nodes]
 
     # Checks if the search hierarchy matches the instance hierarchy
-    def hierarchy_matches(self, search_hierarchy: List[str], instance_hierarchy: List[str] = []):
+    def hierarchy_matches(
+        self, search_hierarchy: List[str], instance_hierarchy: Optional[List[str]] = None
+    ):
+        if instance_hierarchy is None:
+            instance_hierarchy = []
         search_length = min(len(search_hierarchy), len(instance_hierarchy))
         for i in range(search_length):
             if search_hierarchy[i] != instance_hierarchy[i]:
@@ -149,14 +197,17 @@ class PytorchHierarchyNode:
         return True
 
     # Return all nodes from the given name hierarchy on down
-    def get_nodes(self, search_hierarchy: List[str], instance_hierarchy: List[str] = None):
+    def get_nodes(
+        self, search_hierarchy: List[str], instance_hierarchy: Optional[List[str]] = None
+    ):
         if instance_hierarchy is None:
             instance_hierarchy = []
 
         nodes_to_return = []
         # base case for recursion
         # 1 - search_hierarchy does not match instance_hierarchy
-        instance_hierarchy.append(self.instance_name)
+        if self.instance_name is not None:
+            instance_hierarchy.append(self.instance_name)
 
         if not self.hierarchy_matches(search_hierarchy, instance_hierarchy):
             return []
@@ -206,7 +257,63 @@ class PytorchHierarchyNode:
 
 
 def direct_convert_ir_graph_to_pattern(graph):
+    """
+    Convert an internal IR graph object into a GraphPattern description composed of
+    ValuePattern, NodeOutputPattern and NodePattern objects built with an
+    OpsetPatternBuilder.
+    The conversion walks the IR graph in (stored) node order, creating a mapping
+    (vmap) from each IR Value (inputs, initializers, and constant node outputs) to
+    its corresponding ValuePattern / NodeOutputPattern. For every IR node, the
+    builder is invoked dynamically based on the node's op_type, producing one or
+    more NodeOutputPattern objects whose positions (output_index) are used to
+    associate them back to the correct IR Value objects. Finally, the function
+    collects the pattern inputs and outputs (preserving the original IR ordering)
+    and returns a fully constructed GraphPattern.
+    Args:
+        graph: An IR graph object providing:
+            - inputs: iterable of Value objects (graph inputs).
+            - initializers: iterable of Value (or tensor) objects treated as
+              constants.
+            - outputs: iterable of Value objects (graph outputs).
+            - _nodes: iterable of node objects where each node exposes:
+                * op_type: string operator type.
+                * domain: optional operator domain string.
+                * inputs: iterable of Value objects.
+                * outputs: iterable of Value objects (each with .name).
+            Constant nodes (op_type == "Constant") are treated specially: their
+            single output is registered as a ValuePattern directly.
+    Returns:
+        GraphPattern: A pattern object whose:
+            - inputs: List[ValuePattern] corresponding 1:1 with graph.inputs.
+            - outputs: List[ValuePattern / NodeOutputPattern] corresponding 1:1
+              with graph.outputs.
+            - nodes(): Iterator / collection of NodePattern objects recorded by
+              the OpsetPatternBuilder.
+    Behavior / Notes:
+        - The OpsetPatternBuilder is created with record=True so that every
+          constructed operator call is captured as a NodePattern in insertion order.
+        - For multi-output operators, builder.<op_type>(..., _outputs=N) returns a
+          sequence; each element is registered in vmap with the correct output_index.
+        - Value identity (object identity) is used as the key in vmap; this assumes
+          stable Value instances across the IR.
+        - Constant initializers and Constant nodes are both recognized so that
+          downstream pattern matching does not treat them as dynamic inputs.
+    Assumptions:
+        - Every node's outputs are indexed sequentially starting at 0.
+        - Constant nodes have exactly one output (as per typical ONNX semantics).
+        - graph._nodes order reflects the intended topological or insertion order.
+    Limitations:
+        - Does not perform validation of graph correctness (e.g., missing inputs,
+          mismatched output counts).
+        - Does not deduplicate semantically identical constants; uniqueness is by
+          object identity/name only.
+    Example:
+        gp = direct_convert_ir_graph_to_pattern(ir_graph)
+        for node_pat in gp.nodes():
+            print(node_pat.op_type)
+    """
     # Transform IR values to ValuePatterns
+
     vmap = {}
     for input in graph.inputs:
         vmap[input] = ValuePattern(input.name)
@@ -266,6 +373,13 @@ def vdisconnect(value):
 
 
 class ReplacementPatternGraph(ReplacementPatternFunction):
+    """Instantiate a replacement pattern graph from an ONNX Script IR graph.
+
+    The class adapts an ``ir.Graph`` into the replacement side of a rewrite
+    rule: when the pattern matches, ``get_replacement`` materialises the stored
+    graph inside the active rewrite context while remapping bound values to the
+    match result.
+    """
     def __init__(self, ir_graph):
         self._graph = ir_graph
 
