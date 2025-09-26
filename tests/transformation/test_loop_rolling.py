@@ -11,6 +11,7 @@ from brevitas.nn import QuantLinear
 from brevitas.quant import Int8ActPerTensorFloat, Int8Bias, Int8WeightPerTensorFloat
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
+from qonnx.transformation.general import ConvertDivToMul, ConvertSubToAdd
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import gen_finn_dt_tensor
 from qonnx.util.cleanup import cleanup as qonnx_cleanup
@@ -20,6 +21,15 @@ import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
 from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
 from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
 from finn.transformation.streamline import Streamline
+from finn.transformation.streamline.collapse_repeated import (
+    CollapseRepeatedAdd,
+    CollapseRepeatedMul,
+)
+from finn.transformation.streamline.reorder import (
+    MoveAddPastMul,
+    MoveScalarAddPastMatMul,
+    MoveScalarMulPastMatMul,
+)
 
 
 class SimpleSubModule(torch.nn.Module):
@@ -122,8 +132,28 @@ def test_finn_loop():
     model_wrapper = ModelWrapper(onnx_path)
 
     model_wrapper = model_wrapper.transform(ConvertQONNXtoFINN())
-    model_wrapper = model_wrapper.transform(Streamline())
 
+    # TODO: temporarily applying the change in shape for the tensors in the test,
+    # should be turned into a transformation instead, or integrated into existing loop trafos
+    tensors = [vi.name for vi in model_wrapper.graph.value_info]
+    tensors += [inp.name for inp in model_wrapper.graph.input]
+    tensors += [outp.name for outp in model_wrapper.graph.output]
+    for t in tensors:
+        to_hw.lift_to_rank1(t, model_wrapper)
+    # model_wrapper = model_wrapper.transform(Streamline())
+    # instead of streamlining only apply some transformations and then convert to hw
+    model_wrapper = model_wrapper.transform(ConvertSubToAdd())
+    model_wrapper = model_wrapper.transform(ConvertDivToMul())
+    model_wrapper = model_wrapper.transform(MoveScalarMulPastMatMul())
+    model_wrapper = model_wrapper.transform(MoveScalarAddPastMatMul())
+    model_wrapper = model_wrapper.transform(CollapseRepeatedMul())
+    model_wrapper = model_wrapper.transform(MoveAddPastMul())
+    model_wrapper = model_wrapper.transform(CollapseRepeatedAdd())
+    model_wrapper = model_wrapper.transform(to_hw.InferThresholdingLayer())
+    model_wrapper = model_wrapper.transform(to_hw.InferQuantizedMatrixVectorActivation())
+    model_wrapper = model_wrapper.transform(to_hw.InferElementwiseBinaryOperation())
+
+    model_wrapper.save("graph_to_roll.onnx")
     m_input_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.input[0].name)
     m_output_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.output[0].name)
 
@@ -188,3 +218,4 @@ def test_finn_loop():
     produced = odict[model_wrapper.graph.output[0].name]
     inp_tensor = torch.from_numpy(inp_tensor).float()
     expected = model.forward(inp_tensor).detach().numpy()
+    assert (produced == expected).all()
