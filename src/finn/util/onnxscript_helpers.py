@@ -26,7 +26,8 @@ class SubGraphView(ir.GraphView):
         graph (ir.Graph): The parent graph containing the nodes.
         name (str): Name of the subgraph.
         nodes (List[ir.Node]): List of nodes that make up the subgraph.
-        include_initializers (bool): Whether to include initializers connected to the subgraph nodes as part of the subgraph.
+        include_initializers (bool): Whether to include initializers connected to the
+            subgraph nodes as part of the subgraph.
     """
 
     def __init__(self, graph, name, nodes, include_initializers=False):
@@ -126,39 +127,29 @@ class PytorchMetadataNode:
 
 
 class PytorchHierarchyNode:
-    """Represent a node in the hierarchical module reconstructed from pytorch metadata
+    """Represent a node in the hierarchy reconstructed from PyTorch metadata.
 
-    Each hierarchy node mirrors a PyTorch module instance captured by the
-    exporter. It stores child modules, the onnx nodes associated with the module,
-    and utilities for traversing or querying the reconstructed hierarchy.
+    Each instance mirrors a PyTorch module captured by the exporter. It stores
+    child modules plus the wrapped ONNX nodes and exposes helpers that let
+    callers traverse or query the reconstructed module tree.
 
-    Example
-        Suppose you have an ONNX IR graph whose nodes carry PyTorch exporter metadata
-        (metadata_props containing "pkg.torch.onnx.name_scopes" and
-        "pkg.torch.onnx.class_hierarchy"). You can reconstruct and query the
-        module hierarchy like this:
+    Example::
 
-            root = PytorchHierarchyNode()
-            for n in graph._nodes:
-                # add_node silently skips nodes without required metadata
-                root.add_node(n)
+        root = PytorchHierarchyNode()
+        for ir_node in graph._nodes:
+            root.add_node(ir_node)
 
-            # Print every node with its resolved instance path and module type
-            root.print_hierarchy()
+        root.print_hierarchy()
+        target_path = ["top_module", "encoder", "layer_0"]
+        ir_nodes = root.get_nodes(target_path)
 
-            # Retrieve all (ir) nodes that belong to (or are inside) a sub‑module path
-            # e.g. path: top_module/encoder/layer_0
-            target_path = ["top_module", "encoder", "layer_0"]
-            ir_nodes = root.get_nodes(target_path)
-
-
-        Notes
-        - add_node can be called in arbitrary order; it incrementally builds the tree.
-        - get_nodes matches by prefix: supplying ["top_module", "encoder"] returns
-          all descendant nodes under that subtree.
-        - Nodes lacking exporter metadata are ignored (not added).
-        - The hierarchy depth equals the length of the serialized name_scopes list
-          stored per node by the PyTorch exporter.
+    Notes
+    -----
+    ``add_node`` can be called in any order because the structure is built
+    incrementally. ``get_nodes`` performs prefix matching so supplying
+    ``["top_module", "encoder"]`` returns every descendant of that subtree.
+    Nodes that are missing exporter metadata are ignored, and the maximum
+    depth matches the length of the serialized ``name_scopes`` list.
     """
 
     def __init__(self):
@@ -178,7 +169,8 @@ class PytorchHierarchyNode:
 
         for node in self.nodes:
             print(
-                f"Node: {node._node.name}, Instance: {'/'.join(instance_hierarchy)}, Module: {self.module_type}"
+                f"Node: {node._node.name}, Instance: {'/'.join(instance_hierarchy)},"
+                f" Module: {self.module_type}"
             )
 
     def get_unwrapped_nodes(self):
@@ -258,60 +250,12 @@ class PytorchHierarchyNode:
 
 
 def direct_convert_ir_graph_to_pattern(graph):
-    """
-    Convert an internal IR graph object into a GraphPattern description composed of
-    ValuePattern, NodeOutputPattern and NodePattern objects built with an
-    OpsetPatternBuilder.
-    The conversion walks the IR graph in (stored) node order, creating a mapping
-    (vmap) from each IR Value (inputs, initializers, and constant node outputs) to
-    its corresponding ValuePattern / NodeOutputPattern. For every IR node, the
-    builder is invoked dynamically based on the node's op_type, producing one or
-    more NodeOutputPattern objects whose positions (output_index) are used to
-    associate them back to the correct IR Value objects. Finally, the function
-    collects the pattern inputs and outputs (preserving the original IR ordering)
-    and returns a fully constructed GraphPattern.
-    Args:
-        graph: An IR graph object providing:
-            - inputs: iterable of Value objects (graph inputs).
-            - initializers: iterable of Value (or tensor) objects treated as
-              constants.
-            - outputs: iterable of Value objects (graph outputs).
-            - _nodes: iterable of node objects where each node exposes:
-                * op_type: string operator type.
-                * domain: optional operator domain string.
-                * inputs: iterable of Value objects.
-                * outputs: iterable of Value objects (each with .name).
-            Constant nodes (op_type == "Constant") are treated specially: their
-            single output is registered as a ValuePattern directly.
-    Returns:
-        GraphPattern: A pattern object whose:
-            - inputs: List[ValuePattern] corresponding 1:1 with graph.inputs.
-            - outputs: List[ValuePattern / NodeOutputPattern] corresponding 1:1
-              with graph.outputs.
-            - nodes(): Iterator / collection of NodePattern objects recorded by
-              the OpsetPatternBuilder.
-    Behavior / Notes:
-        - The OpsetPatternBuilder is created with record=True so that every
-          constructed operator call is captured as a NodePattern in insertion order.
-        - For multi-output operators, builder.<op_type>(..., _outputs=N) returns a
-          sequence; each element is registered in vmap with the correct output_index.
-        - Value identity (object identity) is used as the key in vmap; this assumes
-          stable Value instances across the IR.
-        - Constant initializers and Constant nodes are both recognized so that
-          downstream pattern matching does not treat them as dynamic inputs.
-    Assumptions:
-        - Every node's outputs are indexed sequentially starting at 0.
-        - Constant nodes have exactly one output (as per typical ONNX semantics).
-        - graph._nodes order reflects the intended topological or insertion order.
-    Limitations:
-        - Does not perform validation of graph correctness (e.g., missing inputs,
-          mismatched output counts).
-        - Does not deduplicate semantically identical constants; uniqueness is by
-          object identity/name only.
-    Example:
-        gp = direct_convert_ir_graph_to_pattern(ir_graph)
-        for node_pat in gp.nodes():
-            print(node_pat.op_type)
+    """Convert an IR graph into an ONNX Script ``GraphPattern``.
+
+    The conversion walks nodes in order, mapping each IR ``Value`` to the
+    corresponding ``ValuePattern``/``NodeOutputPattern`` produced by the
+    pattern builder. The resulting pattern preserves input/output ordering and
+    captures every constructed operator so it can later drive rewrite rules.
     """
     # Transform IR values to ValuePatterns
 
@@ -387,10 +331,9 @@ class ReplacementPatternGraph(ReplacementPatternFunction):
 
     def get_replacement(self, match: MatchResult) -> ReplacementSubgraph | None:
         context = RewriterContext()
-        # match.bindings is dictionary of value_name (str) in replacement subgraph pattern (i.e. ir_graph -> IR Value in actual graph)
-        vvmap = (
-            {}
-        )  # Dictionary mapping values in replacement subgraph pattern -> values in the replacement subgraph
+        # ``match.bindings`` maps ``value_name`` (str) from the replacement
+        # subgraph pattern to actual IR values.
+        vvmap = {}  # Maps pattern values to the values that will populate the replacement
 
         for value in self._graph.inputs:
             if value.name in match.bindings:

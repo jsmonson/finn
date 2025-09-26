@@ -3,17 +3,14 @@ import pytest
 import brevitas.onnx as bo
 import numpy as np
 import onnx
-import onnxruntime as ort
 import onnxscript
 import qonnx.util.basic as util
 import torch
 from brevitas.nn import QuantLinear
 from brevitas.quant import Int8ActPerTensorFloat, Int8Bias, Int8WeightPerTensorFloat
-from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.general import ConvertDivToMul, ConvertSubToAdd
 from qonnx.transformation.infer_shapes import InferShapes
-from qonnx.util.basic import gen_finn_dt_tensor
 from qonnx.util.cleanup import cleanup as qonnx_cleanup
 
 import finn.core.onnx_exec as oxe
@@ -21,7 +18,6 @@ import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
 from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
 from finn.transformation.fpgadataflow.raise_scalar_to_rank1 import RaiseScalarToRank1
 from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
-from finn.transformation.streamline import Streamline
 from finn.transformation.streamline.collapse_repeated import (
     CollapseRepeatedAdd,
     CollapseRepeatedMul,
@@ -228,7 +224,8 @@ def test_finn_loop():
 
 
 def test_inconsistant_initializer_shape():
-    # test that if the initializer shape is inconsistent with the value info shape, the transformation fails
+    # test that if the initializer shape is inconsistent with the value info
+    # shape, the transformation fails
     input_size = 20
     hidden_size = 20
     num_layers = 6
@@ -239,7 +236,8 @@ def test_inconsistant_initializer_shape():
     qonnx_cleanup(onnx_path, out_file=onnx_path)
     model_wrapper = ModelWrapper(onnx_path)
 
-    # manually change the shape of one of the initializers in the loop body to be inconsistent with the value info
+    # manually change the shape of one of the initializers in the loop body to
+    # be inconsistent with the value info
     param0 = model_wrapper.get_initializer("Mul_0_param0")
     model_wrapper.set_initializer("Mul_0_param0", np.append(param0, param0))
 
@@ -249,6 +247,8 @@ def test_inconsistant_initializer_shape():
     # should throw an error because the initializer shape is inconsistent with the value info shape
     with pytest.raises(
         Exception,
-        match="LoopRolling: all loop-body initializers of the same index must have the same shape",
+        match=(
+            "LoopRolling: all loop-body initializers of the same index must have the " "same shape"
+        ),
     ):
         model_wrapper = model_wrapper.transform(LoopRolling(loop_extraction.loop_body_template))
