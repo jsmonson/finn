@@ -140,6 +140,9 @@ def test_finn_loop():
     tensors += [outp.name for outp in model_wrapper.graph.output]
     for t in tensors:
         to_hw.lift_to_rank1(t, model_wrapper)
+
+    # Warning: Running standard streamlining here causes optimizations
+    # accross loop body boundaries that breaks current loop rolling assumptions.
     # model_wrapper = model_wrapper.transform(Streamline())
     # instead of streamlining only apply some transformations and then convert to hw
     model_wrapper = model_wrapper.transform(ConvertSubToAdd())
@@ -153,7 +156,6 @@ def test_finn_loop():
     model_wrapper = model_wrapper.transform(to_hw.InferQuantizedMatrixVectorActivation())
     model_wrapper = model_wrapper.transform(to_hw.InferElementwiseBinaryOperation())
 
-    model_wrapper.save("graph_to_roll.onnx")
     m_input_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.input[0].name)
     m_output_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.output[0].name)
 
@@ -228,7 +230,6 @@ def test_finn_loop():
     assert np.allclose(produced, expected, rtol=rtol, atol=atol), "Results do not match within tolerance!"
 
 
-#@pytest.mark.xfail(strict=True, raises=Exception, reason="Initializer shape inconsistent with value info shape")
 def test_inconsistant_initializer_shape():
     # test that if the initializer shape is inconsistent with the value info shape, the transformation fails
     input_size = 20
@@ -241,7 +242,6 @@ def test_inconsistant_initializer_shape():
     qonnx_cleanup(onnx_path, out_file=onnx_path)
     model_wrapper = ModelWrapper(onnx_path)
 
-    model_wrapper.save("before_extraction.onnx")
     # manually change the shape of one of the initializers in the loop body to be inconsistent with the value info
     param0 = model_wrapper.get_initializer("Mul_0_param0")
     model_wrapper.set_initializer("Mul_0_param0", np.append(param0, param0))
@@ -252,4 +252,3 @@ def test_inconsistant_initializer_shape():
     # should throw an error because the initializer shape is inconsistent with the value info shape
     with pytest.raises(Exception, match="LoopRolling: all loop-body initializers of the same index must have the same shape"):
         model_wrapper = model_wrapper.transform(LoopRolling(loop_extraction.loop_body_template))
-        #raise Exception("Initializer Inconsistent between Loop Bodies")
