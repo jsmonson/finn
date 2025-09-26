@@ -250,6 +250,6 @@ def test_inconsistant_initializer_shape():
     model_wrapper = model_wrapper.transform(loop_extraction)
 
     # should throw an error because the initializer shape is inconsistent with the value info shape
-    with pytest.raises(Exception, match="Initializer Inconsistent between Loop Bodies"):
+    with pytest.raises(Exception, match="LoopRolling: all loop-body initializers of the same index must have the same shape"):
         model_wrapper = model_wrapper.transform(LoopRolling(loop_extraction.loop_body_template))
         #raise Exception("Initializer Inconsistent between Loop Bodies")

@@ -52,6 +52,13 @@ def build_loop_replace_pattern(graph, LoopBody):
     const_indexes = []
     for i, LoopInputType in enumerate(LoopBody.signature):
         if LoopInputType == LoopBodyInputType.PARAMETER:
+            # validate parameter shapes
+            g_shape = nodes[0].inputs[i].shape
+            for node in nodes:
+                if node.inputs[i].shape != g_shape:
+                    print(f"LoopRolling: Index {i} expected shape {g_shape}, got {node.inputs[i].shape}.")
+                    raise Exception(f"LoopRolling: all loop-body initializers of the same index must have the same shape.")
+
             # Build Concat Node
             concat_inputs = []
             for node in nodes:
