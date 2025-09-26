@@ -18,6 +18,7 @@ from qonnx.util.cleanup import cleanup as qonnx_cleanup
 
 import finn.core.onnx_exec as oxe
 import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
+from finn.transformation.fpgadataflow.raise_scalar_to_rank1 import RaiseScalarToRank1
 from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
 from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
 from finn.transformation.streamline import Streamline
@@ -133,13 +134,7 @@ def test_finn_loop():
 
     model_wrapper = model_wrapper.transform(ConvertQONNXtoFINN())
 
-    # TODO: temporarily applying the change in shape for the tensors in the test,
-    # should be turned into a transformation instead, or integrated into existing loop trafos
-    tensors = [vi.name for vi in model_wrapper.graph.value_info]
-    tensors += [inp.name for inp in model_wrapper.graph.input]
-    tensors += [outp.name for outp in model_wrapper.graph.output]
-    for t in tensors:
-        to_hw.lift_to_rank1(t, model_wrapper)
+    model_wrapper = model_wrapper.transform(RaiseScalarToRank1())
 
     # Warning: Running standard streamlining here causes optimizations
     # accross loop body boundaries that breaks current loop rolling assumptions.
