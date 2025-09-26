@@ -2,7 +2,6 @@ import copy
 import numpy as np
 import onnx
 import onnxscript
-import qonnx
 from enum import Enum
 from onnxscript import ir
 from onnxscript.rewriter import pattern, rewrite
@@ -57,10 +56,16 @@ def build_loop_replace_pattern(graph, LoopBody):
             for node in nodes:
                 if node.inputs[i].shape != g_shape:
                     print(
-                        f"LoopRolling: Index {i} expected shape {g_shape}, got {node.inputs[i].shape}."
+                        (
+                            f"LoopRolling: Index {i} expected shape {g_shape}, "
+                            f"got {node.inputs[i].shape}."
+                        )
                     )
                     raise Exception(
-                        f"LoopRolling: all loop-body initializers of the same index must have the same shape."
+                        (
+                            "LoopRolling: all loop-body initializers of the same index "
+                            "must have the same shape."
+                        )
                     )
 
             # Build Concat Node
@@ -191,8 +196,6 @@ def build_loop_replace_pattern(graph, LoopBody):
 
     graph.sort()
 
-    model = ir.serde.serialize_model(ir.Model(graph, ir_version=10))
-
     return osh.ReplacementPatternGraph(graph)
 
 
@@ -251,8 +254,7 @@ class LoopExtraction(Transformation):
         graph.sort()
         nodes = P.get_nodes(self.hierarchy_list)
         print(f"Nodes in layer 0: {len(nodes)}")
-        # loop_body_graph_view = osh.build_graph_view(f"loop-body", nodes)
-        loop_body_graph_view = osh.SubGraphView(graph, f"loop-body", nodes)
+        loop_body_graph_view = osh.SubGraphView(graph, "loop-body", nodes)
         print(f"Layer 0 graph view: {len(loop_body_graph_view._nodes)}")
         loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=10)
         proto = onnxscript.ir.serde.serialize_model(loop_body_model)
@@ -371,7 +373,7 @@ class LoopRolling(Transformation):
         LoopBody = self.loop_body_template
 
         #################################
-        ## I/O Normalization for Loop Body
+        # I/O Normalization for Loop Body
         #################################
         graph.sort()
 
@@ -439,7 +441,7 @@ class LoopRolling(Transformation):
                 LoopBody.signature[index] = LoopBodyInputType.PARAMETER
 
         ###################################################
-        ## End I/O Normalization for Loop Body
+        # End I/O Normalization for Loop Body
         ###################################################
 
         LoopMatchPattern, nodes = LoopBody.build_function_match_pattern(
@@ -455,7 +457,7 @@ class LoopRolling(Transformation):
 
         model = onnxscript.ir.serde.serialize_model(model_ir)
 
-        model_wrapper = qonnx.core.modelwrapper.ModelWrapper(model)
+        model_wrapper = ModelWrapper(model)
 
         model = model_wrapper.transform(FoldConstants())
 
