@@ -186,9 +186,9 @@ def test_finn_loop():
         model_wrapper, model_wrapper.graph.input[0].name, [input_size, hidden_size]
     )  # activation input shape should remain the same
     # commented because name has changed with the additional transformations applied
-    # check_tensor_shape(
-    #    model_wrapper, "mul_5", [input_size, hidden_size]
-    # )  # activation output shape should remain the same
+    check_tensor_shape(
+        model_wrapper, model_wrapper.graph.output[0].name, [input_size, hidden_size]
+    )  # activation output shape should remain the same
     assert (
         model_wrapper.get_tensor_shape(loop_node.input[1])[0] == num_layers
     )  # loop iteration count should match number of layers
