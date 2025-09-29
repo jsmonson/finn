@@ -223,16 +223,12 @@ class LoopExtraction(Transformation):
             added = P.add_node(node)
             if not added:
                 unadded_nodes.append(node)
-        P.print_hierarchy()
-        print(f"Total nodes: {len(graph._nodes)}")
-        print(f"Unadded nodes: {len(unadded_nodes)}")
         # Handle the nodes that have no metadata from PyTorch
         # by finding a neighboring node and using its metadata
         # use predecessor first than successor nodes
         # probably should provide a more robust selection method
         # in the future
         for node in unadded_nodes:
-            print(f"adding metadata for node {node.name}...")
             preds = node.predecessors()
             succs = node.successors()
             if len(preds) > 0:
@@ -249,25 +245,24 @@ class LoopExtraction(Transformation):
             node.metadata_props["pkg.torch.onnx.class_hierarchy"] = mnode.metadata_props[
                 "pkg.torch.onnx.class_hierarchy"
             ]
-            print(f"added metadata for node {node.name}")
 
             assert P.add_node(node)
         graph.sort()
         nodes = P.get_nodes(self.hierarchy_list)
-        print(f"Nodes in layer 0: {len(nodes)}")
+
         loop_body_graph_view = osh.SubGraphView(graph, "loop-body", nodes)
-        print(f"Layer 0 graph view: {len(loop_body_graph_view._nodes)}")
+
         loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=10)
         proto = onnxscript.ir.serde.serialize_model(loop_body_model)
+
         onnx.save(proto, "loop-body-template.onnx")
-        print("Load Loop Body Template")
         self.loop_body_template = LoopBodyTemplate("loop-body-template.onnx")
 
         # Replace instances of the loop body with a function call to the loop body
         change_layers_to_function_calls = pattern.RewriteRule(
             self.loop_body_template.pattern, self.loop_body_template.function_replace
         )
-        print("Replacing layers with function calls")
+
 
         model_layers_replaced = rewrite(
             model_ir, pattern_rewrite_rules=[change_layers_to_function_calls]
@@ -469,7 +464,6 @@ class LoopRolling(Transformation):
         for index in range(activations, len(nodes[0].inputs)):
             inputs = []
             for node in nodes:
-                print(f"Node {node.name} {node.inputs[index]}")
                 cinput = node.inputs[index]
                 inputs.append(cinput)
 
