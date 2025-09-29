@@ -3,7 +3,6 @@ import pytest
 import brevitas.onnx as bo
 import numpy as np
 import onnx
-import onnxscript
 import qonnx.util.basic as util
 import torch
 from brevitas.nn import QuantLinear
@@ -94,19 +93,8 @@ def export_model_to_qonnx(input_size=10, hidden_size=20, num_layers=4, output_si
 
     onnx_model = onnx.load(onnx_path)
     onnx.checker.check_model(onnx_model)
-
-    # Add finn_datatype Quantization Annotation for all tensors
-    onnx_ir = onnxscript.ir.serde.deserialize_model(onnx_model)
-    for node in onnx_ir.graph._nodes:
-        for tensor in node.inputs + node.outputs:
-            if "finn_datatype" not in tensor.meta.get("quant_parameter_tensor_names", {}):
-                tensor.meta["quant_parameter_tensor_names"] = {"finn_datatype": "FLOAT32"}
-    onnx_model = onnxscript.ir.serde.serialize_model(onnx_ir)
     onnx.save(onnx_model, onnx_path)
 
-    # Load the ONNX model to verify
-    print(f"Model exported successfully to {onnx_path}")
-    print(f"Model has {num_layers} layers with input size {input_size}")
     return onnx_path, model
 
 
@@ -134,7 +122,6 @@ def test_finn_loop():
 
     # Warning: Running standard streamlining here causes optimizations
     # accross loop body boundaries that breaks current loop rolling assumptions.
-    # model_wrapper = model_wrapper.transform(Streamline())
     # instead of streamlining only apply some transformations and then convert to hw
     model_wrapper = model_wrapper.transform(ConvertSubToAdd())
     model_wrapper = model_wrapper.transform(ConvertDivToMul())
@@ -149,10 +136,6 @@ def test_finn_loop():
 
     m_input_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.input[0].name)
     m_output_dt = model_wrapper.get_tensor_datatype(model_wrapper.model.graph.output[0].name)
-
-    # if I uncomment this next line, the test fails because infer shapes commutes elementwise inputs
-    # after the first elementwise op is converted.
-    # model_wrapper = model_wrapper.transform(to_hw.InferElementwiseBinaryOperation())
 
     loop_extraction = LoopExtraction(hierarchy_list=["", "layers.0"])
     model_wrapper = model_wrapper.transform(loop_extraction)
@@ -223,7 +206,7 @@ def test_finn_loop():
     ), "Results do not match within tolerance!"
 
 
-def test_inconsistant_initializer_shape():
+def test_inconsistent_initializer_shape():
     # test that if the initializer shape is inconsistent with the value info
     # shape, the transformation fails
     input_size = 20
