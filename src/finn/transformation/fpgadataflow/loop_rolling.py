@@ -284,6 +284,45 @@ class LoopExtraction(Transformation):
         return (model, False)
 
 
+def validate_loop_type(loop_node: ir.Node):
+    assert loop_node.op_type == "FINNLoop", "Node is not a FINNLoop"
+
+def validate_loop_attributes(loop_node: ir.Node):
+    required_attrs = ["body", "backend", "iteration", "inputDataType", "outputDataType"]
+    for attr in required_attrs:
+        assert attr in loop_node.attributes, f"FINNLoop node missing required attribute: {attr}"
+    assert (
+        loop_node.attributes["backend"].value == "fpgadataflow"
+    ), "FINNLoop backend attribute must be 'fpgadataflow'"
+    assert (
+        isinstance(loop_node.attributes["iteration"].value, int)
+        and loop_node.attributes["iteration"].value > 0
+    ), "FINNLoop iteration attribute must be a positive integer"
+    idt = loop_node.attributes["inputDataType"].value
+    odt = loop_node.attributes["outputDataType"].value
+    assert idt == odt, "FINNLoop inputDataType and outputDataType must be the same"
+
+
+def validate_loop_body_io_tensors(loop_node: ir.Node):
+    # Validate that loop body activation input and output types and shapes match
+    body_graph = loop_node.attributes["body"].value
+
+    for i in range(len(body_graph.outputs)):
+        inpt = body_graph.inputs[i]
+        outpt = body_graph.outputs[i]
+        assert inpt.type == outpt.type, f"FINNLoop body activation input/output {i} type mismatch"
+        assert inpt.shape == outpt.shape, f"FINNLoop body activation input/output {i} shape mismatch"
+        if 'quant_parameter_tensor_names' in inpt.meta and 'quant_parameter_tensor_names' in outpt.meta:
+            if inpt.meta['quant_parameter_tensor_names'] != outpt.meta['quant_parameter_tensor_names']:
+                raise Exception(f"FINNLoop body activation input/output {i} quantization parameter tensor names mismatch")
+
+
+def validate_loop_node(loop_node: ir.Node):
+    validate_loop_type(loop_node)
+    validate_loop_attributes(loop_node)
+    validate_loop_body_io_tensors(loop_node)
+
+
 class LoopBodyInputType(Enum):
     UNDEFINED = 0
     ACTIVATION = 1
@@ -455,6 +494,10 @@ class LoopRolling(Transformation):
         rewrite_set = pattern.RewriteRuleSet([change_function_calls_to_loop])
         count = rewrite_set.apply_to_model(model_ir, verbose=None)
         print(f"Rolled {count} function calls into a loop operator")
+
+        for node in model_ir.graph._nodes:
+            if node.op_type == "FINNLoop":
+                validate_loop_node(node)
 
         model = onnxscript.ir.serde.serialize_model(model_ir)
 
