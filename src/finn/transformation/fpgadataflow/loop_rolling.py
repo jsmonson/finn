@@ -11,7 +11,7 @@ from qonnx.transformation.fold_constants import FoldConstants
 from typing import List, Tuple
 
 from finn.util import onnxscript_helpers as osh
-
+from finn.util.fpgadataflow import is_fpgadataflow_node
 
 def get_constant_from_value(value):
     """
@@ -111,12 +111,13 @@ def build_loop_replace_pattern(graph, LoopBody):
             inp = LoopBody.function.inputs[i]
             assert len(inp.consumers()) == 1
             consumer = inp.consumers()[0]
-            consumer.attributes["mlo_max_iter"] = ir.Attr(
-                "mlo_max_iter", ir.AttributeType.INT, iterations
-            )
-            consumer.attributes["inFIFODepths"] = ir.Attr(
-                "inFIFODepths", ir.AttributeType.INTS, [2, 2]
-            )
+            if is_fpgadataflow_node(consumer):
+                consumer.attributes["mlo_max_iter"] = ir.Attr(
+                    "mlo_max_iter", ir.AttributeType.INT, iterations
+                )
+                consumer.attributes["inFIFODepths"] = ir.Attr(
+                    "inFIFODepths", ir.AttributeType.INTS, [2, 2]
+                )
         elif LoopInputType == LoopBodyInputType.CONSTANT:
             const_indexes.append(i)
 
