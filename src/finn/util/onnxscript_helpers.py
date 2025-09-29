@@ -17,7 +17,7 @@ from onnxscript.rewriter.pattern import (
     pattern_builder,
 )
 from typing import List, Optional
-
+from qonnx.util.basic import is_finn_op
 
 class SubGraphView(ir.GraphView):
     """Create a read-only view of a subgraph defined by a set of nodes.
@@ -315,6 +315,19 @@ def vdisconnect(value):
     value._index = None
     value._graph = None
     return value
+
+
+def is_fpgadataflow_onnxir_node(node):
+    """Returns True if given node is fpgadataflow node. Otherwise False."""
+    is_node = False
+    if node is not None:
+        if is_finn_op(node.domain):
+            if "backend" in node.attributes:
+                backend_value = node.attributes["backend"].as_string()
+                if backend_value == "fpgadataflow":
+                    is_node = True
+
+    return is_node
 
 
 class ReplacementPatternGraph(ReplacementPatternFunction):

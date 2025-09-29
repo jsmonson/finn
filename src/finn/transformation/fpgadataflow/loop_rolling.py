@@ -111,7 +111,7 @@ def build_loop_replace_pattern(graph, LoopBody):
             inp = LoopBody.function.inputs[i]
             assert len(inp.consumers()) == 1
             consumer = inp.consumers()[0]
-            if is_fpgadataflow_node(consumer):
+            if osh.is_fpgadataflow_onnxir_node(consumer):
                 consumer.attributes["mlo_max_iter"] = ir.Attr(
                     "mlo_max_iter", ir.AttributeType.INT, iterations
                 )
