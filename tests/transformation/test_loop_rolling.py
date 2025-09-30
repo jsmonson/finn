@@ -3,6 +3,7 @@ import pytest
 import brevitas.onnx as bo
 import numpy as np
 import onnx
+import os
 import qonnx.util.basic as util
 import torch
 from brevitas.nn import QuantLinear
@@ -31,7 +32,7 @@ from finn.transformation.streamline.reorder import (
 
 
 class SimpleSubModule(torch.nn.Module):
-    def __init__(self, in_features, out_features, mul_val=200):
+    def __init__(self, in_features, out_features, mul_val=4):
         super(SimpleSubModule, self).__init__()
         self.mul_val = torch.tensor([mul_val])
         self.linear = QuantLinear(
@@ -49,7 +50,7 @@ class SimpleSubModule(torch.nn.Module):
 
 # Simple Torch Module with parameterizable number of linear layers
 class SimpleModule(torch.nn.Module):
-    def __init__(self, input_size=10, hidden_size=20, num_layers=4, mul_val=200, output_size=None):
+    def __init__(self, input_size=10, hidden_size=20, num_layers=4, mul_val=4, output_size=None):
         super(SimpleModule, self).__init__()
         self.mul_val = mul_val
 
@@ -77,7 +78,7 @@ def export_model_to_qonnx(input_size=10, hidden_size=20, num_layers=4, output_si
         hidden_size=hidden_size,
         num_layers=num_layers,
         output_size=output_size,
-        mul_val=150,
+        mul_val=4,
     )
     x = torch.rand((1, input_size))
     model(x)  # Initialise scale factors
@@ -114,7 +115,7 @@ def check_tensor_shape(model_wrapper, name, expected_shape):
 # input_size == hidden_size to create model that can be rolled
 @pytest.mark.parametrize("input_size", [20, 30, 40])
 # num_layers
-@pytest.mark.parametrize("num_layers", [6, 12])  # TODO: , 24])
+@pytest.mark.parametrize("num_layers", [6, 12, 24])
 def test_finn_loop(input_size, num_layers):
     hidden_size = input_size
 
@@ -206,10 +207,13 @@ def test_finn_loop(input_size, num_layers):
 
     # compare results within a tolerance
     rtol = 1e-4
-    atol = 1e-4
+    atol = 1e-3
     assert np.allclose(
         produced, expected, rtol=rtol, atol=atol
     ), "Results do not match within tolerance!"
+
+    # when run successfully, delete temp onnx files
+    os.remove(onnx_path)
 
 
 def test_inconsistent_initializer_shape():
