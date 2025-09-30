@@ -16,8 +16,9 @@ from onnxscript.rewriter.pattern import (
     RewriterContext,
     pattern_builder,
 )
-from typing import List, Optional
 from qonnx.util.basic import is_finn_op
+from typing import List, Optional
+
 
 class SubGraphView(ir.GraphView):
     """Create a read-only view of a subgraph defined by a set of nodes.

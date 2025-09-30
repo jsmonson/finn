@@ -194,6 +194,9 @@ class QuantActBaseHandler(ABC):
                 add_shape = tuple()
                 if adder_bias == 0.0:
                     zero_bias = True
+                else:
+                    mt_inst.set_nodeattr("out_bias", adder_bias)
+                    zero_bias = True
             else:
                 add_shape = adder_bias.shape
 

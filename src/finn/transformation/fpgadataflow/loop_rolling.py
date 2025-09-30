@@ -11,7 +11,7 @@ from qonnx.transformation.fold_constants import FoldConstants
 from typing import List, Tuple
 
 from finn.util import onnxscript_helpers as osh
-from finn.util.fpgadataflow import is_fpgadataflow_node
+
 
 def get_constant_from_value(value):
     """
@@ -263,7 +263,6 @@ class LoopExtraction(Transformation):
             self.loop_body_template.pattern, self.loop_body_template.function_replace
         )
 
-
         model_layers_replaced = rewrite(
             model_ir, pattern_rewrite_rules=[change_layers_to_function_calls]
         )
@@ -281,6 +280,7 @@ class LoopExtraction(Transformation):
 
 def validate_loop_type(loop_node: ir.Node):
     assert loop_node.op_type == "FINNLoop", "Node is not a FINNLoop"
+
 
 def validate_loop_attributes(loop_node: ir.Node):
     required_attrs = ["body", "backend", "iteration", "inputDataType", "outputDataType"]
@@ -306,10 +306,21 @@ def validate_loop_body_io_tensors(loop_node: ir.Node):
         inpt = body_graph.inputs[i]
         outpt = body_graph.outputs[i]
         assert inpt.type == outpt.type, f"FINNLoop body activation input/output {i} type mismatch"
-        assert inpt.shape == outpt.shape, f"FINNLoop body activation input/output {i} shape mismatch"
-        if 'quant_parameter_tensor_names' in inpt.meta and 'quant_parameter_tensor_names' in outpt.meta:
-            if inpt.meta['quant_parameter_tensor_names'] != outpt.meta['quant_parameter_tensor_names']:
-                raise Exception(f"FINNLoop body activation input/output {i} quantization parameter tensor names mismatch")
+        assert (
+            inpt.shape == outpt.shape
+        ), f"FINNLoop body activation input/output {i} shape mismatch"
+        if (
+            "quant_parameter_tensor_names" in inpt.meta
+            and "quant_parameter_tensor_names" in outpt.meta
+        ):
+            if (
+                inpt.meta["quant_parameter_tensor_names"]
+                != outpt.meta["quant_parameter_tensor_names"]
+            ):
+                raise Exception(
+                    f"""FINNLoop body activation input/output {i}
+                    quantization parameter tensor names mismatch"""
+                )
 
 
 def validate_loop_node(loop_node: ir.Node):
