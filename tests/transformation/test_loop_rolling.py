@@ -42,7 +42,6 @@ class SimpleSubModule(torch.nn.Module):
             bias=True,
             weight_quant=Int8WeightPerTensorFloat,
             input_quant=Int8ActPerTensorFloat,
-            bias_quant=Int8Bias,
         )
 
     def forward(self, x):
