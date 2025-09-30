@@ -1,5 +1,6 @@
 # Copyright (c) 2025, Advanced Micro Devices, Inc.
 # All rights reserved.
+# Portions of this content consist of AI generated content.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:

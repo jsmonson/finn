@@ -185,8 +185,9 @@ def test_finn_loop(input_size, num_layers):
         util.get_by_name(loop_node.attribute, "body").g
     )
 
+    mlo_nodes = ["MVAU", "Thresholding", "ElementwiseAdd", "ElementwiseMul"]
     for node in loop_body_wrapper.model.graph.node:
-        if node.op_type == "MatMul" or node.op_type == "ElementWiseAdd":
+        if node.op_type in mlo_nodes:
             mlo_attr = util.get_by_name(node.attribute, "mlo_max_iter")
             assert (
                 mlo_attr is not None
