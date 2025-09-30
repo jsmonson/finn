@@ -251,8 +251,7 @@ class LoopExtraction(Transformation):
         nodes = P.get_nodes(self.hierarchy_list)
 
         loop_body_graph_view = osh.SubGraphView(graph, "loop-body", nodes)
-
-        loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=10)
+        loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=model.model.ir_version)
         proto = onnxscript.ir.serde.serialize_model(loop_body_model)
 
         onnx.save(proto, "loop-body-template.onnx")
