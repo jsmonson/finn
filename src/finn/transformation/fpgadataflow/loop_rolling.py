@@ -376,8 +376,8 @@ class LoopBodyTemplate:
         if use_iteration_ext:
             nodes.insert(0, graph.node("iteration_ext"))
             nodes.insert(0, graph.node("condition_ext"))
-
-        ir_model = ir.Model(osh.SubGraphView(graph, "inlined_pipe_pattern", nodes), ir_version=10)
+            
+        ir_model = ir.Model(osh.SubGraphView(graph, "inlined_pipe_pattern", nodes), ir_version=self._model_proto.ir_version)
 
         pattern = osh.direct_convert_ir_graph_to_pattern(ir_model.graph)
 
@@ -389,7 +389,7 @@ class LoopBodyTemplate:
         self._ir_graph = self._ir_model.graph
 
     def update(self):
-        self._ir_model = ir.Model(self._ir_graph, ir_version=10)
+        self._ir_model = ir.Model(self._ir_graph, ir_version=self._model_proto.ir_version)
         self._model_proto = ir.serde.serialize_model(self._ir_model)
 
     def save(self, filename):
