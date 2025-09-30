@@ -7,9 +7,11 @@ import qonnx.util.basic as util
 import torch
 from brevitas.nn import QuantLinear
 from brevitas.quant import Int8ActPerTensorFloat, Int8Bias, Int8WeightPerTensorFloat
+from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.general import ConvertDivToMul, ConvertSubToAdd
 from qonnx.transformation.infer_shapes import InferShapes
+from qonnx.util.basic import gen_finn_dt_tensor
 from qonnx.util.cleanup import cleanup as qonnx_cleanup
 
 import finn.core.onnx_exec as oxe
@@ -56,7 +58,11 @@ class SimpleModule(torch.nn.Module):
 
         # Create the linear layers
         for i in range(num_layers):
-            self.layers.append(SimpleSubModule(input_size, hidden_size, mul_val=self.mul_val))
+            in_features = input_size if i == 0 else hidden_size
+            out_features = (
+                hidden_size if i != (num_layers - 1) or output_size is None else hidden_size
+            )
+            self.layers.append(SimpleSubModule(in_features, out_features, mul_val=self.mul_val))
 
     def forward(self, x):
         for layer in self.layers:
@@ -73,16 +79,16 @@ def export_model_to_qonnx(input_size=10, hidden_size=20, num_layers=4, output_si
         output_size=output_size,
         mul_val=150,
     )
+    x = torch.rand((1, input_size))
+    model(x)  # Initialise scale factors
     model.eval()
-    # Create a dummy input tensor
-    dummy_input = torch.randn(input_size, hidden_size)
 
     # Export the model to ONNX format
     onnx_path = f"simple_module_{num_layers}layers.onnx"
     with torch.no_grad():
         bo.export_qonnx(
             model,
-            (dummy_input),
+            x,
             onnx_path,
             do_constant_folding=True,
             input_names=["x"],
@@ -105,13 +111,14 @@ def check_tensor_shape(model_wrapper, name, expected_shape):
     ), f"Shape mismatch for {name}: expected {expected_shape}, got {actual_shape}"
 
 
-def test_finn_loop():
-    input_size = 20
-    hidden_size = 20
-    num_layers = 6
-    output_size = None
+# input_size == hidden_size to create model that can be rolled
+@pytest.mark.parametrize("input_size", [20, 30, 40])
+# num_layers
+@pytest.mark.parametrize("num_layers", [6, 12])  # TODO: , 24])
+def test_finn_loop(input_size, num_layers):
+    hidden_size = input_size
 
-    onnx_path, model = export_model_to_qonnx(input_size, hidden_size, num_layers, output_size)
+    onnx_path, model = export_model_to_qonnx(input_size, hidden_size, num_layers)
 
     qonnx_cleanup(onnx_path, out_file=onnx_path)
     model_wrapper = ModelWrapper(onnx_path)
@@ -130,6 +137,7 @@ def test_finn_loop():
     model_wrapper = model_wrapper.transform(CollapseRepeatedMul())
     model_wrapper = model_wrapper.transform(MoveAddPastMul())
     model_wrapper = model_wrapper.transform(CollapseRepeatedAdd())
+    model_wrapper = model_wrapper.transform(CollapseRepeatedMul())
     model_wrapper = model_wrapper.transform(to_hw.InferThresholdingLayer())
     model_wrapper = model_wrapper.transform(to_hw.InferQuantizedMatrixVectorActivation())
     model_wrapper = model_wrapper.transform(to_hw.InferElementwiseBinaryOperation())
@@ -159,11 +167,11 @@ def test_finn_loop():
 
     # Check tensor shapes by name since loop rolling may reorder inputs
     check_tensor_shape(
-        model_wrapper, model_wrapper.graph.input[0].name, [input_size, hidden_size]
+        model_wrapper, model_wrapper.graph.input[0].name, [1, input_size]
     )  # activation input shape should remain the same
     # commented because name has changed with the additional transformations applied
     check_tensor_shape(
-        model_wrapper, model_wrapper.graph.output[0].name, [input_size, hidden_size]
+        model_wrapper, model_wrapper.graph.output[0].name, [1, hidden_size]
     )  # activation output shape should remain the same
     assert (
         model_wrapper.get_tensor_shape(loop_node.input[1])[0] == num_layers
@@ -186,9 +194,7 @@ def test_finn_loop():
                 mlo_attr.i == num_layers
             ), "Loop body max iteration count should match number of layers"
 
-    inp_tensor = np.random.uniform(low=-1.0, high=1.0, size=(input_size, hidden_size)).astype(
-        np.float32
-    )
+    inp_tensor = gen_finn_dt_tensor(DataType["FLOAT32"], [1, input_size])
     idict = {model_wrapper.graph.input[0].name: inp_tensor}
     odict = oxe.execute_onnx(model_wrapper, idict)
     produced = odict[model_wrapper.graph.output[0].name]
