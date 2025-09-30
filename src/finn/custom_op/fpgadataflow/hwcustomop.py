@@ -307,6 +307,10 @@ class HWCustomOp(CustomOp):
                 os.environ["FINN_ROOT"] + "/finn-rtllib/memstream/hdl/memstream_wrapper_template.v"
             )
             mname = self.onnx_node.name
+            sets = 1
+            mlo_max_iter = self.get_nodeattr("mlo_max_iter")
+            if mlo_max_iter:
+                sets = mlo_max_iter
             if self.onnx_node.op_type.startswith("Thresholding"):
                 depth = self.calc_tmem()
             else:
@@ -320,6 +324,7 @@ class HWCustomOp(CustomOp):
                 init_file = ""
             code_gen_dict = {
                 "$MODULE_NAME$": [mname],
+                "$SETS$": [str(sets)],
                 "$DEPTH$": [str(depth)],
                 "$WIDTH$": [str(padded_width)],
                 "$INIT_FILE$": [init_file],
