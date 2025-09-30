@@ -129,7 +129,7 @@ def test_finn_loop(input_size, num_layers):
     model_wrapper = model_wrapper.transform(RaiseScalarToRank1())
 
     # Warning: Running standard streamlining here causes optimizations
-    # accross loop body boundaries that breaks current loop rolling assumptions.
+    # across loop body boundaries that breaks current loop rolling assumptions.
     # instead of streamlining only apply some transformations and then convert to hw
     model_wrapper = model_wrapper.transform(ConvertSubToAdd())
     model_wrapper = model_wrapper.transform(ConvertDivToMul())
