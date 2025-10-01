@@ -391,7 +391,28 @@ class FINNLoop(HWCustomOp, RTLBackend):
                             for line in infile:
                                 outfile.write(line)
                         os.remove(memblock_file)
-            if param_node.op_type.startswith("Thresholding"):
+                # Replace the path for the dat files in the ipgen files if Eltwise
+                # Adapted from transformations.fpgadataflow.replace_verilog_relpaths
+                if param_node.op_type.startswith("Elementwise"):
+                    param_customop = getCustomOp(param_node)
+                    ipgen_path = param_customop.get_nodeattr("code_gen_dir_ipgen")
+                    if ipgen_path is not None and os.path.isdir(ipgen_path):
+                        for dname, dirs, files in os.walk(ipgen_path):
+                            for fname in files:
+                                if fname.endswith("_memstream_wrapper.v"):
+                                    fpath = os.path.join(dname, fname)
+                                    with open(fpath, "r") as f:
+                                        s = f.read()
+                                    old = "%s/memblock.dat" % ipgen_path
+                                    new = "%s/memblock_%s_id_%s.dat" % (
+                                        path,
+                                        param_node.op_type,
+                                        i + 1,
+                                    )
+                                    s = s.replace(old, new)
+                                    with open(fpath, "w") as f:
+                                        f.write(s)
+            elif param_node.op_type.startswith("Thresholding"):
                 # concatinate all .dat files together
                 pe = inst.get_nodeattr("PE")
                 output_data_type = inst.get_nodeattr("outputDataType")

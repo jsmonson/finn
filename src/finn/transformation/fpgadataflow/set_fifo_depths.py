@@ -293,7 +293,13 @@ class InsertAndSetFIFODepths(Transformation):
 
         # these optypes may potentially be param nodes in an mlo
         # we'll temporarily change them to use external mode for FIFO sizing
-        mlo_optypes = ["MVAU_hls", "MVAU_rtl", "Thresholding_rtl"]
+        mlo_optypes = [
+            "MVAU_hls",
+            "MVAU_rtl",
+            "Thresholding_rtl",
+            "ElementwiseAdd_hls",
+            "ElementwiseMul_hls",
+        ]
         modified_mlo_nodes = []
         for node in model.graph.node:
             # verify assumptions
@@ -328,7 +334,10 @@ class InsertAndSetFIFODepths(Transformation):
                     node.set_nodeattr("mlo_max_iter", 0)
                     if node.onnx_node.op_type.startswith("MVAU"):
                         node.set_nodeattr("mem_mode", "external")
-                    elif node.onnx_node.op_type == "Thresholding_rtl":
+                    elif (
+                        node.onnx_node.op_type == "Thresholding_rtl"
+                        or node.onnx_node.op_type.startswith("Elementwise")
+                    ):
                         # set thresholding array to a dummy value
                         param_input = node.onnx_node.input[1]
                         # remember index of input
@@ -337,7 +346,8 @@ class InsertAndSetFIFODepths(Transformation):
                         tdt = model.get_tensor_datatype(param_input)
                         tshape = model.get_tensor_shape(param_input)
                         dummy_threshs = gen_finn_dt_tensor(tdt, tuple(tshape))
-                        dummy_threshs = np.sort(dummy_threshs, axis=1)
+                        if node.onnx_node.op_type == "Thresholding_rtl":
+                            dummy_threshs = np.sort(dummy_threshs, axis=1)
                         model.set_initializer(param_input, dummy_threshs)
                         self.ind_map[node.onnx_node.name] = ind
                     self.mlo_max_iter = mlo_max_iter
@@ -455,6 +465,8 @@ class InsertAndSetFIFODepths(Transformation):
             model.del_initializer(param_input)
             model.graph.input.insert(self.ind_map[node.name], param_input_vi)
             model.graph.value_info.remove(param_input_vi)
+            if node.op_type.startswith("Elementwise"):
+                node_inst.set_nodeattr("rhs_style", "input")
             reset_implementation(node_inst)
             modified_mlo_nodes.remove(node.name)
 
