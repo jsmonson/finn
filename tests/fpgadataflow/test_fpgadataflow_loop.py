@@ -513,7 +513,7 @@ def make_loop_modelwrapper_nofork(mw, mh, iter_count):
 
 
 def test_fpgadataflow_loop():
-    model = make_loop_modelwrapper(16, 16, 1)
+    model = make_loop_modelwrapper(16, 16, 3)
     model = model.transform(InferShapes())
     model.save("finn_loop.onnx")
     # model = ModelWrapper("finn_loop.onnx")
@@ -538,9 +538,11 @@ def test_fpgadataflow_loop():
     body = body.transform(SetExecMode("cppsim"))
     inst.set_nodeattr("body", body.graph)
     x = gen_finn_dt_tensor(DataType["INT8"], [1, 3, 3, 16])
+    np.save("input.npy", x)
     input_dict = {model.graph.input[0].name: x}
     y_dict = oxe.execute_onnx(model, input_dict)
     y = y_dict[model.graph.output[0].name]
+    np.save("expected_output.npy", y)
     print(y)
 
 

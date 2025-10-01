@@ -471,7 +471,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 # for Thresholds this value is fm size / pe
                 # for all other param nodes it is 1
                 tap_rep = 1
-                if node.op_type == "Thresholding_rtl":
+                if node.op_type == "Thresholding_rtl" or node.op_type.startswith("Elementwise"):
                     tap_rep = np.prod(node_inst.get_folded_input_shape(0)[:-1])
                 stname = "IN_%s" % graph_inputs.index(node.input[1])
                 code_gen_dict = {
@@ -805,6 +805,10 @@ class FINNLoop(HWCustomOp, RTLBackend):
             lambda node: node.op_type == "Thresholding_rtl"
             or (
                 node.op_type == "MVAU_rtl"
+                and any(attr.name == "mlo_max_iter" and attr.i > 0 for attr in node.attribute)
+            )
+            or (
+                node.op_type.startswith("Elementwise")
                 and any(attr.name == "mlo_max_iter" and attr.i > 0 for attr in node.attribute)
             ),
         )
