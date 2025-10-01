@@ -42,7 +42,6 @@ class SimpleSubModule(torch.nn.Module):
             bias=True,
             weight_quant=Int8WeightPerTensorFloat,
             input_quant=Int8ActPerTensorFloat,
-            bias_quant=Int8Bias,
         )
 
     def forward(self, x):
@@ -131,7 +130,7 @@ def test_finn_loop(input_size, num_layers):
     model_wrapper = model_wrapper.transform(RaiseScalarToRank1())
 
     # Warning: Running standard streamlining here causes optimizations
-    # accross loop body boundaries that breaks current loop rolling assumptions.
+    # across loop body boundaries that breaks current loop rolling assumptions.
     # instead of streamlining only apply some transformations and then convert to hw
     model_wrapper = model_wrapper.transform(AbsorbSignBiasIntoMultiThreshold())
     model_wrapper = model_wrapper.transform(ConvertSubToAdd())
