@@ -305,6 +305,10 @@ class HWCustomOp(CustomOp):
                 os.environ["FINN_ROOT"] + "/finn-rtllib/memstream/hdl/memstream_wrapper_template.v"
             )
             mname = self.onnx_node.name
+            sets = 1
+            mlo_max_iter = self.get_nodeattr("mlo_max_iter")
+            if mlo_max_iter:
+                sets = mlo_max_iter
             if self.onnx_node.op_type.startswith("Thresholding"):
                 depth = self.calc_tmem()
             else:
@@ -318,6 +322,7 @@ class HWCustomOp(CustomOp):
                 init_file = ""
             code_gen_dict = {
                 "$MODULE_NAME$": [mname],
+                "$SETS$": [str(sets)],
                 "$DEPTH$": [str(depth)],
                 "$WIDTH$": [str(padded_width)],
                 "$INIT_FILE$": [init_file],
@@ -343,15 +348,24 @@ class HWCustomOp(CustomOp):
         """Helper function to generate verilog code for fetch_weights component.
         Currently utilized by MVAU."""
         ops = ["MVAU_hls", "MVAU_rtl"]
-        if self.onnx_node.op_type in ops:
+        if self.onnx_node.op_type in ops or self.onnx_node.op_type.startswith("Elementwise"):
             template_path = os.environ["FINN_ROOT"] + "/finn-rtllib/mlo/fetch_weights_wrapper.v"
             mname = self.onnx_node.name
             wdt = self.get_input_datatype(1)
-            mw = self.get_nodeattr("MW")
-            mh = self.get_nodeattr("MH")
-            pe = self.get_nodeattr("PE")
-            simd = self.get_nodeattr("SIMD")
-            n_reps = np.prod(self.get_nodeattr("numInputVectors"))
+            if self.onnx_node.op_type in ops:
+                mw = self.get_nodeattr("MW")
+                mh = self.get_nodeattr("MH")
+                pe = self.get_nodeattr("PE")
+                simd = self.get_nodeattr("SIMD")
+                n_reps = np.prod(self.get_nodeattr("numInputVectors"))
+            else:
+                # Eltwise layers only have one parallelism parameter
+                mw = 1
+                mh = self.get_nodeattr("rhs_shape")[-1]
+                pe = self.get_nodeattr("PE")
+                simd = 1
+                # TODO use broadcast rhs shape here
+                n_reps = np.prod(self.get_nodeattr("rhs_shape")[:-1])
             layer_offs = mw * mh
             # upper bound on how many layers can be supported, set to 64 for now
             n_max_layers = 64

@@ -36,21 +36,25 @@ module stream_tap #(
 	// Input Sidestep Register Stage
 	logic [DATA_WIDTH-1:0]  A = 'x;
 	logic  AVld = 0;
+	assign	irdy = !AVld;
 
-	// Output Register Stage
+	// Output Register & Skid Buffer on Tap
 	logic [DATA_WIDTH-1:0]  B = 'x;
 	logic  OVld = 0;
 	cnt_t  TCnt = '{ CNT_BITS-1: 0, default: 'x };
 	logic  TLst = 'x;
+	uwire  tvld0 = TCnt[$left(TCnt)];
+	uwire  trdy0;
 
-	// Output Wiring
-	assign	irdy = !AVld;
 	assign	odat = B;
 	assign	ovld = OVld;
-	assign	tdat = B;
-	assign	tvld = TCnt[$left(TCnt)];
+	skid #(.DATA_WIDTH(DATA_WIDTH), .FEED_STAGES(0)) tap_skid (
+		.clk, .rst,
+		.idat(B),    .ivld(tvld0), .irdy(trdy0),
+		.odat(tdat), .ovld(tvld),  .ordy(trdy)
+	);
 
-	uwire  bload = (ordy || !ovld) && ((trdy && TLst) || !tvld);
+	uwire  bload = (ordy || !ovld) && ((trdy0 && TLst) || !tvld0);
 	always_ff @(posedge clk) begin
 		if(rst) begin
 			A <= 'x;
@@ -76,7 +80,7 @@ module stream_tap #(
 				TLst <= iavl? TAP_REP == 1 : 'x;
 			end
 			else begin
-				automatic logic  tick = tvld && trdy;
+				automatic logic  tick = tvld0 && trdy0;
 				OVld <= OVld && !ordy;
 				TCnt <= TCnt + tick;
 				TLst <= (TCnt == cnt_t'(-2)) && tick;

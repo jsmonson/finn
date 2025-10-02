@@ -79,7 +79,7 @@ class ElementwiseBinaryOperation_hls(
         """Generates c++ code and tcl script for ip generation."""
         super().code_generation_ipgen(model, fpgapart, clk)
         mem_mode = self.get_nodeattr("mem_mode")
-        if mem_mode == "internal_decoupled":
+        if mem_mode == "internal_decoupled" or self.get_nodeattr("mlo_max_iter"):
             self.generate_hdl_memstream(fpgapart)
 
     # Generates list of C++ includes to be placed at the top of the generated
@@ -174,7 +174,9 @@ class ElementwiseBinaryOperation_hls(
             rhs_shape = (len(out_shape) - len(rhs_shape)) * (1,) + rhs_shape
             # Reshape the input to align with the output shape
             rhs = rhs.reshape(*rhs_shape)
-            if self.get_nodeattr("mem_mode") == "internal_embedded":
+            if self.get_nodeattr("mem_mode") == "internal_embedded" and not self.get_nodeattr(
+                "mlo_max_iter"
+            ):
                 # Generate C++ array initialization code
                 # Note: no packing, but with variable name/type declaration
                 rhs_code = numpy_to_hls_code(rhs, self.rhs_dtype, "rhs", False, False)
@@ -262,10 +264,11 @@ class ElementwiseBinaryOperation_hls(
         if self.lhs_style == "input" or lhs_decoupled:
             # Generate function calls for reading the input files into the input
             # streams
+            npy_type = "half" if self.lhs_dtype.get_hls_datatype_str() == "half" else "float"
             self.code_gen_dict["$READNPYDATA$"] += [
                 # Generate function call reading from file into the input stream
-                #   Note: Inputs are always represented as numpy floats
-                "npy2apintstream<LhsPacked, LhsType, LhsWidth, float>(",
+                #   Note: Inputs can be represented as numpy floats or halfs
+                f"npy2apintstream<LhsPacked, LhsType, LhsWidth, {npy_type}>(",
                 f'"{code_gen_dir}/input_0.npy", in0_V, false',
                 ");",
             ]
@@ -275,10 +278,11 @@ class ElementwiseBinaryOperation_hls(
         if self.rhs_style == "input" or rhs_decoupled:
             # Generate function calls for reading the input files into the input
             # streams
+            npy_type = "half" if self.rhs_dtype.get_hls_datatype_str() == "half" else "float"
             self.code_gen_dict["$READNPYDATA$"] += [
                 # Generate function call reading from file into the input stream
-                #   Note: Inputs are always represented as numpy floats
-                "npy2apintstream<RhsPacked, RhsType, RhsWidth, float>(",
+                #   Note: Inputs can be represented as numpy floats or halfs
+                f"npy2apintstream<RhsPacked, RhsType, RhsWidth, {npy_type}>(",
                 f'"{code_gen_dir}/input_1.npy", in1_V, false',
                 ");",
             ]
@@ -525,10 +529,11 @@ class ElementwiseBinaryOperation_hls(
         }}}"""
         # Generate function call for reading from the output stream into the
         # output file
+        npy_type = "half" if self.out_dtype.get_hls_datatype_str() == "half" else "float"
         self.code_gen_dict["$DATAOUTSTREAM$"] = [
             # Generate function call reading from stream into the output file
-            #   Note: Outputs are always represented as numpy floats
-            "apintstream2npy<OutPacked, OutType, OutWidth, float>(",
+            #   Note: Outputs can be numpy floats or halfs
+            f"apintstream2npy<OutPacked, OutType, OutWidth, {npy_type}>(",
             f'out0_V, {shape}, "{code_gen_dir}/output_0.npy", false',
             ");",
         ]
@@ -610,6 +615,8 @@ class ElementwiseBinaryOperation_hls(
         # need to be inserted
         if self.lhs_style == "input":
             intf_names["s_axis"] += [("in0_V", self.get_instream_width_padded(ind=0))]
+            if self.rhs_style == "const" and self.get_nodeattr("mlo_max_iter"):
+                intf_names["s_axis"] += [("in1_V", self.get_instream_width_padded(ind=0))]
         # If the right-hand-side is provided as runtime input interface names
         # need to be inserted
         if self.rhs_style == "input":
@@ -628,8 +635,11 @@ class ElementwiseBinaryOperation_hls(
         cmd = ["file mkdir %s" % source_target]
         # add streamer if needed
         mem_mode = self.get_nodeattr("mem_mode")
+        mlo = self.get_nodeattr("mlo_max_iter")
         lhs_decoupled = self.lhs_style == "const" and mem_mode == "internal_decoupled"
-        rhs_decoupled = self.rhs_style == "const" and mem_mode == "internal_decoupled"
+        rhs_decoupled = (self.rhs_style == "const" and mem_mode == "internal_decoupled") or (
+            self.rhs_style == "input" and mlo
+        )
 
         # lhs_decoupled XOR rhs_decoupled
         if lhs_decoupled != rhs_decoupled:
@@ -650,6 +660,11 @@ class ElementwiseBinaryOperation_hls(
                 "create_bd_intf_pin -mode Slave "
                 "-vlnv xilinx.com:interface:axis_rtl:1.0 /%s/%s" % (node_name, din_name)
             )
+            if mlo:
+                cmd.append(
+                    "create_bd_intf_pin -mode Slave "
+                    "-vlnv xilinx.com:interface:axis_rtl:1.0 /%s/in1_V" % node_name
+                )
             # instantiate the hls ip
             cmd.append(
                 "create_bd_cell -type ip -vlnv %s /%s/%s"
@@ -678,6 +693,11 @@ class ElementwiseBinaryOperation_hls(
                 "create_bd_cell -type hier -reference %s /%s/%s"
                 % (strm_tmpl_name, node_name, strm_inst)
             )
+            if mlo:
+                cmd.append(
+                    "connect_bd_intf_net [get_bd_intf_pins %s/in1_V] "
+                    "[get_bd_intf_pins %s/%s/s_axis_0]" % (node_name, node_name, strm_inst)
+                )
             cmd.append(
                 "connect_bd_intf_net [get_bd_intf_pins %s/%s/m_axis_0] "
                 "[get_bd_intf_pins %s/%s/in1_V]" % (node_name, strm_inst, node_name, node_name)

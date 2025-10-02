@@ -181,6 +181,16 @@ class InferThresholdingLayer(Transformation):
                 idt = model.get_tensor_datatype(thl_input)
                 tdt = model.get_tensor_datatype(thl_threshold)
 
+                # only infer layers where input and thresholds are integers or fp32
+                idt_int = idt.is_integer()
+                tdt_int = tdt.is_integer()
+                idt_fp = idt in ["FLOAT32", "FLOAT16"]
+                tdt_fp = tdt in ["FLOAT32", "FLOAT16"]
+                if not (idt_int or idt_fp):
+                    continue
+                if not (tdt_int or tdt_fp):
+                    continue
+
                 # check layout of inputs/outputs, and convert if needed
                 # check layout and convert if necessary
                 thl_in_layout = model.get_tensor_layout(thl_input)
@@ -1838,6 +1848,8 @@ class InferElementwiseBinaryOperation(Transformation):
                     rhs_dtype=str(idt1),
                     out_dtype=str(odt0),
                 )
+                if hasattr(node, "metadata_props"):
+                    new_node.metadata_props.extend(node.metadata_props)
                 graph.node.insert(index + 1, new_node)
                 graph.node.remove(node)
 

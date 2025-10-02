@@ -230,6 +230,8 @@ class AvgPoolAndTruncToQuantAvgPool(Transformation):
                             [act_scale_div_tensor.name],
                         )
                         graph.node.insert(running_node_index, scale_div_node)
+                        if hasattr(n, "metadata_props"):
+                            scale_div_node.metadata_props.extend(n.metadata_props)
                         running_node_index += 1
 
                         act_scale_mul_tensor = helper.make_tensor_value_info(
@@ -252,6 +254,8 @@ class AvgPoolAndTruncToQuantAvgPool(Transformation):
                             data_layout=data_layout,
                         )
                         graph.node.insert(running_node_index, QuantAvgPool2d_node)
+                        if hasattr(n, "metadata_props"):
+                            QuantAvgPool2d_node.metadata_props.extend(n.metadata_props)
                         running_node_index += 1
 
                         scale_mul_tensor = helper.make_tensor_value_info(
@@ -268,6 +272,8 @@ class AvgPoolAndTruncToQuantAvgPool(Transformation):
                             [t_node.output[0]],
                         )
                         graph.node.insert(running_node_index, scale_mul_node)
+                        if hasattr(n, "metadata_props"):
+                            scale_mul_node.metadata_props.extend(n.metadata_props)
                         running_node_index += 1
 
                         # Remove old nodes

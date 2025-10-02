@@ -282,7 +282,6 @@ class FINNLoop(HWCustomOp, RTLBackend):
                     params = context[node.input[i]]
                     input_dict[loop_body.graph.input[i].name] = params[i_iter]
             outp_dict = oxe.execute_onnx(loop_body, input_dict, return_full_exec_context=True)
-            np.savez(f"expt_out_{i_iter}.npz", **outp_dict)
             inp_values = outp_dict[loop_body.graph.output[0].name]
         result = outp_dict[loop_body.graph.output[0].name]
         context[node.output[0]] = np.asarray(result, dtype=np.float32)
@@ -345,13 +344,14 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 loop_body.set_tensor_datatype(loop_tensor, param_dtype)
                 inst = getCustomOp(param_node)
                 inst.generate_params(loop_body, path)
-                # if param_node.op_type.startswith("MVAU"):
                 param_file = "{}/memblock.dat".format(path)
-                new_param_file = "{}/memblock_{}.dat".format(path, iter)
-                if param_node.op_type.startswith("MVAU"):
+                new_param_file = "{}/{}_memblock_{}.dat".format(path, param_node.op_type, iter)
+                if param_node.op_type.startswith("MVAU") or param_node.op_type.startswith(
+                    "Elementwise"
+                ):
                     # rename so it doesn't get overwritten
                     shutil.move(param_file, new_param_file)
-                else:
+                elif param_node.op_type.startswith("Thresholding"):
                     # get all generated Thresholding dat files
                     pe = inst.get_nodeattr("PE")
                     output_data_type = inst.get_nodeattr("outputDataType")
@@ -374,17 +374,45 @@ class FINNLoop(HWCustomOp, RTLBackend):
                             param_path.stem + "_i" + str(iter) + param_path.suffix
                         )
                         shutil.move(param_path, new_param_file)
-            if param_node.op_type.startswith("MVAU"):
+                else:
+                    raise Exception
+
+            if param_node.op_type.startswith("MVAU") or param_node.op_type.startswith(
+                "Elementwise"
+            ):
                 # concatinate all .dat files together
-                param_file = "{}/memblock_MVAU_id_{}.dat".format(path, i + 1)
+                param_file = "{}/memblock_{}_id_{}.dat".format(path, param_node.op_type, i + 1)
                 with open(param_file, "w") as outfile:
                     for iter in range(iteration):
-                        memblock_file = "{}/memblock_{}.dat".format(path, iter)
+                        memblock_file = "{}/{}_memblock_{}.dat".format(
+                            path, param_node.op_type, iter
+                        )
                         with open(memblock_file, "r") as infile:
                             for line in infile:
                                 outfile.write(line)
                         os.remove(memblock_file)
-            if param_node.op_type.startswith("Thresholding"):
+                # Replace the path for the dat files in the ipgen files if Eltwise
+                # Adapted from transformations.fpgadataflow.replace_verilog_relpaths
+                if param_node.op_type.startswith("Elementwise"):
+                    param_customop = getCustomOp(param_node)
+                    ipgen_path = param_customop.get_nodeattr("code_gen_dir_ipgen")
+                    if ipgen_path is not None and os.path.isdir(ipgen_path):
+                        for dname, dirs, files in os.walk(ipgen_path):
+                            for fname in files:
+                                if fname.endswith("_memstream_wrapper.v"):
+                                    fpath = os.path.join(dname, fname)
+                                    with open(fpath, "r") as f:
+                                        s = f.read()
+                                    old = "%s/memblock.dat" % ipgen_path
+                                    new = "%s/memblock_%s_id_%s.dat" % (
+                                        path,
+                                        param_node.op_type,
+                                        i + 1,
+                                    )
+                                    s = s.replace(old, new)
+                                    with open(fpath, "w") as f:
+                                        f.write(s)
+            elif param_node.op_type.startswith("Thresholding"):
                 # concatinate all .dat files together
                 pe = inst.get_nodeattr("PE")
                 output_data_type = inst.get_nodeattr("outputDataType")
@@ -757,7 +785,8 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 "create_bd_intf_pin -mode Master "
                 "-vlnv xilinx.com:interface:axis_rtl:1.0 /%s/m_axis_%d" % (bd_name, id + 1)
             )
-        # get stream tap components
+        # get stream tap (+ skid)  components
+        skid_file = os.path.join(os.environ["FINN_ROOT"], "finn-rtllib/skid/skid.sv")
         stream_tap_dir = os.path.join(os.environ["FINN_ROOT"], "finn-rtllib/stream_tap/hdl/")
         file_suffix = "_stream_tap_wrapper.v"
         # automatically find stream tap verilog components in code generation directory
@@ -767,9 +796,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
             if fname.endswith(file_suffix):
                 st_verilog_files.append(os.path.join(code_gen_dir, fname))
                 st_tmpl_names.append(fname[:-2])
-        sourcefiles = st_verilog_files + [
-            stream_tap_dir + "stream_tap.sv",
-        ]
+        sourcefiles = st_verilog_files + [stream_tap_dir + "stream_tap.sv", skid_file]
         for f in sourcefiles:
             cmd += ["add_files -copy_to %s -norecurse %s" % (source_target, f)]
 
@@ -778,6 +805,10 @@ class FINNLoop(HWCustomOp, RTLBackend):
             lambda node: node.op_type == "Thresholding_rtl"
             or (
                 node.op_type == "MVAU_rtl"
+                and any(attr.name == "mlo_max_iter" and attr.i > 0 for attr in node.attribute)
+            )
+            or (
+                node.op_type.startswith("Elementwise")
                 and any(attr.name == "mlo_max_iter" and attr.i > 0 for attr in node.attribute)
             ),
         )
