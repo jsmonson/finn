@@ -107,15 +107,18 @@ fi
 if [ -z "${XILINX_VIVADO}" ]; then
   yecho "finnxsi will be unavailable since Vivado was not found"
 else
+  # Build finn_xsi using the new Python-based setup
   if [ -f "${FINN_ROOT}/finn_xsi/xsi.so" ]; then
-    gecho "Found finnxsi at ${FINN_ROOT}/finn_xsi/xsi.so"
+    gecho "Found existing finn_xsi at ${FINN_ROOT}/finn_xsi/xsi.so"
   else
-    OLDPWD=$(pwd)
-    cd ${FINN_ROOT}/finn_xsi
-    make
-    cd $OLDPWD
+    gecho "Building finn_xsi using finn.xsi.setup..."
+    python -m finn.xsi.setup --quiet
+    if [ $? -eq 0 ]; then
+      gecho "finn_xsi built successfully"
+    else
+      recho "Failed to build finn_xsi"
+    fi
   fi
-  export PYTHONPATH=$PYTHONPATH:${FINN_ROOT}/finn_xsi
   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lib/x86_64-linux-gnu/:${XILINX_VIVADO}/lib/lnx64.o
 fi
 
