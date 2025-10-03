@@ -300,14 +300,13 @@ def validate_loop_attributes(loop_node: ir.Node):
 def validate_loop_body_io_tensors(loop_node: ir.Node):
     # Validate that loop body activation input and output types and shapes match
     body_graph = loop_node.attributes["body"].value
-
     for i in range(len(body_graph.outputs)):
         inpt = body_graph.inputs[i]
         outpt = body_graph.outputs[i]
-        assert inpt.type == outpt.type, f"FINNLoop body activation input/output {i} type mismatch"
+        assert inpt.type == outpt.type, f"FINNLoop body activation input/output {i} type mismatch {inpt.type} != {outpt.type}"
         assert (
             inpt.shape == outpt.shape
-        ), f"FINNLoop body activation input/output {i} shape mismatch"
+        ), f"FINNLoop body activation input/output {i} shape mismatch {inpt.shape} != {outpt.shape}"
         if (
             "quant_parameter_tensor_names" in inpt.meta
             and "quant_parameter_tensor_names" in outpt.meta
@@ -428,17 +427,17 @@ class LoopRolling(Transformation):
         nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)  
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
-        activations = 0
+
+        # my loop rolling code assumes that the activation inputs are listed first and
+        # that corresponding output activations have the same index as the input
+        input_swaps = []
         if len(nodes) == 1:
             # find and label the activation inputs
             for i, input in enumerate(nodes[0].inputs):
                 if not input.is_initializer():
                     if input.is_graph_input() or input.producer().op_type != "Constant":
-                        import pdb; pdb.set_trace()
-                        LoopBody.signature[i] = LoopBodyInputType.ACTIVATION
-                        activations += 1
+                        input_swaps.append((len(input_swaps), i))
         else:
-            input_swaps = []
             for i in range(len(nodes) - 1):
                 a_node = nodes[i]
                 b_node = nodes[i + 1]
@@ -457,23 +456,24 @@ class LoopRolling(Transformation):
                         # check that they are the same in the rest
                         assert input_swap in input_swaps
 
-            # apply the input swaps to each nodes
-            for node in nodes:
-                for swap in input_swaps:
-                    a = node.inputs[swap[0]]
-                    b = node.inputs[swap[1]]
-                    node.replace_input_with(swap[0], b)
-                    node.replace_input_with(swap[1], a)
-
-            # apply the input swaps to the function graph
-            # mark swapped nodes as activations
+        # apply the input swaps to each nodes
+        for node in nodes:
             for swap in input_swaps:
-                a = LoopBody.function.inputs[swap[0]]
-                b = LoopBody.function.inputs[swap[1]]
-                LoopBody.function.inputs[swap[0]] = b
-                LoopBody.function.inputs[swap[1]] = a
-                LoopBody.signature[swap[0]] = LoopBodyInputType.ACTIVATION
-                activations += 1
+                a = node.inputs[swap[0]]
+                b = node.inputs[swap[1]]
+                node.replace_input_with(swap[0], b)
+                node.replace_input_with(swap[1], a)
+
+        # apply the input swaps to the function graph
+        # mark swapped nodes as activations
+        activations = 0
+        for swap in input_swaps:
+            a = LoopBody.function.inputs[swap[0]]
+            b = LoopBody.function.inputs[swap[1]]
+            LoopBody.function.inputs[swap[0]] = b
+            LoopBody.function.inputs[swap[1]] = a
+            LoopBody.signature[swap[0]] = LoopBodyInputType.ACTIVATION
+            activations += 1
 
         # Next Label Inputs according to how they are produced.
         # Indexable inputs will have different constant or none producers
@@ -507,6 +507,8 @@ class LoopRolling(Transformation):
         count = rewrite_set.apply_to_model(model_ir, verbose=None)
         print(f"Rolled {count} function calls into a loop operator")
 
+        #model = onnxscript.ir.serde.serialize_model(model_ir)
+        #onnx.save(model, "after_loop_rolling.onnx")
         for node in model_ir.graph._nodes:
             if node.op_type == "FINNLoop":
                 validate_loop_node(node)
