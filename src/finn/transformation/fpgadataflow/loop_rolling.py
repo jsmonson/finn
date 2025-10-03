@@ -428,43 +428,52 @@ class LoopRolling(Transformation):
         nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)  
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
-        input_swaps = []
-        for i in range(len(nodes) - 1):
-            a_node = nodes[i]
-            b_node = nodes[i + 1]
-
-            for a_out in a_node.outputs:
-                # Require that outputs of a have a single use of b_node
-                assert len(a_out.uses()) == 1
-                assert a_out.uses()[0][0] is b_node
-
-                a_use_index = a_out.uses()[0][1]
-                input_swap = (a_out.index(), a_use_index)
-                if i == 0:
-                    # add swaps from the first node
-                    input_swaps.append(input_swap)
-                else:
-                    # check that they are the same in the rest
-                    assert input_swap in input_swaps
-
-        # apply the input swaps to each nodes
-        for node in nodes:
-            for swap in input_swaps:
-                a = node.inputs[swap[0]]
-                b = node.inputs[swap[1]]
-                node.replace_input_with(swap[0], b)
-                node.replace_input_with(swap[1], a)
-
-        # apply the input swaps to the function graph
-        # mark swapped nodes as activations
         activations = 0
-        for swap in input_swaps:
-            a = LoopBody.function.inputs[swap[0]]
-            b = LoopBody.function.inputs[swap[1]]
-            LoopBody.function.inputs[swap[0]] = b
-            LoopBody.function.inputs[swap[1]] = a
-            LoopBody.signature[swap[0]] = LoopBodyInputType.ACTIVATION
-            activations += 1
+        if len(nodes) == 1:
+            # find and label the activation inputs
+            for i, input in enumerate(nodes[0].inputs):
+                if not input.is_initializer():
+                    if input.is_graph_input() or input.producer().op_type != "Constant":
+                        import pdb; pdb.set_trace()
+                        LoopBody.signature[i] = LoopBodyInputType.ACTIVATION
+                        activations += 1
+        else:
+            input_swaps = []
+            for i in range(len(nodes) - 1):
+                a_node = nodes[i]
+                b_node = nodes[i + 1]
+
+                for a_out in a_node.outputs:
+                    # Require that outputs of a have a single use of b_node
+                    assert len(a_out.uses()) == 1
+                    assert a_out.uses()[0][0] is b_node
+
+                    a_use_index = a_out.uses()[0][1]
+                    input_swap = (a_out.index(), a_use_index)
+                    if i == 0:
+                        # add swaps from the first node
+                        input_swaps.append(input_swap)
+                    else:
+                        # check that they are the same in the rest
+                        assert input_swap in input_swaps
+
+            # apply the input swaps to each nodes
+            for node in nodes:
+                for swap in input_swaps:
+                    a = node.inputs[swap[0]]
+                    b = node.inputs[swap[1]]
+                    node.replace_input_with(swap[0], b)
+                    node.replace_input_with(swap[1], a)
+
+            # apply the input swaps to the function graph
+            # mark swapped nodes as activations
+            for swap in input_swaps:
+                a = LoopBody.function.inputs[swap[0]]
+                b = LoopBody.function.inputs[swap[1]]
+                LoopBody.function.inputs[swap[0]] = b
+                LoopBody.function.inputs[swap[1]] = a
+                LoopBody.signature[swap[0]] = LoopBodyInputType.ACTIVATION
+                activations += 1
 
         # Next Label Inputs according to how they are produced.
         # Indexable inputs will have different constant or none producers
