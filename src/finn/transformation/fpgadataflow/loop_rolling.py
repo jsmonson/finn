@@ -156,7 +156,7 @@ def build_loop_replace_pattern(graph, LoopBody):
             LoopBody.function.sort()
 
         elif LoopInputType == LoopBodyInputType.ACTIVATION:
-            cinp = osh.vdisconnect(copy.copy(LoopBody.function.inputs[i]))
+            cinp = osh.vdisconnect(copy.copy(nodes[0].inputs[i]))
             graph_inputs.append(cinp)
             loop_inputs.append(cinp)
 
@@ -425,8 +425,7 @@ class LoopRolling(Transformation):
         # get the consecutive node layers
         # TODO: write a check to ensure that there is only one
         #       set of consecutive nodes.
-        nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)
-
+        nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)  
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
         input_swaps = []
