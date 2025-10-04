@@ -507,8 +507,6 @@ class LoopRolling(Transformation):
         count = rewrite_set.apply_to_model(model_ir, verbose=None)
         print(f"Rolled {count} function calls into a loop operator")
 
-        #model = onnxscript.ir.serde.serialize_model(model_ir)
-        #onnx.save(model, "after_loop_rolling.onnx")
         for node in model_ir.graph._nodes:
             if node.op_type == "FINNLoop":
                 validate_loop_node(node)
