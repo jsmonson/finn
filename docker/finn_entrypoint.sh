@@ -119,7 +119,6 @@ else
       recho "Failed to build finn_xsi"
     fi
   fi
-  export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lib/x86_64-linux-gnu/:${XILINX_VIVADO}/lib/lnx64.o
 fi
 
 if [ -f "$HLS_PATH/settings64.sh" ];then
@@ -154,8 +153,6 @@ else
   echo "If you need to enable a beta device, ensure .Xilinx/HLS_init.tcl and/or .Xilinx/Vivado/Vivado_init.tcl are set correctly and mounted"
   echo "See https://docs.xilinx.com/r/en-US/ug835-vivado-tcl-commands/Tcl-Initialization-Scripts"
 fi
-
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VITIS_PATH/lnx64/tools/fpo_v7_1"
 
 export PATH=$PATH:$HOME/.local/bin
 

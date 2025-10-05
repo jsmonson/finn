@@ -58,8 +58,43 @@ def _validate_env_vars():
             )
 
 
+def _setup_ld_library_path():
+    """Set up LD_LIBRARY_PATH for Vivado and Vitis libraries."""
+    ld_library_path = os.environ.get("LD_LIBRARY_PATH", "")
+    paths_to_add = []
+
+    # Add Vivado library path if XILINX_VIVADO is set
+    vivado_path = os.environ.get("XILINX_VIVADO")
+    if vivado_path:
+        vivado_lib = Path(vivado_path) / "lib" / "lnx64.o"
+        if vivado_lib.exists():
+            paths_to_add.append(str(vivado_lib))
+
+        # Also add standard system lib path
+        system_lib = Path("/lib/x86_64-linux-gnu")
+        if system_lib.exists():
+            paths_to_add.append(str(system_lib))
+
+    # Add Vitis FPO library path if VITIS_PATH is set
+    vitis_path = os.environ.get("VITIS_PATH")
+    if vitis_path:
+        vitis_fpo = Path(vitis_path) / "lnx64" / "tools" / "fpo_v7_1"
+        if vitis_fpo.exists():
+            paths_to_add.append(str(vitis_fpo))
+
+    # Update LD_LIBRARY_PATH if we have paths to add
+    if paths_to_add:
+        existing_paths = ld_library_path.split(":") if ld_library_path else []
+        # Only add paths that aren't already present
+        for path in paths_to_add:
+            if path not in existing_paths:
+                existing_paths.append(path)
+        os.environ["LD_LIBRARY_PATH"] = ":".join(existing_paths)
+
+
 # Run validation on import
 _validate_env_vars()
+_setup_ld_library_path()
 
 # Version information
 try:
