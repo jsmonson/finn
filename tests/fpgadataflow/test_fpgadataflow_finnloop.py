@@ -9,7 +9,7 @@ from qonnx.transformation.general import RemoveUnusedTensors
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.transformation.merge_onnx_models import MergeONNXModels
-from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model
+from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model, get_by_name
 
 import finn.core.onnx_exec as oxe
 from finn.transformation.fpgadataflow.compile_cppsim import CompileCppSim
@@ -395,7 +395,23 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     ), "Loop extraction did not find expected number of loop bodies"
 
     model = model.transform(LoopRolling(loop_extraction.loop_body_template))
-
+        
+    # the rhs_style for the elementwise node needs to be set to 'input' for the loop
+    # this requires recompilation of the elementwise node for cppsim
+    loop_node = model.get_nodes_by_op_type("FINNLoop")[0]
+    loop_body_graph = get_by_name(loop_node.attribute, "body").g
+    elementwise_node = get_by_name(loop_body_graph.node, elemwise_optype, "op_type")
+    rhs_style_attr = get_by_name(elementwise_node.attribute, "rhs_style")
+    rhs_style_attr.s = b'input'
+    code_gen_dir_cppsim_attr = get_by_name(elementwise_node.attribute, "code_gen_dir_cppsim")
+    code_gen_dir_cppsim_attr.s = b'' # reset cpp gen directory to force recompilation
+    executable_path_attr = get_by_name(elementwise_node.attribute, "executable_path")
+    executable_path_attr.s = b'' # reset cpp exec directory to force recompilation
+    
+    # recompile element wise node for cppsim
+    model = model.transform(PrepareCppSim(), apply_to_subgraphs=True)
+    model = model.transform(CompileCppSim(), apply_to_subgraphs=True)
+    
     y_dict = oxe.execute_onnx(model, io_dict)
     y_prod = y_dict[model.graph.output[0].name]
     assert (y_prod == y_ref).all()

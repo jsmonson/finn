@@ -312,8 +312,8 @@ def validate_loop_body_io_tensors(loop_node: ir.Node):
             and "quant_parameter_tensor_names" in outpt.meta
         ):
             if (
-                inpt.meta["quant_parameter_tensor_names"]
-                != outpt.meta["quant_parameter_tensor_names"]
+                inpt.meta["quant_parameter_tensor_names"]['finn_datatype']
+                != outpt.meta["quant_parameter_tensor_names"]['finn_datatype']
             ):
                 raise Exception(
                     f"""FINNLoop body activation input/output {i}
