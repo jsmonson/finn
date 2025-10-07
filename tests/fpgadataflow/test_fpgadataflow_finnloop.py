@@ -81,9 +81,11 @@ def make_loop_modelwrapper(
     T2 = np.sort(
         generate_random_threshold_values(dtype, 1, dtype.get_num_possible_values() - 1), axis=1
     )
+    
+    T3_dtype = DataType["FLOAT32"] if eltw_param_dtype == "FLOAT32" else dtype
     T3 = np.sort(
         generate_random_threshold_values(
-            DataType["FLOAT32"] if eltw_param_dtype == "FLOAT32" else dtype,
+            T3_dtype,
             1,
             dtype.get_num_possible_values() - 1,
         ),
@@ -303,13 +305,14 @@ def make_loop_modelwrapper(
         f"thresh0{name_suffix}",
         f"thresh1{name_suffix}",
         f"thresh2{name_suffix}",
-        f"thresh3{name_suffix}",
-        f"mul_param{name_suffix}",
         f"ifm{name_suffix}",
         f"ofm_final{name_suffix}",
     ]
     for tensor in tensors:
         loop_body_model.set_tensor_datatype(tensor, dtype)
+
+    loop_body_model.set_tensor_datatype(f"thresh3{name_suffix}", T3_dtype)
+    loop_body_model.set_tensor_datatype(f"mul_param{name_suffix}", DataType[eltw_param_dtype])
 
     return loop_body_model
 
@@ -376,6 +379,7 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     model = model.transform(PrepareCppSim())
     model = model.transform(CompileCppSim())
     model = model.transform(SetExecMode("cppsim"))
+    model.save("fpgadataflow_finnloop.onnx")
     # generate reference io pair
     x = gen_finn_dt_tensor(DataType["INT8"], (1, 3, 3, dim))
     io_dict = {model.graph.input[0].name: x}
