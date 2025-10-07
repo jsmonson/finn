@@ -156,7 +156,7 @@ def build_loop_replace_pattern(graph, LoopBody):
             LoopBody.function.sort()
 
         elif LoopInputType == LoopBodyInputType.ACTIVATION:
-            cinp = osh.vdisconnect(copy.copy(LoopBody.function.inputs[i]))
+            cinp = osh.vdisconnect(copy.copy(nodes[0].inputs[i]))
             graph_inputs.append(cinp)
             loop_inputs.append(cinp)
 
@@ -300,21 +300,20 @@ def validate_loop_attributes(loop_node: ir.Node):
 def validate_loop_body_io_tensors(loop_node: ir.Node):
     # Validate that loop body activation input and output types and shapes match
     body_graph = loop_node.attributes["body"].value
-
     for i in range(len(body_graph.outputs)):
         inpt = body_graph.inputs[i]
         outpt = body_graph.outputs[i]
-        assert inpt.type == outpt.type, f"FINNLoop body activation input/output {i} type mismatch"
+        assert inpt.type == outpt.type, f"FINNLoop body activation input/output {i} type mismatch {inpt.type} != {outpt.type}"
         assert (
             inpt.shape == outpt.shape
-        ), f"FINNLoop body activation input/output {i} shape mismatch"
+        ), f"FINNLoop body activation input/output {i} shape mismatch {inpt.shape} != {outpt.shape}"
         if (
             "quant_parameter_tensor_names" in inpt.meta
             and "quant_parameter_tensor_names" in outpt.meta
         ):
             if (
-                inpt.meta["quant_parameter_tensor_names"]
-                != outpt.meta["quant_parameter_tensor_names"]
+                inpt.meta["quant_parameter_tensor_names"]['finn_datatype']
+                != outpt.meta["quant_parameter_tensor_names"]['finn_datatype']
             ):
                 raise Exception(
                     f"""FINNLoop body activation input/output {i}
@@ -425,28 +424,37 @@ class LoopRolling(Transformation):
         # get the consecutive node layers
         # TODO: write a check to ensure that there is only one
         #       set of consecutive nodes.
-        nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)
-
+        nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)  
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
+
+        # my loop rolling code assumes that the activation inputs are listed first and
+        # that corresponding output activations have the same index as the input
         input_swaps = []
-        for i in range(len(nodes) - 1):
-            a_node = nodes[i]
-            b_node = nodes[i + 1]
+        if len(nodes) == 1:
+            # find and label the activation inputs
+            for i, input in enumerate(nodes[0].inputs):
+                if not input.is_initializer():
+                    if input.is_graph_input() or input.producer().op_type != "Constant":
+                        input_swaps.append((len(input_swaps), i))
+        else:
+            for i in range(len(nodes) - 1):
+                a_node = nodes[i]
+                b_node = nodes[i + 1]
 
-            for a_out in a_node.outputs:
-                # Require that outputs of a have a single use of b_node
-                assert len(a_out.uses()) == 1
-                assert a_out.uses()[0][0] is b_node
+                for a_out in a_node.outputs:
+                    # Require that outputs of a have a single use of b_node
+                    assert len(a_out.uses()) == 1
+                    assert a_out.uses()[0][0] is b_node
 
-                a_use_index = a_out.uses()[0][1]
-                input_swap = (a_out.index(), a_use_index)
-                if i == 0:
-                    # add swaps from the first node
-                    input_swaps.append(input_swap)
-                else:
-                    # check that they are the same in the rest
-                    assert input_swap in input_swaps
+                    a_use_index = a_out.uses()[0][1]
+                    input_swap = (a_out.index(), a_use_index)
+                    if i == 0:
+                        # add swaps from the first node
+                        input_swaps.append(input_swap)
+                    else:
+                        # check that they are the same in the rest
+                        assert input_swap in input_swaps
 
         # apply the input swaps to each nodes
         for node in nodes:
