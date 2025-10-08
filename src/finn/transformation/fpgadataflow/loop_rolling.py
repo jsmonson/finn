@@ -297,34 +297,48 @@ def validate_loop_attributes(loop_node: ir.Node):
     assert idt == odt, "FINNLoop inputDataType and outputDataType must be the same"
 
 
-def validate_loop_body_io_tensors(loop_node: ir.Node):
+def tensor_has_finn_datatype(tensor):
+    return "quant_parameter_tensor_names" in tensor.meta and "finn_datatype" in tensor.meta["quant_parameter_tensor_names"]
+
+def finn_datatypes_match(datatype_a, datatype_b):
+    return datatype_a == datatype_b
+
+def tensor_types_match(value_a, value_b):
+    return value_a.type == value_b.type
+
+def tensor_shapes_match(value_a, value_b):
+    return value_a.shape == value_b.shape
+
+def validate_loop_io_tensor_pair(tensor_a, tensor_b):
+    assert tensor_types_match(tensor_a, tensor_b), f"FINNLoop body activation input/output type mismatch {tensor_a.type} != {tensor_b.type}"
+    assert tensor_shapes_match(tensor_a, tensor_b), f"FINNLoop body activation input/output shape mismatch {tensor_a.shape} != {tensor_b.shape}"
+    
+    if tensor_has_finn_datatype(tensor_a) and tensor_has_finn_datatype(tensor_b):
+        assert finn_datatypes_match(tensor_a.meta["quant_parameter_tensor_names"]['finn_datatype'],
+                                     tensor_b.meta["quant_parameter_tensor_names"]['finn_datatype']), \
+            f"FINNLoop body activation input/output quantization parameter tensor names mismatch"
+    elif not tensor_has_finn_datatype(tensor_a) and not tensor_has_finn_datatype(tensor_b):
+        pass  # both do not have finn_datatype, this is acceptable
+    else:
+        raise Exception(f"FINNLoop body activation input/output finn_datatype presence mismatch")
+
+
+def validate_loop_io_tensors(loop_node: ir.Node):
     # Validate that loop body activation input and output types and shapes match
     body_graph = loop_node.attributes["body"].value
     for i in range(len(body_graph.outputs)):
-        inpt = body_graph.inputs[i]
-        outpt = body_graph.outputs[i]
-        assert inpt.type == outpt.type, f"FINNLoop body activation input/output {i} type mismatch {inpt.type} != {outpt.type}"
-        assert (
-            inpt.shape == outpt.shape
-        ), f"FINNLoop body activation input/output {i} shape mismatch {inpt.shape} != {outpt.shape}"
-        if (
-            "quant_parameter_tensor_names" in inpt.meta
-            and "quant_parameter_tensor_names" in outpt.meta
-        ):
-            if (
-                inpt.meta["quant_parameter_tensor_names"]['finn_datatype']
-                != outpt.meta["quant_parameter_tensor_names"]['finn_datatype']
-            ):
-                raise Exception(
-                    f"""FINNLoop body activation input/output {i}
-                    quantization parameter tensor names mismatch"""
-                )
-
+        node_input = loop_node.inputs[i]
+        node_output = loop_node.outputs[i]
+        body_input = body_graph.inputs[i]
+        body_output = body_graph.outputs[i]
+        validate_loop_io_tensor_pair(node_input, body_input)
+        validate_loop_io_tensor_pair(node_output, body_output)
+        validate_loop_io_tensor_pair(body_input, body_output)
 
 def validate_loop_node(loop_node: ir.Node):
     validate_loop_type(loop_node)
     validate_loop_attributes(loop_node)
-    validate_loop_body_io_tensors(loop_node)
+    validate_loop_io_tensors(loop_node)
 
 
 class LoopBodyInputType(Enum):
