@@ -373,6 +373,8 @@ class ReplacementPatternGraph(ReplacementPatternFunction):
             for i, cout in enumerate(coutput):
                 cout._type = node.outputs[i].type
                 cout._shape = node.outputs[i].shape
+                for key in node.outputs[i].meta:
+                    cout.meta[key] = node.outputs[i].meta[key]
                 vvmap[node.outputs[cout.index()]] = cout
 
         new_outputs = [vvmap[x] for x in self._graph.outputs]
