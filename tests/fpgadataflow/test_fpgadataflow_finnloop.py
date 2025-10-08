@@ -9,7 +9,7 @@ from qonnx.transformation.general import RemoveUnusedTensors
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.transformation.merge_onnx_models import MergeONNXModels
-from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model
+from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model, get_by_name
 
 import finn.core.onnx_exec as oxe
 from finn.transformation.fpgadataflow.compile_cppsim import CompileCppSim
@@ -81,9 +81,11 @@ def make_loop_modelwrapper(
     T2 = np.sort(
         generate_random_threshold_values(dtype, 1, dtype.get_num_possible_values() - 1), axis=1
     )
+    
+    T3_dtype = DataType["FLOAT32"] if eltw_param_dtype == "FLOAT32" else dtype
     T3 = np.sort(
         generate_random_threshold_values(
-            DataType["FLOAT32"] if eltw_param_dtype == "FLOAT32" else dtype,
+            T3_dtype,
             1,
             dtype.get_num_possible_values() - 1,
         ),
@@ -303,13 +305,14 @@ def make_loop_modelwrapper(
         f"thresh0{name_suffix}",
         f"thresh1{name_suffix}",
         f"thresh2{name_suffix}",
-        f"thresh3{name_suffix}",
-        f"mul_param{name_suffix}",
         f"ifm{name_suffix}",
         f"ofm_final{name_suffix}",
     ]
     for tensor in tensors:
         loop_body_model.set_tensor_datatype(tensor, dtype)
+
+    loop_body_model.set_tensor_datatype(f"thresh3{name_suffix}", T3_dtype)
+    loop_body_model.set_tensor_datatype(f"mul_param{name_suffix}", DataType[eltw_param_dtype])
 
     return loop_body_model
 
@@ -376,6 +379,7 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     model = model.transform(PrepareCppSim())
     model = model.transform(CompileCppSim())
     model = model.transform(SetExecMode("cppsim"))
+    model.save("fpgadataflow_finnloop.onnx")
     # generate reference io pair
     x = gen_finn_dt_tensor(DataType["INT8"], (1, 3, 3, dim))
     io_dict = {model.graph.input[0].name: x}
@@ -391,7 +395,23 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     ), "Loop extraction did not find expected number of loop bodies"
 
     model = model.transform(LoopRolling(loop_extraction.loop_body_template))
-
+        
+    # the rhs_style for the elementwise node needs to be set to 'input' for the loop
+    # this requires recompilation of the elementwise node for cppsim
+    loop_node = model.get_nodes_by_op_type("FINNLoop")[0]
+    loop_body_graph = get_by_name(loop_node.attribute, "body").g
+    elementwise_node = get_by_name(loop_body_graph.node, elemwise_optype, "op_type")
+    rhs_style_attr = get_by_name(elementwise_node.attribute, "rhs_style")
+    rhs_style_attr.s = b'input'
+    code_gen_dir_cppsim_attr = get_by_name(elementwise_node.attribute, "code_gen_dir_cppsim")
+    code_gen_dir_cppsim_attr.s = b'' # reset cpp gen directory to force recompilation
+    executable_path_attr = get_by_name(elementwise_node.attribute, "executable_path")
+    executable_path_attr.s = b'' # reset cpp exec directory to force recompilation
+    
+    # recompile element wise node for cppsim
+    model = model.transform(PrepareCppSim(), apply_to_subgraphs=True)
+    model = model.transform(CompileCppSim(), apply_to_subgraphs=True)
+    
     y_dict = oxe.execute_onnx(model, io_dict)
     y_prod = y_dict[model.graph.output[0].name]
     assert (y_prod == y_ref).all()
