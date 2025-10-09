@@ -2,7 +2,6 @@ import pytest
 
 import numpy as np
 import onnx
-import os
 from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
@@ -418,13 +417,13 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     executable_path_attr = get_by_name(elementwise_node.attribute, "executable_path")
     executable_path_attr.s = b""  # reset cpp exec directory to force recompilation
 
-    #    # recompile element wise node for cppsim
-    #    model = model.transform(PrepareCppSim(), apply_to_subgraphs=True)
-    #    model = model.transform(CompileCppSim(), apply_to_subgraphs=True)
+    # recompile element wise node for cppsim
+    # model = model.transform(PrepareCppSim(), apply_to_subgraphs=True)
+    # model = model.transform(CompileCppSim(), apply_to_subgraphs=True)
 
-    #    y_dict = oxe.execute_onnx(model, io_dict)
-    #    y_prod = y_dict[model.graph.output[0].name]
-    #    assert (y_prod == y_ref).all()
+    # y_dict = oxe.execute_onnx(model, io_dict)
+    # y_prod = y_dict[model.graph.output[0].name]
+    # assert (y_prod == y_ref).all()
 
     # node-by-node rtlsim
     model = model.transform(GiveUniqueNodeNames(), apply_to_subgraphs=True)
@@ -439,7 +438,7 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     # assert (y_prod == y_ref).all()
 
     # FIFO sizing
-    model = model.transform(InsertAndSetFIFODepths(fpga_part, clk_ns))
+    model = model.transform(InsertAndSetFIFODepths(fpga_part, clk_ns), apply_to_subgraphs=True)
 
     # stitched IP rtlsim
     model = model.transform(
@@ -449,11 +448,7 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     model = model.transform(
         CreateStitchedIP(fpga_part, clk_ns), apply_to_subgraphs=True, use_preorder_traversal=False
     )
-    # model.set_metadata_prop("exec_mode", "rtlsim")
 
-    model.save("test.onnx")
-    np.save("input.npy", x)
-    os.environ["LIVENESS_THRESHOLD"] = "100000000000"
     mlo_prehook = mlo_prehook_func_factory(model)
     rtlsim_exec(model, io_dict, pre_hook=mlo_prehook)
     y_prod = io_dict[model.graph.output[0].name]
