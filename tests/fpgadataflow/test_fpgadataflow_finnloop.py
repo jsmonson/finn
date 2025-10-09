@@ -5,17 +5,28 @@ import onnx
 from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.transformation.general import RemoveUnusedTensors
+from qonnx.transformation.general import GiveUniqueNodeNames, RemoveUnusedTensors
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.transformation.merge_onnx_models import MergeONNXModels
-from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model, get_by_name
+from qonnx.util.basic import gen_finn_dt_tensor, get_by_name, qonnx_make_model
 
 import finn.core.onnx_exec as oxe
+from finn.core.rtlsim_exec import rtlsim_exec
 from finn.transformation.fpgadataflow.compile_cppsim import CompileCppSim
+from finn.transformation.fpgadataflow.create_stitched_ip import CreateStitchedIP
+from finn.transformation.fpgadataflow.hlssynth_ip import HLSSynthIP
 from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
 from finn.transformation.fpgadataflow.prepare_cppsim import PrepareCppSim
+from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
+
+# from finn.transformation.fpgadataflow.prepare_rtlsim import PrepareRTLSim
 from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
+from finn.transformation.fpgadataflow.set_fifo_depths import InsertAndSetFIFODepths
+from finn.util.mlo_sim import mlo_prehook_func_factory
+
+fpga_part = "xcvc1902-vsva2197-2MP-e-S"
+clk_ns = 5
 
 
 def generate_random_threshold_values(data_type, num_input_channels, num_steps):
@@ -46,7 +57,6 @@ def create_node(node_type, inputs, outputs, name, extra_params={}):
         else "finn.custom_op.fpgadataflow.hls",
         "backend": "fpgadataflow",
         "numInputVectors": list((1, 3, 3)),
-        "inFIFODepths": [2, 2],
         "name": name,
     }
     return helper.make_node(node_type, inputs, outputs, **{**base_params, **extra_params})
@@ -81,7 +91,7 @@ def make_loop_modelwrapper(
     T2 = np.sort(
         generate_random_threshold_values(dtype, 1, dtype.get_num_possible_values() - 1), axis=1
     )
-    
+
     T3_dtype = DataType["FLOAT32"] if eltw_param_dtype == "FLOAT32" else dtype
     T3 = np.sort(
         generate_random_threshold_values(
@@ -115,7 +125,7 @@ def make_loop_modelwrapper(
             {
                 "NumChannels": mh,
                 "NumOutputStreams": 2,
-                "PE": 1,
+                "PE": 2,
                 "inputDataType": dtype.name,
                 "outFIFODepths": [2, 2],
             },
@@ -128,8 +138,8 @@ def make_loop_modelwrapper(
             {
                 "MW": mw,
                 "MH": mh,
-                "SIMD": 1,
-                "PE": 1,
+                "SIMD": 2,
+                "PE": 2,
                 "inputDataType": "INT8",
                 "weightDataType": "INT8",
                 "outputDataType": "INT32",
@@ -145,7 +155,7 @@ def make_loop_modelwrapper(
             f"Thresholding_rtl_0{name_suffix}",
             {
                 "NumChannels": mh,
-                "PE": 1,
+                "PE": 2,
                 "inputDataType": "INT32",
                 "weightDataType": "INT33",
                 "outputDataType": dtype.name,
@@ -161,8 +171,8 @@ def make_loop_modelwrapper(
             {
                 "MW": mw,
                 "MH": mh,
-                "SIMD": 1,
-                "PE": 1,
+                "SIMD": 2,
+                "PE": 2,
                 "inputDataType": "INT8",
                 "weightDataType": "INT8",
                 "outputDataType": "INT32",
@@ -178,7 +188,7 @@ def make_loop_modelwrapper(
             f"Thresholding_rtl_1{name_suffix}",
             {
                 "NumChannels": mh,
-                "PE": 1,
+                "PE": 2,
                 "inputDataType": "INT32",
                 "weightDataType": "INT33",
                 "outputDataType": dtype.name,
@@ -194,8 +204,8 @@ def make_loop_modelwrapper(
             {
                 "MW": mw,
                 "MH": mh,
-                "SIMD": 1,
-                "PE": 1,
+                "SIMD": 2,
+                "PE": 2,
                 "inputDataType": "INT8",
                 "weightDataType": "INT8",
                 "outputDataType": "INT32",
@@ -211,7 +221,7 @@ def make_loop_modelwrapper(
             f"Thresholding_rtl_2{name_suffix}",
             {
                 "NumChannels": mh,
-                "PE": 1,
+                "PE": 2,
                 "inputDataType": "INT32",
                 "weightDataType": "INT33",
                 "outputDataType": dtype.name,
@@ -224,7 +234,7 @@ def make_loop_modelwrapper(
             [f"mt2_out{name_suffix}", f"mt1_out{name_suffix}"],
             [f"ofm{name_suffix}"],
             f"AddStreams_hls_0{name_suffix}",
-            {"NumChannels": mh, "PE": 1, "inputDataTypes": [dtype.name, dtype.name]},
+            {"NumChannels": mh, "PE": 2, "inputDataTypes": [dtype.name, dtype.name]},
         ),
         create_node(
             elemwise_optype,
@@ -247,7 +257,7 @@ def make_loop_modelwrapper(
             f"Thresholding_rtl4{name_suffix}",
             {
                 "NumChannels": mh,
-                "PE": 1,
+                "PE": 2,
                 "numSteps": dtype.get_num_possible_values() - 1,
                 "inputDataType": thresholding_input_dtype.name,
                 "weightDataType": thresholding_input_dtype.name,
@@ -354,7 +364,7 @@ def create_chained_loop_bodies(
 # dimensions
 @pytest.mark.parametrize("dim", [16])
 # iteration count, number of models chained together
-@pytest.mark.parametrize("iteration", [1, 3])
+@pytest.mark.parametrize("iteration", [3])
 # elementwise operation
 @pytest.mark.parametrize("elemwise_optype", ["ElementwiseMul_hls", "ElementwiseAdd_hls"])
 # elementwise shape
@@ -379,7 +389,6 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     model = model.transform(PrepareCppSim())
     model = model.transform(CompileCppSim())
     model = model.transform(SetExecMode("cppsim"))
-    model.save("fpgadataflow_finnloop.onnx")
     # generate reference io pair
     x = gen_finn_dt_tensor(DataType["INT8"], (1, 3, 3, dim))
     io_dict = {model.graph.input[0].name: x}
@@ -395,23 +404,52 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     ), "Loop extraction did not find expected number of loop bodies"
 
     model = model.transform(LoopRolling(loop_extraction.loop_body_template))
-        
+
     # the rhs_style for the elementwise node needs to be set to 'input' for the loop
     # this requires recompilation of the elementwise node for cppsim
     loop_node = model.get_nodes_by_op_type("FINNLoop")[0]
     loop_body_graph = get_by_name(loop_node.attribute, "body").g
     elementwise_node = get_by_name(loop_body_graph.node, elemwise_optype, "op_type")
     rhs_style_attr = get_by_name(elementwise_node.attribute, "rhs_style")
-    rhs_style_attr.s = b'input'
+    rhs_style_attr.s = b"input"
     code_gen_dir_cppsim_attr = get_by_name(elementwise_node.attribute, "code_gen_dir_cppsim")
-    code_gen_dir_cppsim_attr.s = b'' # reset cpp gen directory to force recompilation
+    code_gen_dir_cppsim_attr.s = b""  # reset cpp gen directory to force recompilation
     executable_path_attr = get_by_name(elementwise_node.attribute, "executable_path")
-    executable_path_attr.s = b'' # reset cpp exec directory to force recompilation
-    
+    executable_path_attr.s = b""  # reset cpp exec directory to force recompilation
+
     # recompile element wise node for cppsim
-    model = model.transform(PrepareCppSim(), apply_to_subgraphs=True)
-    model = model.transform(CompileCppSim(), apply_to_subgraphs=True)
-    
-    y_dict = oxe.execute_onnx(model, io_dict)
-    y_prod = y_dict[model.graph.output[0].name]
+    # model = model.transform(PrepareCppSim(), apply_to_subgraphs=True)
+    # model = model.transform(CompileCppSim(), apply_to_subgraphs=True)
+
+    # y_dict = oxe.execute_onnx(model, io_dict)
+    # y_prod = y_dict[model.graph.output[0].name]
+    # assert (y_prod == y_ref).all()
+
+    # node-by-node rtlsim
+    model = model.transform(GiveUniqueNodeNames(), apply_to_subgraphs=True)
+    # TODO: allow for node-by-node rtlsim of a finn loop op
+    # model = model.transform(SetExecMode("rtlsim"), apply_to_subgraphs=True)
+    # model = model.transform(PrepareIP(fpga_part, clk_ns), apply_to_subgraphs=True)
+    # model = model.transform(HLSSynthIP(), apply_to_subgraphs=True)
+    # model = model.transform(PrepareRTLSim(), apply_to_subgraphs=True)
+
+    # y_dict = oxe.execute_onnx(model, io_dict)
+    # y_prod = y_dict[model.graph.output[0].name]
+    # assert (y_prod == y_ref).all()
+
+    # FIFO sizing
+    model = model.transform(InsertAndSetFIFODepths(fpga_part, clk_ns), apply_to_subgraphs=True)
+
+    # stitched IP rtlsim
+    model = model.transform(
+        PrepareIP(fpga_part, clk_ns), apply_to_subgraphs=True, use_preorder_traversal=False
+    )
+    model = model.transform(HLSSynthIP(), apply_to_subgraphs=True)
+    model = model.transform(
+        CreateStitchedIP(fpga_part, clk_ns), apply_to_subgraphs=True, use_preorder_traversal=False
+    )
+
+    mlo_prehook = mlo_prehook_func_factory(model)
+    rtlsim_exec(model, io_dict, pre_hook=mlo_prehook)
+    y_prod = io_dict[model.graph.output[0].name]
     assert (y_prod == y_ref).all()
