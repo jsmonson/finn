@@ -156,7 +156,7 @@ def build_loop_replace_pattern(graph, LoopBody):
             LoopBody.function.sort()
 
         elif LoopInputType == LoopBodyInputType.ACTIVATION:
-            cinp = osh.vdisconnect(copy.copy(LoopBody.function.inputs[i]))
+            cinp = osh.vdisconnect(copy.copy(nodes[0].inputs[i]))
             graph_inputs.append(cinp)
             loop_inputs.append(cinp)
 
@@ -297,35 +297,48 @@ def validate_loop_attributes(loop_node: ir.Node):
     assert idt == odt, "FINNLoop inputDataType and outputDataType must be the same"
 
 
-def validate_loop_body_io_tensors(loop_node: ir.Node):
+def tensor_has_finn_datatype(tensor):
+    return "quant_parameter_tensor_names" in tensor.meta and "finn_datatype" in tensor.meta["quant_parameter_tensor_names"]
+
+def finn_datatypes_match(datatype_a, datatype_b):
+    return datatype_a == datatype_b
+
+def tensor_types_match(value_a, value_b):
+    return value_a.type == value_b.type
+
+def tensor_shapes_match(value_a, value_b):
+    return value_a.shape == value_b.shape
+
+def validate_loop_io_tensor_pair(tensor_a, tensor_b):
+    assert tensor_types_match(tensor_a, tensor_b), f"FINNLoop body activation input/output type mismatch {tensor_a.type} != {tensor_b.type}"
+    assert tensor_shapes_match(tensor_a, tensor_b), f"FINNLoop body activation input/output shape mismatch {tensor_a.shape} != {tensor_b.shape}"
+    
+    if tensor_has_finn_datatype(tensor_a) and tensor_has_finn_datatype(tensor_b):
+        assert finn_datatypes_match(tensor_a.meta["quant_parameter_tensor_names"]['finn_datatype'],
+                                     tensor_b.meta["quant_parameter_tensor_names"]['finn_datatype']), \
+            f"FINNLoop body activation input/output quantization parameter tensor names mismatch"
+    elif not tensor_has_finn_datatype(tensor_a) and not tensor_has_finn_datatype(tensor_b):
+        pass  # both do not have finn_datatype, this is acceptable
+    else:
+        raise Exception(f"FINNLoop body activation input/output finn_datatype presence mismatch")
+
+
+def validate_loop_io_tensors(loop_node: ir.Node):
     # Validate that loop body activation input and output types and shapes match
     body_graph = loop_node.attributes["body"].value
-
     for i in range(len(body_graph.outputs)):
-        inpt = body_graph.inputs[i]
-        outpt = body_graph.outputs[i]
-        assert inpt.type == outpt.type, f"FINNLoop body activation input/output {i} type mismatch"
-        assert (
-            inpt.shape == outpt.shape
-        ), f"FINNLoop body activation input/output {i} shape mismatch"
-        if (
-            "quant_parameter_tensor_names" in inpt.meta
-            and "quant_parameter_tensor_names" in outpt.meta
-        ):
-            if (
-                inpt.meta["quant_parameter_tensor_names"]
-                != outpt.meta["quant_parameter_tensor_names"]
-            ):
-                raise Exception(
-                    f"""FINNLoop body activation input/output {i}
-                    quantization parameter tensor names mismatch"""
-                )
-
+        node_input = loop_node.inputs[i]
+        node_output = loop_node.outputs[i]
+        body_input = body_graph.inputs[i]
+        body_output = body_graph.outputs[i]
+        validate_loop_io_tensor_pair(node_input, body_input)
+        validate_loop_io_tensor_pair(node_output, body_output)
+        validate_loop_io_tensor_pair(body_input, body_output)
 
 def validate_loop_node(loop_node: ir.Node):
     validate_loop_type(loop_node)
     validate_loop_attributes(loop_node)
-    validate_loop_body_io_tensors(loop_node)
+    validate_loop_io_tensors(loop_node)
 
 
 class LoopBodyInputType(Enum):
@@ -425,28 +438,37 @@ class LoopRolling(Transformation):
         # get the consecutive node layers
         # TODO: write a check to ensure that there is only one
         #       set of consecutive nodes.
-        nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)
-
+        nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)  
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
+
+        # my loop rolling code assumes that the activation inputs are listed first and
+        # that corresponding output activations have the same index as the input
         input_swaps = []
-        for i in range(len(nodes) - 1):
-            a_node = nodes[i]
-            b_node = nodes[i + 1]
+        if len(nodes) == 1:
+            # find and label the activation inputs
+            for i, input in enumerate(nodes[0].inputs):
+                if not input.is_initializer():
+                    if input.is_graph_input() or input.producer().op_type != "Constant":
+                        input_swaps.append((len(input_swaps), i))
+        else:
+            for i in range(len(nodes) - 1):
+                a_node = nodes[i]
+                b_node = nodes[i + 1]
 
-            for a_out in a_node.outputs:
-                # Require that outputs of a have a single use of b_node
-                assert len(a_out.uses()) == 1
-                assert a_out.uses()[0][0] is b_node
+                for a_out in a_node.outputs:
+                    # Require that outputs of a have a single use of b_node
+                    assert len(a_out.uses()) == 1
+                    assert a_out.uses()[0][0] is b_node
 
-                a_use_index = a_out.uses()[0][1]
-                input_swap = (a_out.index(), a_use_index)
-                if i == 0:
-                    # add swaps from the first node
-                    input_swaps.append(input_swap)
-                else:
-                    # check that they are the same in the rest
-                    assert input_swap in input_swaps
+                    a_use_index = a_out.uses()[0][1]
+                    input_swap = (a_out.index(), a_use_index)
+                    if i == 0:
+                        # add swaps from the first node
+                        input_swaps.append(input_swap)
+                    else:
+                        # check that they are the same in the rest
+                        assert input_swap in input_swaps
 
         # apply the input swaps to each nodes
         for node in nodes:
