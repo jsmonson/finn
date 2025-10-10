@@ -277,6 +277,13 @@ class LoopExtraction(Transformation):
         return (model, False)
 
 
+def add_finn_datatype_if_needed(tensor):
+    if not tensor_has_finn_datatype(tensor):
+        if "quant_parameter_tensor_names" not in tensor.meta:
+            tensor.meta["quant_parameter_tensor_names"] = {}
+        tensor.meta["quant_parameter_tensor_names"]["finn_datatype"] = osh.tensor_type_to_finn_datatype_string(tensor.type)
+
+
 def validate_loop_type(loop_node: ir.Node):
     assert loop_node.op_type == "FINNLoop", "Node is not a FINNLoop"
 
@@ -312,28 +319,21 @@ def tensor_shapes_match(value_a, value_b):
 def validate_loop_io_tensor_pair(tensor_a, tensor_b):
     assert tensor_types_match(tensor_a, tensor_b), f"FINNLoop body activation input/output type mismatch {tensor_a.type} != {tensor_b.type}"
     assert tensor_shapes_match(tensor_a, tensor_b), f"FINNLoop body activation input/output shape mismatch {tensor_a.shape} != {tensor_b.shape}"
-    
-    if tensor_has_finn_datatype(tensor_a) and tensor_has_finn_datatype(tensor_b):
-        assert finn_datatypes_match(tensor_a.meta["quant_parameter_tensor_names"]['finn_datatype'],
-                                     tensor_b.meta["quant_parameter_tensor_names"]['finn_datatype']), \
-            f"FINNLoop body activation input/output quantization parameter tensor names mismatch"
-    elif not tensor_has_finn_datatype(tensor_a) and not tensor_has_finn_datatype(tensor_b):
-        pass  # both do not have finn_datatype, this is acceptable
-    else:
-        raise Exception(f"FINNLoop body activation input/output finn_datatype presence mismatch")
+
+    add_finn_datatype_if_needed(tensor_a)
+    add_finn_datatype_if_needed(tensor_b)
+
+    assert finn_datatypes_match(tensor_a.meta["quant_parameter_tensor_names"]['finn_datatype'],
+                                tensor_b.meta["quant_parameter_tensor_names"]['finn_datatype']), f"FINNLoop body activation input/output finn_datatype mismatch {tensor_a.meta['quant_parameter_tensor_names']['finn_datatype']} != {tensor_b.meta['quant_parameter_tensor_names']['finn_datatype']}"
 
 
 def validate_loop_io_tensors(loop_node: ir.Node):
     # Validate that loop body activation input and output types and shapes match
     body_graph = loop_node.attributes["body"].value
     for i in range(len(body_graph.outputs)):
-        node_input = loop_node.inputs[i]
-        node_output = loop_node.outputs[i]
-        body_input = body_graph.inputs[i]
-        body_output = body_graph.outputs[i]
-        validate_loop_io_tensor_pair(node_input, body_input)
-        validate_loop_io_tensor_pair(node_output, body_output)
-        validate_loop_io_tensor_pair(body_input, body_output)
+        validate_loop_io_tensor_pair(loop_node.inputs[i], body_graph.inputs[i])
+        validate_loop_io_tensor_pair(loop_node.outputs[i], body_graph.outputs[i])
+        validate_loop_io_tensor_pair(body_graph.inputs[i], body_graph.outputs[i])
 
 def validate_loop_node(loop_node: ir.Node):
     validate_loop_type(loop_node)
@@ -389,7 +389,7 @@ class LoopBodyTemplate:
         if use_iteration_ext:
             nodes.insert(0, graph.node("iteration_ext"))
             nodes.insert(0, graph.node("condition_ext"))
-            
+
         ir_model = ir.Model(osh.SubGraphView(graph, "inlined_pipe_pattern", nodes), ir_version=self._model_proto.ir_version)
 
         pattern = osh.direct_convert_ir_graph_to_pattern(ir_model.graph)
@@ -438,7 +438,7 @@ class LoopRolling(Transformation):
         # get the consecutive node layers
         # TODO: write a check to ensure that there is only one
         #       set of consecutive nodes.
-        nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)  
+        nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
 
