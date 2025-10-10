@@ -18,7 +18,7 @@ from onnxscript.rewriter.pattern import (
 )
 from qonnx.util.basic import is_finn_op
 from typing import List, Optional
-
+from onnx_ir import _enums
 
 class SubGraphView(ir.GraphView):
     """Create a read-only view of a subgraph defined by a set of nodes.
@@ -411,3 +411,28 @@ def build_concat_node_from_inputs(inputs):
 def build_reshape_node(inp, reshape_shape):
     reshape_out = ir.Value(name=f"{inp.name}_reshape", type=inp.type)
     return ir.Node("", "Reshape", inputs=[inp, reshape_shape], outputs=[reshape_out])
+
+
+def tensor_type_to_finn_datatype_string(tensor_type):
+    if tensor_type == ir.TensorType(_enums.DataType.FLOAT):
+        return "FLOAT32"
+    elif tensor_type == ir.TensorType(_enums.DataType.INT8):
+        return "INT8"
+    elif tensor_type == ir.TensorType(_enums.DataType.INT16):
+        return "INT16"
+    elif tensor_type == ir.TensorType(_enums.DataType.INT32):
+        return "INT32"
+    elif tensor_type == ir.TensorType(_enums.DataType.INT64):
+        return "INT64"
+    elif tensor_type == ir.TensorType(_enums.DataType.UINT8):
+        return "UINT8"
+    elif tensor_type == ir.TensorType(_enums.DataType.UINT16):
+        return "UINT16"
+    elif tensor_type == ir.TensorType(_enums.DataType.UINT32):
+        return "UINT32"
+    elif tensor_type == ir.TensorType(_enums.DataType.UINT64):
+        return "UINT64"
+    elif tensor_type == ir.TensorType(_enums.DataType.BOOL):
+        return "BOOL"
+    else:
+        raise ValueError(f"Unsupported tensor type: {tensor_type}")
