@@ -569,6 +569,8 @@ class SimEngine:
                             self.map[addr] = (self.wd_queue.pop(0), size)
                             addr += size
                             length -= 1
+                            if length == 0:
+                                self.wr_completion_queue.append((0, 1))
                         else:
                             self.wa_queue.insert(0, (addr, length, size))
                             break
@@ -610,7 +612,6 @@ class SimEngine:
                     length = 1 + self.awlen.read().as_unsigned()
                     size = 2 ** self.awsize.read().as_unsigned()
                     self.wa_queue.append((addr, length, size))
-                    self.wr_completion_queue.insert(0, 1)
 
                 # Queue received Write Data
                 if self.wvalid.read().as_bool():
