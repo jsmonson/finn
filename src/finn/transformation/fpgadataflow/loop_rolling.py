@@ -204,10 +204,10 @@ class LoopExtraction(Transformation):
     def __init__(self, hierarchy_list: List[str]):
         super().__init__()
 
-        assert isinstance(hierarchy_list, list), "Hierarchy list must be a list of strings"
-        assert all(
-            isinstance(item, str) for item in hierarchy_list
-        ), "All items in hierarchy list must be strings"
+        #assert isinstance(hierarchy_list, list), "Hierarchy list must be a list of strings"
+        #assert all(
+        #    isinstance(item, str) for item in hierarchy_list
+        #), "All items in hierarchy list must be strings"
         self.hierarchy_list = hierarchy_list
         self.loop_body_template = None
 
@@ -248,7 +248,11 @@ class LoopExtraction(Transformation):
 
             assert P.add_node(node)
         graph.sort()
-        nodes = P.get_nodes(self.hierarchy_list)
+        for i, hierarchy in enumerate(self.hierarchy_list):
+            if i == 0:
+                nodes = P.get_nodes(hierarchy)
+            else:
+                nodes += P.get_nodes(hierarchy)
 
         loop_body_graph_view = osh.SubGraphView(graph, "loop-body", nodes)
         loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=model.model.ir_version)
