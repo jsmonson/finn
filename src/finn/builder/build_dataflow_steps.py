@@ -456,7 +456,13 @@ def step_apply_folding_config(model: ModelWrapper, cfg: DataflowBuildConfig):
     and other attributes, if config file is specified."""
 
     if cfg.folding_config_file is not None:
-        model = model.transform(GiveUniqueNodeNames(), apply_to_subgraphs=True)
+        model = model.transform(GiveUniqueNodeNames())
+        loop_nodes = model.get_nodes_by_op_type("FINNLoop")
+        for loop_node in loop_nodes:
+           loop_inst = getCustomOp(loop_node)
+           loop_body = loop_inst.get_nodeattr("body")
+           loop_body = loop_body.transform(GiveUniqueNodeNames(prefix=loop_node.name + "_"))
+           loop_inst.set_nodeattr("body", loop_body.graph)
         model = model.transform(ApplyConfig(cfg.folding_config_file), apply_to_subgraphs=True)
 
     if VerificationStepType.FOLDED_HLS_CPPSIM in cfg._resolve_verification_steps():
@@ -589,7 +595,13 @@ def step_set_fifo_depths(model: ModelWrapper, cfg: DataflowBuildConfig):
             model = model.transform(GiveUniqueNodeNames())
             model = model.transform(GiveReadableTensorNames())
         elif cfg.auto_fifo_strategy == "largefifo_rtlsim":
-            model = model.transform(GiveUniqueNodeNames(), apply_to_subgraphs=True)
+            model = model.transform(GiveUniqueNodeNames())
+            loop_nodes = model.get_nodes_by_op_type("FINNLoop")
+            for loop_node in loop_nodes:
+                loop_inst = getCustomOp(loop_node)
+                loop_body = loop_inst.get_nodeattr("body")
+                loop_body = loop_body.transform(GiveUniqueNodeNames(prefix=loop_node.name + "_"))
+                loop_inst.set_nodeattr("body", loop_body.graph)
             model = model.transform(GiveReadableTensorNames(), apply_to_subgraphs=True)
             if cfg.fifosim_save_waveform:
                 report_dir = cfg.output_dir + "/report"
@@ -621,13 +633,19 @@ def step_set_fifo_depths(model: ModelWrapper, cfg: DataflowBuildConfig):
         # set by ApplyConfig, so create_shallow_fifos=True
         model = model.transform(InsertFIFO(create_shallow_fifos=True), apply_to_subgraphs=True)
         model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()), apply_to_subgraphs=True)
-        model = model.transform(GiveUniqueNodeNames(), apply_to_subgraphs=True)
+        model = model.transform(GiveUniqueNodeNames())
+        loop_nodes = model.get_nodes_by_op_type("FINNLoop")
+        for loop_node in loop_nodes:
+           loop_inst = getCustomOp(loop_node)
+           loop_body = loop_inst.get_nodeattr("body")
+           loop_body = loop_body.transform(GiveUniqueNodeNames(prefix=loop_node.name + "_"))
+           loop_inst.set_nodeattr("body", loop_body.graph)
         model = model.transform(
             GiveReadableTensorNames(),
             apply_to_subgraphs=True,
         )
         if cfg.folding_config_file is not None:
-            model = model.transform(ApplyConfig(cfg.folding_config_file))
+            model = model.transform(ApplyConfig(cfg.folding_config_file), apply_to_subgraphs=True)
 
     # extract the final configuration and save it as json
     hw_attrs = [
