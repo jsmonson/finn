@@ -201,13 +201,15 @@ def build_loop_replace_pattern(graph, LoopBody):
 
 
 class LoopExtraction(Transformation):
-    def __init__(self, hierarchy_list: List[str]):
+    def __init__(self, hierarchy_list: List[List[str]]):
         super().__init__()
 
-        #assert isinstance(hierarchy_list, list), "Hierarchy list must be a list of strings"
-        #assert all(
-        #    isinstance(item, str) for item in hierarchy_list
-        #), "All items in hierarchy list must be strings"
+        assert isinstance(hierarchy_list, list), "Hierarchy list must be a list of strings"
+        for hlist in hierarchy_list:
+            assert isinstance(hlist, list), "Each hierarchy entry must be a list of strings"
+            assert all(
+                isinstance(item, str) for item in hlist
+            ), "All items in hierarchy sub-list must be strings"
         self.hierarchy_list = hierarchy_list
         self.loop_body_template = None
 
