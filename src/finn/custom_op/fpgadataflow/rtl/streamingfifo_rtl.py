@@ -104,8 +104,8 @@ class StreamingFIFO_rtl(StreamingFIFO, RTLBackend):
         else:
             count_width = int(self.get_nodeattr("depth")).bit_length()
             code_gen_dict["$FIFO_CORE$"] = "q_srl"
+            depth = int(self.get_nodeattr("depth"))
             if self.get_nodeattr("impl_style") == "rtl":
-                depth = int(self.get_nodeattr("depth"))
                 assert (
                     depth * in_width <= 1000000
                 ), "Size of variable 'srl' will be too large to handle."
