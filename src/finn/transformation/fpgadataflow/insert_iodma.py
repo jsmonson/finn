@@ -30,7 +30,7 @@ import math
 import numpy as np
 from onnx import TensorProto
 from onnx import helper as oh
-from qonnx.custom_op.registry import getCustomOp
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.general import SortGraph
 from qonnx.util.basic import get_by_name
@@ -112,7 +112,7 @@ class InsertIODMA(Transformation):
                 else:
                     in_shape = model.get_tensor_shape(graph_in_name)
                     in_dtype = model.get_tensor_datatype(graph_in_name)
-                    first_node_inst = getCustomOp(first_node)
+                    first_node_inst = getHWCustomOp(first_node, model)
                     in_folded_shape = first_node_inst.get_folded_input_shape()
                     # take advantage of AXI stream width padding for DMA alignment
                     # (AXI streams are always padded to 8 bits)
@@ -158,7 +158,7 @@ class InsertIODMA(Transformation):
                 else:
                     out_shape = model.get_tensor_shape(graph_out_name)
                     out_dtype = model.get_tensor_datatype(graph_out_name)
-                    final_node_inst = getCustomOp(final_node)
+                    final_node_inst = getHWCustomOp(final_node, model)
                     out_folded_shape = final_node_inst.get_folded_output_shape()
                     # take advantage of AXI stream width padding for DMA alignment
                     # (AXI streams are always padded to 8 bits)
@@ -200,13 +200,13 @@ class InsertIODMA(Transformation):
             fc_extw_nodes = list(
                 filter(
                     lambda x: x.op_type in ["MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl"]
-                    and getCustomOp(x).get_nodeattr("mem_mode") == "external"
+                    and getHWCustomOp(x, model).get_nodeattr("mem_mode") == "external"
                     and model.find_producer(x.input[1]) is None,
                     all_nodes,
                 )
             )
             for fc_node in fc_extw_nodes:
-                fc_inst = getCustomOp(fc_node)
+                fc_inst = getHWCustomOp(fc_node, model)
                 fc_w_name = fc_node.input[1]
                 w_shape = model.get_tensor_shape(fc_w_name)
                 w_dtype = model.get_tensor_datatype(fc_w_name)

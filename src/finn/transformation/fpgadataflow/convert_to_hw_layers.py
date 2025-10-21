@@ -35,7 +35,7 @@ from qonnx.core.datatype import DataType
 
 # QONNX wrapper to ONNX model graphs
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.general import SortGraph
 from qonnx.transformation.infer_datatypes import InferDataTypes
@@ -68,7 +68,7 @@ class InferConvInpGen(Transformation):
                 if not dt.is_integer():
                     warnings.warn("%s : Input is not int. Can't infer ConvInpGen." % n.name)
                     continue
-                i2c_inst = getCustomOp(n)
+                i2c_inst = getHWCustomOp(n, model)
                 stride_h, stride_w = i2c_inst.get_nodeattr("stride")
                 k_h, k_w = i2c_inst.get_nodeattr("kernel_size")
                 pad_attr = i2c_inst.get_nodeattr("pad_amount")
@@ -199,11 +199,11 @@ class InferThresholdingLayer(Transformation):
                 pe = 1
 
                 odt = model.get_tensor_datatype(thl_output)
-                scale = getCustomOp(node).get_nodeattr("out_scale")
+                scale = getHWCustomOp(node, model).get_nodeattr("out_scale")
                 assert scale == 1.0, (
                     node.name + ": MultiThreshold out_scale must be 1 for HLS conversion."
                 )
-                actval = getCustomOp(node).get_nodeattr("out_bias")
+                actval = getHWCustomOp(node, model).get_nodeattr("out_bias")
                 assert int(actval) == actval, (
                     node.name + ": MultiThreshold out_bias must be integer for HLS conversion."
                 )
@@ -864,14 +864,14 @@ class InferPool(Transformation):
                     sh, sw = list(get_by_name(node.attribute, "strides").ints)
                     dlayout = "NCHW"
                 elif node.op_type == "QuantAvgPool2d":
-                    inst = getCustomOp(node)
+                    inst = getHWCustomOp(node, model)
                     # QuantAvgPool2d has a single scalar attribute
                     # for kernel size and stride (implicit square)
                     kh = kw = inst.get_nodeattr("kernel")
                     sh = sw = inst.get_nodeattr("stride")
                     dlayout = inst.get_nodeattr("data_layout")
                 elif node.op_type == "MaxPoolNHWC":
-                    inst = getCustomOp(node)
+                    inst = getHWCustomOp(node, model)
                     kh, kw = inst.get_nodeattr("kernel_shape")
                     sh, sw = inst.get_nodeattr("strides")
                     dlayout = "NHWC"
@@ -950,7 +950,7 @@ class InferPool(Transformation):
                     assert odt.is_integer(), """Output data type for QuantAvgPool2d
                     needs to be integer"""
                     assert all(x == 0 for x in pad), "Padding is not supported for QuantAvgPool2d"
-                    inst = getCustomOp(node)
+                    inst = getHWCustomOp(node, model)
                     pool_fxn = "QuantAvgPool"
                     pool_size_param = inst.get_shifts()
                     accum_bits = inst.get_accum_size()
@@ -1499,8 +1499,8 @@ class InferQuantizedMatrixVectorActivation(Transformation):
                         thresholds neither 1 nor MH."""
                         )
                         odt = model.get_tensor_datatype(mt_output)
-                        scale = getCustomOp(consumer).get_nodeattr("out_scale")
-                        actval = getCustomOp(consumer).get_nodeattr("out_bias")
+                        scale = getHWCustomOp(consumer, model).get_nodeattr("out_scale")
+                        actval = getHWCustomOp(consumer, model).get_nodeattr("out_bias")
                         assert int(actval) == actval, (
                             consumer.name + ": out_bias must be integer for HLS conversion."
                         )
@@ -1656,11 +1656,11 @@ class InferVectorVectorActivation(Transformation):
                         thresholds neither 1 nor Channels."""
                         )
                         odt = model.get_tensor_datatype(mt_output)
-                        scale = getCustomOp(consumer).get_nodeattr("out_scale")
+                        scale = getHWCustomOp(consumer, model).get_nodeattr("out_scale")
                         assert scale == 1.0, (
                             consumer.name + ": out_scale must be equal to 1.0 for HLS conversion."
                         )
-                        actval = getCustomOp(consumer).get_nodeattr("out_bias")
+                        actval = getHWCustomOp(consumer, model).get_nodeattr("out_bias")
                         assert int(actval) == actval, (
                             consumer.name + ": out_bias must be integer for HLS conversion."
                         )

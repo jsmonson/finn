@@ -29,7 +29,7 @@
 
 import qonnx.custom_op.registry as registry
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 
 from finn.util.fpgadataflow import is_hls_node, is_rtl_node
@@ -48,12 +48,12 @@ class AnnotateCycles(Transformation):
         # annotate node cycles
         for node in graph.node:
             if is_hls_node(node) or is_rtl_node(node):
-                op_inst = registry.getCustomOp(node)
+                op_inst = registry.getHWCustomOp(node, model)
                 cycles = op_inst.get_exp_cycles()
                 op_inst.set_nodeattr("cycles_estimate", cycles)
             elif node.op_type == "StreamingDataflowPartition":
                 # recurse into model to manually annotate per-layer cycles
-                sdp_model_filename = getCustomOp(node).get_nodeattr("model")
+                sdp_model_filename = getHWCustomOp(node, model).get_nodeattr("model")
                 sdp_model = ModelWrapper(sdp_model_filename)
                 sdp_model = sdp_model.transform(AnnotateCycles())
                 # save transformed model

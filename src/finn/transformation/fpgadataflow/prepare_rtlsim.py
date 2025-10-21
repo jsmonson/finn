@@ -62,7 +62,7 @@ class PrepareRTLSim(NodeLocalTransformation):
         if is_hls_node(node) or is_rtl_node(node):
             try:
                 # lookup op_type in registry of CustomOps
-                inst = registry.getCustomOp(node)
+                inst = registry.getHWCustomOp(node, model)
                 inst.prepare_rtlsim()
                 # ensure that executable path is now set
                 assert (

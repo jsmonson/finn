@@ -43,7 +43,7 @@ def verify_nodes(model):
     for node in model.graph.node:
         if is_finn_op(node.domain):
             op_type = node.op_type
-            inst = registry.getCustomOp(node)
+            inst = registry.getHWCustomOp(node, model)
             verification_dict[op_type] = inst.verify_node()
 
     return verification_dict

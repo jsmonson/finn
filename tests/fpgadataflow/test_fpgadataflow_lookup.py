@@ -34,12 +34,13 @@ import torch
 from brevitas.export import export_qonnx
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import gen_finn_dt_tensor
 from qonnx.util.cleanup import cleanup as qonnx_cleanup
+
+from finn.util.basic import getHWCustomOp
 from torch import nn
 
 from finn.core.onnx_exec import execute_onnx
@@ -179,7 +180,7 @@ def test_fpgadataflow_lookup_external():
     assert model.graph.node[0].input[0] == iname
     assert model.graph.node[0].input[1] == ename
     assert model.graph.node[0].output[0] == oname
-    getCustomOp(model.graph.node[0]).set_nodeattr("mem_mode", "external")
+    getHWCustomOp(model.graph.node[0], model).set_nodeattr("mem_mode", "external")
     model = model.transform(GiveUniqueNodeNames())
     model = model.transform(PrepareIP(fpga_part, 10))
     model = model.transform(HLSSynthIP())

@@ -27,7 +27,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from onnx import helper as oh
-from qonnx.custom_op.registry import getCustomOp
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 
 from finn.util.fpgadataflow import is_fpgadataflow_node
@@ -76,8 +76,8 @@ class InsertDWC(Transformation):
                     )
                     consumer = consumers[0]
                     if _suitable_node(consumer) is True:
-                        n0 = getCustomOp(n)
-                        n1 = getCustomOp(consumer)
+                        n0 = getHWCustomOp(n, model)
+                        n1 = getHWCustomOp(consumer, model)
                         n0_out_shape = n0.get_folded_output_shape(out_idx)
                         # get input idx
                         in_idx = None

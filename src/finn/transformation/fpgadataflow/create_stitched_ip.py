@@ -32,7 +32,7 @@ import multiprocessing as mp
 import os
 import subprocess
 import warnings
-from qonnx.custom_op.registry import getCustomOp
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.util.basic import get_num_default_workers
 from shutil import copytree
@@ -48,7 +48,7 @@ def is_external_input(model, node, i):
     # indicate whether input i of node should be made external
     # True only if input is unconnected and has no initializer
     # Only esception is second input of FC layers when mem_mode is external
-    node_inst = getCustomOp(node)
+    node_inst = getHWCustomOp(node, model)
     op_type = node.op_type
     producer = model.find_producer(node.input[i])
     if producer is None:
@@ -114,7 +114,7 @@ class CreateStitchedIP(Transformation):
 
     def is_double_pumped(self, node):
         if node.op_type.startswith("MVAU"):
-            inst = getCustomOp(node)
+            inst = getHWCustomOp(node, model)
             try:
                 pumped_compute = inst.get_nodeattr("pumpedCompute")
             except AttributeError:
@@ -123,7 +123,7 @@ class CreateStitchedIP(Transformation):
 
     def connect_clk_rst(self, node):
         inst_name = node.name
-        node_inst = getCustomOp(node)
+        node_inst = getHWCustomOp(node, model)
         clock_intf_name = node_inst.get_verilog_top_module_intf_names()["clk"][0]
         reset_intf_name = node_inst.get_verilog_top_module_intf_names()["rst"][0]
         # make clock and reset external, if they aren't already
@@ -169,7 +169,7 @@ class CreateStitchedIP(Transformation):
 
     def connect_axi(self, node):
         inst_name = node.name
-        node_inst = getCustomOp(node)
+        node_inst = getHWCustomOp(node, model)
         axilite_intf_name = node_inst.get_verilog_top_module_intf_names()["axilite"]
         aximm_intf_name = node_inst.get_verilog_top_module_intf_names()["aximm"]
         if len(axilite_intf_name) != 0:
@@ -201,7 +201,7 @@ class CreateStitchedIP(Transformation):
 
     def connect_m_axis_external(self, node, idx=None):
         inst_name = node.name
-        node_inst = getCustomOp(node)
+        node_inst = getHWCustomOp(node, model)
         output_intf_names = node_inst.get_verilog_top_module_intf_names()["m_axis"]
         # make output axis external
         for i in range(len(output_intf_names)):
@@ -224,7 +224,7 @@ class CreateStitchedIP(Transformation):
 
     def connect_s_axis_external(self, node, idx=None):
         inst_name = node.name
-        node_inst = getCustomOp(node)
+        node_inst = getHWCustomOp(node, model)
         input_intf_names = node_inst.get_verilog_top_module_intf_names()["s_axis"]
         # make input axis external
         for i in range(len(input_intf_names)):
@@ -253,7 +253,7 @@ class CreateStitchedIP(Transformation):
 
     def connect_ap_none_external(self, node):
         inst_name = node.name
-        node_inst = getCustomOp(node)
+        node_inst = getHWCustomOp(node, model)
         input_intf_names = node_inst.get_verilog_top_module_intf_names()["ap_none"]
         # make external
         for i in range(len(input_intf_names)):
@@ -328,7 +328,7 @@ class CreateStitchedIP(Transformation):
                 calling CreateStitchedIP."""
             )
         if model.graph.node[0].op_type == "StreamingFIFO_rtl":
-            firstfifo = getCustomOp(model.graph.node[0])
+            firstfifo = getHWCustomOp(model.graph.node[0], model)
             if firstfifo.get_nodeattr("impl_style") == "vivado":
                 warnings.warn(
                     """First FIFO has impl_style=vivado, which may cause
@@ -341,7 +341,7 @@ class CreateStitchedIP(Transformation):
             assert is_hls_node(node) or is_rtl_node(
                 node
             ), "All nodes must be FINN fpgadataflow nodes."
-            node_inst = getCustomOp(node)
+            node_inst = getHWCustomOp(node, model)
             ip_dir_value = node_inst.get_nodeattr("ip_path")
             assert os.path.isdir(ip_dir_value), "IP generation directory doesn't exist."
             ip_dirs += [ip_dir_value]
@@ -355,7 +355,7 @@ class CreateStitchedIP(Transformation):
                     if producer is None:
                         continue
                     j = list(producer.output).index(node.input[i])
-                    src_intf_name = getCustomOp(producer).get_verilog_top_module_intf_names()[
+                    src_intf_name = getHWCustomOp(producer, model).get_verilog_top_module_intf_names()[
                         "m_axis"
                     ][j][0]
                     dst_intf_name = node_inst.get_verilog_top_module_intf_names()["s_axis"][i][0]
@@ -375,7 +375,7 @@ class CreateStitchedIP(Transformation):
             assert inp_cons != [], "No consumer for input " + inp_name
             assert len(inp_cons) == 1, "Multiple consumers for input " + inp_name
             node = inp_cons[0]
-            node_inst = getCustomOp(node)
+            node_inst = getHWCustomOp(node, model)
             for i in range(len(node.input)):
                 if node.input[i] == inp_name:
                     self.connect_s_axis_external(node, idx=i)
@@ -383,7 +383,7 @@ class CreateStitchedIP(Transformation):
             out_name = output.name
             node = model.find_producer(out_name)
             assert node is not None, "No producer for output " + out_name
-            node_inst = getCustomOp(node)
+            node_inst = getHWCustomOp(node, model)
             for i in range(len(node.output)):
                 if node.output[i] == out_name:
                     self.connect_m_axis_external(node, idx=i)

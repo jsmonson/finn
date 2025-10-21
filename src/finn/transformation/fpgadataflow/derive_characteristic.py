@@ -28,11 +28,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-import qonnx.custom_op.registry as registry
 import warnings
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.base import NodeLocalTransformation
 
+from finn.util.basic import getHWCustomOp
 from finn.util.fpgadataflow import is_hls_node, is_rtl_node
 
 
@@ -62,7 +62,7 @@ class DeriveCharacteristic(NodeLocalTransformation):
         if is_hls_node(node) or is_rtl_node(node):
             try:
                 # lookup op_type in registry of CustomOps
-                inst = registry.getCustomOp(node)
+                inst = getHWCustomOp(node, model)
                 inst.derive_characteristic_fxns(period=self.period)
             except KeyError:
                 # exception if op_type is not supported
@@ -97,15 +97,15 @@ class DeriveCharacteristic(NodeLocalTransformation):
             if comp_branch_first is None or comp_branch_last is None:
                 warnings.warn("Found unsupported DuplicateStreams, skipping")
                 return (model, run_again)
-            comp_branch_last = registry.getCustomOp(comp_branch_last)
-            comp_branch_first = registry.getCustomOp(comp_branch_first)
+            comp_branch_last = getHWCustomOp(comp_branch_last, model)
+            comp_branch_first = getHWCustomOp(comp_branch_first, model)
             # for DuplicateStreams, use comp_branch_first's input characterization
             # for AddStreams, use comp_branch_last's output characterization
             period = comp_branch_first.get_nodeattr("io_chrc_period")
             comp_branch_first_f = comp_branch_first.get_nodeattr("io_characteristic")[: 2 * period]
             comp_branch_last_f = comp_branch_last.get_nodeattr("io_characteristic")[2 * period :]
-            ds_node_inst = registry.getCustomOp(ds_node)
-            addstrm_node_inst = registry.getCustomOp(addstrm_node)
+            ds_node_inst = getHWCustomOp(ds_node, model)
+            addstrm_node_inst = getHWCustomOp(addstrm_node, model)
             ds_node_inst.set_nodeattr("io_chrc_period", period)
             ds_node_inst.set_nodeattr("io_characteristic", comp_branch_first_f * 2)
             addstrm_node_inst.set_nodeattr("io_chrc_period", period)
@@ -134,7 +134,7 @@ class DeriveFIFOSizes(NodeLocalTransformation):
         if is_hls_node(node) or is_rtl_node(node):
             try:
                 # lookup op_type in registry of CustomOps
-                prod = registry.getCustomOp(node)
+                prod = getHWCustomOp(node, model)
                 assert not (op_type.startswith("StreamingFIFO")), "Found existing FIFOs"
                 period = prod.get_nodeattr("io_chrc_period")
                 prod_chrc = prod.get_nodeattr("io_chrc_out")[0]
@@ -153,7 +153,7 @@ class DeriveFIFOSizes(NodeLocalTransformation):
                         # need an entry in the list anyway
                         out_fifo_depths.append(self.io_fifo_depth)
                         continue
-                    cons = registry.getCustomOp(cons_node)
+                    cons = getHWCustomOp(cons_node, model)
                     cons_chrc = cons.get_nodeattr("io_chrc_in")[0]
                     # find minimum phase shift satisfying the constraint
                     pshift_min = period - 1

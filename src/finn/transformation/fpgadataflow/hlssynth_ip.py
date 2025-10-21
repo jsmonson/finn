@@ -58,7 +58,7 @@ class HLSSynthIP(NodeLocalTransformation):
         if is_hls_node(node):
             try:
                 # lookup op_type in registry of CustomOps
-                inst = registry.getCustomOp(node)
+                inst = registry.getHWCustomOp(node, model)
                 # ensure that code is generated
                 assert (
                     inst.get_nodeattr("code_gen_dir_ipgen") != ""

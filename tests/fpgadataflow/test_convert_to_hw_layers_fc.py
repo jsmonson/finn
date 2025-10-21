@@ -37,7 +37,6 @@ import torch
 from brevitas.export import export_qonnx
 from pkgutil import get_data
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.bipolar_to_xnor import ConvertBipolarMatMulToXnorPopcount
 from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.general import (
@@ -47,6 +46,8 @@ from qonnx.transformation.general import (
 )
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.cleanup import cleanup as qonnx_cleanup
+
+from finn.util.basic import getHWCustomOp
 
 import finn.core.onnx_exec as oxe
 import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
@@ -103,19 +104,19 @@ def test_convert_to_hw_layers_tfc_w1a1():
     assert model.get_tensor_shape(fc3.input[0]) == [1, 64]
     assert model.get_tensor_shape(fc3.input[1]) == [64, 10]
 
-    fc0w = getCustomOp(fc0)
+    fc0w = getHWCustomOp(fc0, model)
     fc0w.set_nodeattr("SIMD", 784)
     fc0w.set_nodeattr("PE", 16)
 
-    fc1w = getCustomOp(fc1)
+    fc1w = getHWCustomOp(fc1, model)
     fc1w.set_nodeattr("SIMD", 16)
     fc1w.set_nodeattr("PE", 16)
 
-    fc2w = getCustomOp(fc2)
+    fc2w = getHWCustomOp(fc2, model)
     fc2w.set_nodeattr("SIMD", 16)
     fc2w.set_nodeattr("PE", 16)
 
-    fc3w = getCustomOp(fc3)
+    fc3w = getHWCustomOp(fc3, model)
     fc3w.set_nodeattr("SIMD", 16)
     fc3w.set_nodeattr("PE", 10)
 
@@ -175,16 +176,16 @@ def test_convert_to_hw_layers_tfc_w1a2():
     assert fc3.op_type.startswith("MVAU")
     assert model.get_tensor_shape(fc3.input[0]) == [1, 64]
     assert model.get_tensor_shape(fc3.input[1]) == [64, 10]
-    fc0w = getCustomOp(fc0)
+    fc0w = getHWCustomOp(fc0, model)
     fc0w.set_nodeattr("SIMD", 784)
     fc0w.set_nodeattr("PE", 16)
-    fc1w = getCustomOp(fc1)
+    fc1w = getHWCustomOp(fc1, model)
     fc1w.set_nodeattr("SIMD", 16)
     fc1w.set_nodeattr("PE", 16)
-    fc2w = getCustomOp(fc2)
+    fc2w = getHWCustomOp(fc2, model)
     fc2w.set_nodeattr("SIMD", 16)
     fc2w.set_nodeattr("PE", 16)
-    fc3w = getCustomOp(fc3)
+    fc3w = getHWCustomOp(fc3, model)
     fc3w.set_nodeattr("SIMD", 16)
     fc3w.set_nodeattr("PE", 10)
     model = model.transform(PrepareCppSim())

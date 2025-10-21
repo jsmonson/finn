@@ -43,7 +43,7 @@ def exp_cycles_per_layer(model):
     cycle_dict = {}
     for node in model.graph.node:
         if is_hls_node(node) or is_rtl_node(node):
-            inst = registry.getCustomOp(node)
+            inst = registry.getHWCustomOp(node, model)
             cycle_dict[node.name] = int(inst.get_exp_cycles())
 
     return cycle_dict

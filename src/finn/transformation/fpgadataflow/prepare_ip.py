@@ -43,7 +43,7 @@ def _codegen_single_node(node, model, fpgapart, clk):
     op_type = node.op_type
     try:
         # lookup op_type in registry of CustomOps
-        inst = registry.getCustomOp(node)
+        inst = registry.getHWCustomOp(node, model)
         # get the path of the code generation directory
         code_gen_dir = inst.get_nodeattr("code_gen_dir_ipgen")
         # ensure that there is a directory

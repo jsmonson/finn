@@ -32,7 +32,7 @@ import os
 import subprocess
 from enum import Enum
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.general import (
     GiveReadableTensorNames,
@@ -193,7 +193,7 @@ class VitisLink(Transformation):
         instance_names = {}
         for node in model.graph.node:
             assert node.op_type == "StreamingDataflowPartition", "Invalid link graph"
-            sdp_node = getCustomOp(node)
+            sdp_node = getHWCustomOp(node, model)
             dataflow_model_filename = sdp_node.get_nodeattr("model")
             kernel_model = ModelWrapper(dataflow_model_filename)
             kernel_xo = kernel_model.get_metadata_prop("vitis_xo")
@@ -405,7 +405,7 @@ class VitisBuild(Transformation):
         sdp_nodes = model.get_nodes_by_op_type("StreamingDataflowPartition")
         for sdp_node in sdp_nodes:
             prefix = sdp_node.name + "_"
-            sdp_node = getCustomOp(sdp_node)
+            sdp_node = getHWCustomOp(sdp_node, model)
             dataflow_model_filename = sdp_node.get_nodeattr("model")
             kernel_model = ModelWrapper(dataflow_model_filename)
             kernel_model = kernel_model.transform(InsertFIFO())

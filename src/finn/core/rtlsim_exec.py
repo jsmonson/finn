@@ -28,11 +28,11 @@
 
 import numpy as np
 import os
-from qonnx.custom_op.registry import getCustomOp
 
 from finn import xsi
 from finn.util.basic import (
     get_finn_root,
+    getHWCustomOp,
     get_liveness_threshold_cycles,
     get_vivado_root,
     launch_process_helper,
@@ -53,7 +53,7 @@ def prep_rtlsim_io_dict(model, execution_context):
         i_tensor = execution_context[i_name]
         i_dt = model.get_tensor_datatype(i_name)
         first_node_onnx = model.find_consumer(i_name)
-        first_node = getCustomOp(first_node_onnx)
+        first_node = getHWCustomOp(first_node_onnx, model)
         node_inp_ind = list(first_node_onnx.input).index(i_name)
 
         if node_inp_ind == 0:
@@ -88,7 +88,7 @@ def prep_rtlsim_io_dict(model, execution_context):
         o_name = o_vi.name
         o_shape = model.get_tensor_shape(o_name)
         o_dt = model.get_tensor_datatype(o_name)
-        last_node = getCustomOp(model.find_producer(o_name))
+        last_node = getHWCustomOp(model.find_producer(o_name), model)
         o_folded_shape = last_node.get_folded_output_shape()
         # override batch size from actual input
         o_shape = list(o_shape)
@@ -195,7 +195,7 @@ def rtlsim_exec_cppxsi(
         iname = top_inp.name
         first_node = model.find_consumer(iname)
         assert first_node is not None, "Failed to find consumer for " + iname
-        fnode_inst = getCustomOp(first_node)
+        fnode_inst = getHWCustomOp(first_node, model)
         top_ind = list(first_node.input).index(iname)
         ishape_folded = fnode_inst.get_folded_input_shape(ind=top_ind)
         instream_iters.append(np.prod(ishape_folded[:-1]))
@@ -203,7 +203,7 @@ def rtlsim_exec_cppxsi(
         oname = top_out.name
         last_node = model.find_producer(oname)
         assert last_node is not None, "Failed to find producer for " + oname
-        lnode_inst = getCustomOp(last_node)
+        lnode_inst = getHWCustomOp(last_node, model)
         top_ind = list(last_node.output).index(oname)
         oshape_folded = lnode_inst.get_folded_output_shape(ind=top_ind)
         outstream_iters.append(np.prod(oshape_folded[:-1]))

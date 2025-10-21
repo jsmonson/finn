@@ -29,10 +29,10 @@
 import numpy as np
 import warnings
 from onnx import helper
-from qonnx.custom_op.registry import getCustomOp, hasCustomOp
+from qonnx.custom_op.registry import hasCustomOp
 from qonnx.transformation.base import Transformation
 
-from finn.util.basic import get_dsp_block, is_versal
+from finn.util.basic import get_dsp_block, getHWCustomOp, is_versal
 
 
 def _determine_impl_style(node, fpgapart, model):
@@ -50,14 +50,14 @@ def _determine_impl_style(node, fpgapart, model):
         rtl_variant = hasCustomOp("finn.custom_op.fpgadataflow.rtl", f"{optype}_rtl")
 
     # check if user has specified a preferred_impl_style
-    node_inst = getCustomOp(node)
+    node_inst = getHWCustomOp(node, model)
     impl_style = node_inst.get_nodeattr("preferred_impl_style")
 
     # if impl_style not set, for "simple" layers always try
     # to use rtl variant if available
     if impl_style == "":
         if optype == "StreamingDataWidthConverter":
-            return _dwc_determine_impl_style(node)
+            return _dwc_determine_impl_style(node, model)
         if rtl_variant:
             if optype == "MVAU":
                 idt = node_inst.get_input_datatype(0)
@@ -73,7 +73,7 @@ def _determine_impl_style(node, fpgapart, model):
                 wdt = node_inst.get_input_datatype(1)
                 inp_width_fit = idt.bitwidth() >= 4
                 weight_width_fit = wdt.bitwidth() >= 4
-                if inp_width_fit and weight_width_fit and _vvu_rtl_possible(node, fpgapart):
+                if inp_width_fit and weight_width_fit and _vvu_rtl_possible(node, fpgapart, model):
                     return "rtl"
                 else:
                     return "hls"
@@ -112,7 +112,7 @@ def _determine_impl_style(node, fpgapart, model):
     elif impl_style == "rtl":
         # rtl dwc does not support every inWidth to outWidth ratio
         if optype == "StreamingDataWidthConverter":
-            if _dwc_determine_impl_style(node) != "rtl":
+            if _dwc_determine_impl_style(node, model) != "rtl":
                 warn_str = """RTL implementation of DWC requires
                             stream widths that are integer width ratios
                             from each other. Node %s will automatically be
@@ -136,7 +136,7 @@ def _determine_impl_style(node, fpgapart, model):
                 warnings.warn(warn_str)
                 return "hls"
         elif optype == "VVAU":
-            if _vvu_rtl_possible(node, fpgapart):
+            if _vvu_rtl_possible(node, fpgapart, model):
                 return "rtl"
             else:
                 warn_str = """There is no RTL variant for %s. The node will automatically be
@@ -173,9 +173,9 @@ def _determine_impl_style(node, fpgapart, model):
         )
 
 
-def _dwc_determine_impl_style(node):
+def _dwc_determine_impl_style(node, model=None):
     # when possible use rtl variant
-    dwc = getCustomOp(node)
+    dwc = getHWCustomOp(node, model)
     dwc_in_width = dwc.get_nodeattr("inWidth")
     dwc_out_width = dwc.get_nodeattr("outWidth")
     # check if rtl variant can be used
@@ -195,7 +195,7 @@ def _mvu_rtl_possible(n, fpgapart, model):
     # Please note, DSP48E1 does only support narrow range for weights
     # Next to that, embedded thresholding functionality is not supported
     # and neither binaryxnormode computation.
-    node_inst = getCustomOp(n)
+    node_inst = getHWCustomOp(n, model)
     # first check if no Activation or binary xnor mode and return False
     # immediately if one of them is True
     no_activation = node_inst.get_nodeattr("noActivation") == 0
@@ -231,12 +231,12 @@ def _mvu_rtl_possible(n, fpgapart, model):
     return inp_width_in_range and weight_width_in_range
 
 
-def _vvu_rtl_possible(n, fpgapart):
+def _vvu_rtl_possible(n, fpgapart, model=None):
     # Checks whether RTL-based VVU is supported
     # Currently, we only support RTL-VVU on DSP58 up to 8sx9s inputs
     # (8-bit signed weights x (9-bit signed OR 8-bit (un)signed) activations).
     # Next to that, embedded thresholding functionality is not supported.
-    node_inst = getCustomOp(n)
+    node_inst = getHWCustomOp(n, model)
     if not node_inst.get_nodeattr("noActivation"):
         return False
     if not is_versal(fpgapart):

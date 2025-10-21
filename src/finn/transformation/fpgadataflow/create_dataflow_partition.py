@@ -27,7 +27,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.create_generic_partitions import PartitionFromLambda
 from qonnx.util.basic import get_by_name
@@ -86,14 +86,14 @@ class CreateDataflowPartition(Transformation):
         p_nodes = parent_model.get_nodes_by_op_type("GenericPartition")
         for partition_ind, p_node in enumerate(p_nodes):
             # go into partition to extract some info
-            p_node_inst = getCustomOp(p_node)
+            p_node_inst = getHWCustomOp(p_node, model)
             node_model_filename = p_node_inst.get_nodeattr("model")
             p_model = ModelWrapper(node_model_filename)
             # check floorplan (SLR assignment per node)
-            inst = getCustomOp(p_model.graph.node[0])
+            inst = getHWCustomOp(p_model.graph.node[0], p_model)
             slr = inst.get_nodeattr("slr")
             for node in p_model.graph.node:
-                inst = getCustomOp(node)
+                inst = getHWCustomOp(node, model)
                 assert slr == inst.get_nodeattr(
                     "slr"
                 ), """all nodes with same partition_id must have the same slr id"""
@@ -101,7 +101,7 @@ class CreateDataflowPartition(Transformation):
             nmemports = 0
             mem_port = ""
             for node in p_model.graph.node:
-                inst = getCustomOp(node)
+                inst = getHWCustomOp(node, model)
                 port = inst.get_nodeattr("mem_port")
                 if port is not None and port != "":
                     nmemports += 1
@@ -110,7 +110,7 @@ class CreateDataflowPartition(Transformation):
             # done, change node type and add info in parent graph
             p_node.op_type = "StreamingDataflowPartition"
             p_node.domain = "finn.custom_op.fpgadataflow"
-            new_p_node_inst = getCustomOp(p_node)
+            new_p_node_inst = getHWCustomOp(p_node, model)
             new_p_node_inst.set_nodeattr("partition_id", partition_ind)
             new_p_node_inst.set_nodeattr("slr", slr)
             new_p_node_inst.set_nodeattr("mem_port", mem_port)

@@ -31,8 +31,9 @@ import qonnx.core.data_layout as DataLayout
 import warnings
 from onnx import helper as oh
 from qonnx.core.datatype import DataType
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.base import Transformation
+
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import get_by_name
@@ -72,7 +73,7 @@ class AbsorbSignBiasIntoMultiThreshold(Transformation):
                         continue
                     bias = A.flatten()[0]
                     # set MultiThreshold bias property
-                    mt_inst = getCustomOp(mt_node)
+                    mt_inst = getHWCustomOp(mt_node, model)
                     bias += mt_inst.get_nodeattr("out_bias")
                     mt_inst.set_nodeattr("out_bias", bias)
                     graph_modified = True
@@ -353,7 +354,7 @@ class AbsorbTransposeIntoMultiThreshold(Transformation):
                         # and not model.is_fork_node(mt_cand)
                     ):
                         mt_cand_orig_output = mt_cand.output[0]
-                        mt = getCustomOp(mt_cand)
+                        mt = getHWCustomOp(mt_cand, model)
                         mt.set_nodeattr("data_layout", "NHWC")
                         # Rewire input of MultiThreshold node
                         mt_cand.input[0] = n.input[0]

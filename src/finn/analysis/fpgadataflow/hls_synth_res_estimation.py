@@ -52,7 +52,7 @@ def hls_synth_res_estimation(model):
             res_dict[node.name]["LUT"] = 0
             res_dict[node.name]["DSP48E"] = 0
             res_dict[node.name]["URAM"] = 0
-            inst = registry.getCustomOp(node)
+            inst = registry.getHWCustomOp(node, model)
             code_gen_dir = inst.get_nodeattr("code_gen_dir_ipgen")
             if code_gen_dir == "":
                 warnings.warn(

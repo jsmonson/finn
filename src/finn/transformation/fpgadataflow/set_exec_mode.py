@@ -50,7 +50,7 @@ class SetExecMode(Transformation):
             if is_hls_node(node) or is_rtl_node(node):
                 try:
                     # lookup op_type in registry of CustomOps
-                    inst = registry.getCustomOp(node)
+                    inst = registry.getHWCustomOp(node, model)
                     # set sim_mode accordingly to argument mode
                     inst.set_nodeattr("exec_mode", self.mode)
                     # ensure that sim_mode is now set

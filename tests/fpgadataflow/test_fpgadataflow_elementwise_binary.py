@@ -33,11 +33,12 @@ from onnx import TensorProto
 from onnx import helper as oh
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model
+
+from finn.util.basic import getHWCustomOp
 
 from finn.core.onnx_exec import execute_onnx
 from finn.transformation.fpgadataflow.compile_cppsim import CompileCppSim
@@ -186,7 +187,7 @@ def test_elementwise_binary_operation(
     assert len(model.graph.node) == 1
     assert model.graph.node[0].op_type == f"{op_type}_hls"
 
-    getCustomOp(model.graph.node[0]).set_nodeattr("PE", pe)
+    getHWCustomOp(model.graph.node[0], model).set_nodeattr("PE", pe)
 
     # Try to minimize the bit-widths of all data types involved
     model = model.transform(MinimizeWeightBitWidth())
@@ -272,8 +273,8 @@ def test_elementwise_binary_operation_stitched_ip(
     assert len(model.graph.node) == 1
     assert model.graph.node[0].op_type == f"{op_type}"
 
-    getCustomOp(model.graph.node[0]).set_nodeattr("PE", pe)
-    getCustomOp(model.graph.node[0]).set_nodeattr("mem_mode", mem_mode)
+    getHWCustomOp(model.graph.node[0], model).set_nodeattr("PE", pe)
+    getHWCustomOp(model.graph.node[0], model).set_nodeattr("mem_mode", mem_mode)
 
     # Test running shape and data type inference on the model graph
     model = model.transform(InferDataTypes())

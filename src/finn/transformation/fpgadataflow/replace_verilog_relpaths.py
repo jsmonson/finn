@@ -45,7 +45,7 @@ class ReplaceVerilogRelPaths(Transformation):
             if is_hls_node(node) or is_rtl_node(node):
                 try:
                     # lookup op_type in registry of CustomOps
-                    inst = registry.getCustomOp(node)
+                    inst = registry.getHWCustomOp(node, model)
                     # find the IP gen dir
                     ipgen_path = inst.get_nodeattr("ipgen_path")
                     if ipgen_path is not None and os.path.isdir(ipgen_path):

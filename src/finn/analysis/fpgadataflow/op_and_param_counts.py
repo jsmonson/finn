@@ -52,7 +52,7 @@ def op_and_param_counts(model):
     ret_dict = {}
     for node in model.graph.node:
         if is_finn_op(node.domain):
-            inst = registry.getCustomOp(node)
+            inst = registry.getHWCustomOp(node, model)
             if hasattr(inst, "get_op_and_param_counts"):
                 node_op_and_param_counts = inst.get_op_and_param_counts()
                 ret_dict[node.name] = node_op_and_param_counts
