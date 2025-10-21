@@ -595,14 +595,6 @@ def step_set_fifo_depths(model: ModelWrapper, cfg: DataflowBuildConfig):
             model = model.transform(GiveUniqueNodeNames())
             model = model.transform(GiveReadableTensorNames())
         elif cfg.auto_fifo_strategy == "largefifo_rtlsim":
-            model = model.transform(GiveUniqueNodeNames())
-            loop_nodes = model.get_nodes_by_op_type("FINNLoop")
-            for loop_node in loop_nodes:
-                loop_inst = getCustomOp(loop_node)
-                loop_body = loop_inst.get_nodeattr("body")
-                loop_body = loop_body.transform(GiveUniqueNodeNames(prefix=loop_node.name + "_"))
-                loop_inst.set_nodeattr("body", loop_body.graph)
-            model = model.transform(GiveReadableTensorNames(), apply_to_subgraphs=True)
             if cfg.fifosim_save_waveform:
                 report_dir = cfg.output_dir + "/report"
                 os.makedirs(report_dir, exist_ok=True)
@@ -621,6 +613,14 @@ def step_set_fifo_depths(model: ModelWrapper, cfg: DataflowBuildConfig):
                 apply_to_subgraphs=True,
                 use_preorder_traversal=False,
             )
+            model = model.transform(GiveUniqueNodeNames())
+            loop_nodes = model.get_nodes_by_op_type("FINNLoop")
+            for loop_node in loop_nodes:
+                loop_inst = getCustomOp(loop_node)
+                loop_body = loop_inst.get_nodeattr("body")
+                loop_body = loop_body.transform(GiveUniqueNodeNames(prefix=loop_node.name + "_"))
+                loop_inst.set_nodeattr("body", loop_body.graph)
+            model = model.transform(GiveReadableTensorNames(), apply_to_subgraphs=True)
             # InsertAndSetFIFODepths internally removes any shallow FIFOs
             # so no need to call RemoveShallowFIFOs here
         else:
