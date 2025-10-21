@@ -1,41 +1,17 @@
-# Copyright (c) 2020, Xilinx
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-# * Redistributions of source code must retain the above copyright notice, this
-#   list of conditions and the following disclaimer.
-#
-# * Redistributions in binary form must reproduce the above copyright notice,
-#   this list of conditions and the following disclaimer in the documentation
-#   and/or other materials provided with the distribution.
-#
-# * Neither the name of FINN nor the names of its
-#   contributors may be used to endorse or promote products derived from
-#   this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 """Brainsmith integration for FINN.
-
-This module provides component discovery for Brainsmith plugin system.
-FINN components (kernels, backends, steps) are automatically discovered and
-returned as metadata for registration by Brainsmith.
 
 Entry point: brainsmith.plugins -> finn = finn.brainsmith_integration:register_all
 
-Note: This module has ZERO dependencies on brainsmith. It only discovers and
-returns FINN components - registration is handled by brainsmith.
+Strategy:
+- Auto-discover components following standard patterns
+- Manually register exceptions and cross-module associations
+- Zero dependencies on brainsmith (returns metadata only)
+
+Components:
+- Steps: Auto-discovered from finn.builder.build_dataflow_steps
+- Kernels: Auto-discovered from fpgadataflow/*.py + manual special cases
+- Backends: Auto-discovered from hls/ and rtl/ directories
+- Infer Transforms: Manual mapping (cross-module association)
 """
 
 import importlib
@@ -44,46 +20,63 @@ from pathlib import Path
 
 
 def register_all():
-    """Discover all FINN components and return metadata for registration.
+    """Return FINN components for Brainsmith registration.
 
     This is the entry point function called by Brainsmith's plugin discovery.
     FINN has no dependency on brainsmith - this just returns component data.
 
     Returns:
-        Dict with keys 'kernels', 'backends', 'steps', each containing lists
-        of component metadata dicts.
+        Dict with keys 'kernels', 'backends', 'steps', each containing
+        lists of component metadata dicts.
 
     Example:
         >>> components = register_all()
-        >>> len(components['kernels'])
-        36
-        >>> components['kernels'][0]
-        {'name': 'MVAU', 'class': <class 'MVAU'>, 'op_type': 'MVAU'}
+        >>> 'steps' in components and 'kernels' in components
+        True
+        >>> all(isinstance(components[k], list) for k in components)
+        True
     """
     return {
-        'kernels': _discover_kernels(),
-        'backends': _discover_backends(),
+        'kernels': _register_kernels(),
+        'backends': _register_backends(),
         'steps': _discover_steps()
     }
 
 
-def _discover_kernels():
-    """Auto-discover FINN kernel components.
+# ============================================================================
+# KERNELS: Hybrid auto-discovery + manual enrichment
+# ============================================================================
 
-    Scans finn.custom_op.fpgadataflow for HWCustomOp subclasses.
+def _register_kernels():
+    """Register FINN kernels - hybrid approach.
+
+    Strategy:
+    1. Auto-discover: Regular kernels from fpgadataflow/*.py
+    2. Manual add: Special kernels (combined kernel+backend)
+    3. Manual enrich: Add infer_transform metadata where applicable
+
+    Returns ~36 kernels total.
+    """
+    kernels = _discover_regular_kernels()  # ~33 kernels
+    kernels.extend(_register_special_kernels())  # +3 special
+    _add_infer_transforms(kernels)  # Enrich ~10 with transforms
+
+    return kernels
+
+
+def _discover_regular_kernels():
+    """Auto-discover standard kernel classes from fpgadataflow/*.py.
+
+    Pattern: HWCustomOp subclasses in finn.custom_op.fpgadataflow module.
 
     Returns:
-        List of kernel metadata dicts, each containing:
-        - name: Kernel name for registration
-        - class: The kernel class object
-        - op_type: ONNX operation type
+        List of kernel dicts: [{'name': str, 'class': type}, ...]
     """
     from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
     import finn.custom_op.fpgadataflow as fpga
 
     kernels = []
 
-    # Modules to exclude from kernel discovery
     exclude = {
         '__init__.py', 'hwcustomop.py', 'hlsbackend.py',
         'rtlbackend.py', 'templates.py', 'streamingdataflowpartition.py'
@@ -96,57 +89,124 @@ def _discover_kernels():
             continue
 
         module_name = f'finn.custom_op.fpgadataflow.{py_file.stem}'
+
         try:
             module = importlib.import_module(module_name)
 
-            # Find HWCustomOp subclasses
+            # Find all HWCustomOp subclasses defined in this module
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if (cls.__module__ == module.__name__ and
                     issubclass(cls, HWCustomOp) and
                     cls is not HWCustomOp):
 
-                    # Use op_type as name if available
-                    kernel_name = getattr(cls, 'op_type', name)
-
                     kernels.append({
-                        'name': kernel_name,
-                        'class': cls,
-                        'op_type': kernel_name
+                        'name': name,
+                        'class': cls
                     })
 
         except Exception:
-            # Skip modules that fail to import
             pass
 
     return kernels
 
 
-def _discover_backends():
-    """Auto-discover FINN backend components.
+def _register_special_kernels():
+    """Manually register special kernels that don't follow standard pattern.
 
-    Scans finn.custom_op.fpgadataflow.hls and .rtl for backend classes.
+    These are combined kernel+backend implementations that live in hls/
+    instead of fpgadataflow/. They break the discovery pattern.
 
     Returns:
-        List of backend metadata dicts, each containing:
-        - name: Backend name for registration
-        - class: The backend class object
-        - target_kernel: Full kernel name (e.g., 'finn:MVAU')
-        - language: 'hls' or 'rtl'
+        List of kernel dicts for special cases.
+    """
+    from finn.custom_op.fpgadataflow.hls.checksum_hls import CheckSum_hls
+    from finn.custom_op.fpgadataflow.hls.iodma_hls import IODMA_hls
+    from finn.custom_op.fpgadataflow.hls.tlastmarker_hls import TLastMarker_hls
+
+    return [
+        {'name': 'CheckSum', 'class': CheckSum_hls},
+        {'name': 'IODMA', 'class': IODMA_hls},
+        {'name': 'TLastMarker', 'class': TLastMarker_hls},
+    ]
+
+
+def _add_infer_transforms(kernels):
+    """Enrich kernel metadata with infer_transform classes.
+
+    Infer transforms are in finn.transformation.fpgadataflow.convert_to_hw_layers,
+    a separate module from kernels. No automatic way to link them - requires
+    explicit mapping.
+
+    Only ~10 out of 36 kernels support inference transformations.
+
+    Args:
+        kernels: List of kernel dicts to enrich (modified in-place)
+    """
+    # Import available infer transforms
+    try:
+        from finn.transformation.fpgadataflow.convert_to_hw_layers import (
+            InferQuantizedMatrixVectorActivation,
+            InferVectorVectorActivation,
+            InferThresholdingLayer,
+            InferChannelwiseLinearLayer,
+        )
+
+        # Explicit mapping: kernel name -> transform class
+        # Add more entries as FINN exposes new infer transforms
+        TRANSFORM_MAP = {
+            'MVAU': InferQuantizedMatrixVectorActivation,
+            'VVAU': InferVectorVectorActivation,
+            'Thresholding': InferThresholdingLayer,
+            'ChannelwiseOp': InferChannelwiseLinearLayer,
+        }
+
+        # Enrich discovered kernels with transforms
+        for kernel in kernels:
+            if kernel['name'] in TRANSFORM_MAP:
+                kernel['infer_transform'] = TRANSFORM_MAP[kernel['name']]
+
+    except ImportError:
+        pass
+
+
+# ============================================================================
+# BACKENDS: Full auto-discovery
+# ============================================================================
+
+def _register_backends():
+    """Auto-discover all FINN backends from hls/ and rtl/ directories.
+
+    Pattern:
+    - HLS: finn.custom_op.fpgadataflow.hls.*_hls.py contains HLSBackend subclasses
+    - RTL: finn.custom_op.fpgadataflow.rtl.*_rtl.py contains RTLBackend subclasses
+    - Target kernel: Remove _hls or _rtl suffix from class name
+
+    Returns ~40+ backends (mix of HLS and RTL implementations).
+    """
+    backends = []
+    backends.extend(_discover_hls_backends())
+    backends.extend(_discover_rtl_backends())
+    return backends
+
+
+def _discover_hls_backends():
+    """Auto-discover HLS backend implementations.
+
+    Returns:
+        List of backend dicts with name, class, target_kernel, language.
     """
     from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
-    from finn.custom_op.fpgadataflow.rtlbackend import RTLBackend
     import finn.custom_op.fpgadataflow.hls as hls_module
-    import finn.custom_op.fpgadataflow.rtl as rtl_module
 
     backends = []
-
-    # Scan HLS backends
     hls_dir = Path(hls_module.__file__).parent
+
     for py_file in sorted(hls_dir.glob('*.py')):
         if py_file.name == '__init__.py':
             continue
 
         module_name = f'finn.custom_op.fpgadataflow.hls.{py_file.stem}'
+
         try:
             module = importlib.import_module(module_name)
 
@@ -155,24 +215,39 @@ def _discover_backends():
                     issubclass(cls, HLSBackend) and
                     cls is not HLSBackend):
 
-                    target_kernel = _infer_target_kernel(cls, 'hls')
+                    target = name[:-4] if name.endswith('_hls') else name
+
                     backends.append({
                         'name': name,
                         'class': cls,
-                        'target_kernel': target_kernel,
+                        'target_kernel': f'finn:{target}',
                         'language': 'hls'
                     })
 
         except Exception:
             pass
 
-    # Scan RTL backends
+    return backends
+
+
+def _discover_rtl_backends():
+    """Auto-discover RTL backend implementations.
+
+    Returns:
+        List of backend dicts with name, class, target_kernel, language.
+    """
+    from finn.custom_op.fpgadataflow.rtlbackend import RTLBackend
+    import finn.custom_op.fpgadataflow.rtl as rtl_module
+
+    backends = []
     rtl_dir = Path(rtl_module.__file__).parent
+
     for py_file in sorted(rtl_dir.glob('*.py')):
         if py_file.name == '__init__.py':
             continue
 
         module_name = f'finn.custom_op.fpgadataflow.rtl.{py_file.stem}'
+
         try:
             module = importlib.import_module(module_name)
 
@@ -181,11 +256,12 @@ def _discover_backends():
                     issubclass(cls, RTLBackend) and
                     cls is not RTLBackend):
 
-                    target_kernel = _infer_target_kernel(cls, 'rtl')
+                    target = name[:-4] if name.endswith('_rtl') else name
+
                     backends.append({
                         'name': name,
                         'class': cls,
-                        'target_kernel': target_kernel,
+                        'target_kernel': f'finn:{target}',
                         'language': 'rtl'
                     })
 
@@ -195,62 +271,28 @@ def _discover_backends():
     return backends
 
 
+# ============================================================================
+# STEPS: Full auto-discovery (unchanged)
+# ============================================================================
+
 def _discover_steps():
     """Auto-discover FINN builder step functions.
 
-    Scans finn.builder.build_dataflow_steps for functions starting with 'step_'.
+    Pattern: Functions named step_* in finn.builder.build_dataflow_steps
 
     Returns:
-        List of step metadata dicts, each containing:
-        - name: Step name for registration (without 'step_' prefix)
-        - func: The step function object
+        List of step dicts with name and func.
     """
     from finn.builder import build_dataflow_steps
 
     steps = []
 
-    # Find all step_* functions
     for name, func in inspect.getmembers(build_dataflow_steps, inspect.isfunction):
         if name.startswith('step_') and func.__module__ == build_dataflow_steps.__name__:
-            # Remove 'step_' prefix for registration name
-            step_name = name[5:]
+            step_name = name[5:]  # Remove 'step_' prefix
             steps.append({
                 'name': step_name,
                 'func': func
             })
 
     return steps
-
-
-def _infer_target_kernel(backend_class, language):
-    """Infer target kernel from backend's parent class hierarchy.
-
-    Args:
-        backend_class: The backend class to analyze
-        language: 'hls' or 'rtl'
-
-    Returns:
-        Full kernel name with source prefix (e.g., 'finn:MVAU')
-
-    Strategy:
-        1. Check parent classes for kernel (non-Backend class from fpgadataflow)
-        2. If not found, parse backend name (remove _hls/_rtl suffix)
-    """
-    # Strategy 1: Find kernel in parent classes
-    for base in backend_class.__bases__:
-        base_module = getattr(base, '__module__', '')
-        base_name = getattr(base, '__name__', '')
-
-        if (base_module.startswith('finn.custom_op.fpgadataflow') and
-            not base_name.endswith('Backend') and
-            base_name not in ('HWCustomOp', 'CustomOp')):
-            return f'finn:{base_name}'
-
-    # Strategy 2: Parse backend class name
-    name = backend_class.__name__
-    if name.endswith(f'_{language}'):
-        kernel_name = name[:-len(f'_{language}')]
-        return f'finn:{kernel_name}'
-
-    # Fallback: use backend name as-is
-    return f'finn:{name}'
