@@ -26,7 +26,6 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-import qonnx.custom_op.registry as registry
 from functools import partial
 from qonnx.core.modelwrapper import ModelWrapper
 from finn.util.basic import getHWCustomOp
@@ -35,6 +34,7 @@ from qonnx.transformation.base import Transformation
 from finn.analysis.fpgadataflow.hls_synth_res_estimation import hls_synth_res_estimation
 from finn.analysis.fpgadataflow.post_synth_res import post_synth_res
 from finn.analysis.fpgadataflow.res_estimation import res_estimation
+from finn.util.basic import getHWCustomOp
 from finn.util.fpgadataflow import is_fpgadataflow_node
 
 
@@ -71,7 +71,7 @@ class AnnotateResources(Transformation):
         # annotate node resources
         for node in graph.node:
             if is_fpgadataflow_node(node) and node.name in self.res_dict.keys():
-                op_inst = registry.getHWCustomOp(node, model)
+                op_inst = getHWCustomOp(node, model)
                 op_inst.set_nodeattr("res_" + self.mode, str(self.res_dict[node.name]))
                 children_dict[node.name] = self.res_dict[node.name]
             elif node.op_type == "StreamingDataflowPartition":

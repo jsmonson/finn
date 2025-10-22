@@ -26,8 +26,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import qonnx.custom_op.registry as registry
 from qonnx.util.basic import is_finn_op
+
+from finn.util.basic import getHWCustomOp
 
 
 def verify_nodes(model):
@@ -43,7 +44,7 @@ def verify_nodes(model):
     for node in model.graph.node:
         if is_finn_op(node.domain):
             op_type = node.op_type
-            inst = registry.getHWCustomOp(node, model)
+            inst = getHWCustomOp(node, model)
             verification_dict[op_type] = inst.verify_node()
 
     return verification_dict

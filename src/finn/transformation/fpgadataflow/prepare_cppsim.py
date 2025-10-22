@@ -30,14 +30,13 @@
 import copy
 import multiprocessing as mp
 import os
-import qonnx.custom_op.registry as registry
 from qonnx.transformation.base import Transformation
 from qonnx.util.basic import get_num_default_workers
 
-from finn.util.basic import make_build_dir
+from finn.util.basic import getHWCustomOp, make_build_dir
 from finn.util.fpgadataflow import is_hls_node
 
-
+from finn.util.basic import getHWCustomOp
 def _codegen_single_node(node, model):
     """Calls C++ code generation for one node. Resulting code can be used
     to simulate node using cppsim."""
@@ -45,7 +44,7 @@ def _codegen_single_node(node, model):
     op_type = node.op_type
     try:
         # lookup op_type in registry of CustomOps
-        inst = registry.getHWCustomOp(node, model)
+        inst = getHWCustomOp(node, model)
         # get the path of the code generation directory
         code_gen_dir = inst.get_nodeattr("code_gen_dir_cppsim")
         # ensure that there is a directory

@@ -47,19 +47,47 @@ def register_all():
 # KERNELS: Hybrid auto-discovery + manual enrichment
 # ============================================================================
 
+# Kernels that are intentionally NOT registered (no infer transforms)
+# These kernels are either:
+# 1. Infrastructure: Inserted by build pipeline or manually placed
+# 2. Sub-components: Created by other transforms, not from ONNX directly
+
+INFRASTRUCTURE_KERNELS = {
+    'StreamingFIFO',              # Inserted by InsertFIFO/SetFIFODepths
+    'StreamingDataWidthConverter', # AXI width alignment
+    'TLastMarker',                # AXI stream utility
+    'CheckSum',                   # Data verification
+    'IODMA',                      # DMA interface, manually placed
+}
+
+SUBCOMPONENT_KERNELS = {
+    # Created by other infer transforms
+    'FMPadding',        # Created by InferConvInpGen when padding needed
+    'FMPadding_Pixel',  # Variant of FMPadding
+    # Already hardware targets (output of InferElementwiseBinaryOperation)
+    'ElementwiseAdd', 'ElementwiseSub', 'ElementwiseMul', 'ElementwiseDiv',
+    'ElementwiseAnd', 'ElementwiseOr', 'ElementwiseXor',
+    'ElementwiseBitwiseAnd', 'ElementwiseBitwiseOr', 'ElementwiseBitwiseXor',
+    'ElementwiseBitShift',
+    'ElementwiseEqual', 'ElementwiseGreater', 'ElementwiseGreaterOrEqual',
+    'ElementwiseLess', 'ElementwiseLessOrEqual',
+    # Note: ElementwiseBinaryOperation has its own infer transform, registered separately
+}
+
+
 def _register_kernels():
-    """Register FINN kernels - hybrid approach.
+    """Register FINN kernels - only those with infer transforms.
 
     Strategy:
-    1. Auto-discover: Regular kernels from fpgadataflow/*.py
-    2. Manual add: Special kernels (combined kernel+backend)
-    3. Manual enrich: Add infer_transform metadata where applicable
+    1. Auto-discover kernels from fpgadataflow/*.py
+    2. Filter out infrastructure and sub-component kernels
+    3. Enrich with infer_transform metadata
 
-    Returns ~36 kernels total.
+    Returns 16 kernels (all with infer transforms).
+    23 kernels excluded (see INFRASTRUCTURE_KERNELS and SUBCOMPONENT_KERNELS).
     """
-    kernels = _discover_regular_kernels()  # ~33 kernels
-    kernels.extend(_register_special_kernels())  # +3 special
-    _add_infer_transforms(kernels)  # Enrich ~10 with transforms
+    kernels = _discover_regular_kernels()  # Discovers and filters
+    _add_infer_transforms(kernels)  # All kernels get transforms
 
     return kernels
 
@@ -68,9 +96,11 @@ def _discover_regular_kernels():
     """Auto-discover standard kernel classes from fpgadataflow/*.py.
 
     Pattern: HWCustomOp subclasses in finn.custom_op.fpgadataflow module.
+    Filters out infrastructure and sub-component kernels.
 
     Returns:
         List of kernel dicts: [{'name': str, 'class': type}, ...]
+        Only kernels with infer transforms are included.
     """
     from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
     import finn.custom_op.fpgadataflow as fpga
@@ -99,6 +129,10 @@ def _discover_regular_kernels():
                     issubclass(cls, HWCustomOp) and
                     cls is not HWCustomOp):
 
+                    # Skip infrastructure and sub-component kernels
+                    if name in INFRASTRUCTURE_KERNELS or name in SUBCOMPONENT_KERNELS:
+                        continue
+
                     kernels.append({
                         'name': name,
                         'class': cls
@@ -110,26 +144,6 @@ def _discover_regular_kernels():
     return kernels
 
 
-def _register_special_kernels():
-    """Manually register special kernels that don't follow standard pattern.
-
-    These are combined kernel+backend implementations that live in hls/
-    instead of fpgadataflow/. They break the discovery pattern.
-
-    Returns:
-        List of kernel dicts for special cases.
-    """
-    from finn.custom_op.fpgadataflow.hls.checksum_hls import CheckSum_hls
-    from finn.custom_op.fpgadataflow.hls.iodma_hls import IODMA_hls
-    from finn.custom_op.fpgadataflow.hls.tlastmarker_hls import TLastMarker_hls
-
-    return [
-        {'name': 'CheckSum', 'class': CheckSum_hls},
-        {'name': 'IODMA', 'class': IODMA_hls},
-        {'name': 'TLastMarker', 'class': TLastMarker_hls},
-    ]
-
-
 def _add_infer_transforms(kernels):
     """Enrich kernel metadata with infer_transform classes.
 
@@ -137,7 +151,8 @@ def _add_infer_transforms(kernels):
     a separate module from kernels. No automatic way to link them - requires
     explicit mapping.
 
-    Only ~10 out of 36 kernels support inference transformations.
+    All 16 registered kernels receive transforms via TRANSFORM_MAP below.
+    (23 kernels excluded during discovery - see ignore lists at top)
 
     Args:
         kernels: List of kernel dicts to enrich (modified in-place)
@@ -145,19 +160,44 @@ def _add_infer_transforms(kernels):
     # Import available infer transforms
     try:
         from finn.transformation.fpgadataflow.convert_to_hw_layers import (
-            InferQuantizedMatrixVectorActivation,
-            InferVectorVectorActivation,
-            InferThresholdingLayer,
+            InferAddStreamsLayer,
+            InferBinaryMatrixVectorActivation,
             InferChannelwiseLinearLayer,
+            InferConcatLayer,
+            InferConvInpGen,
+            InferDuplicateStreamsLayer,
+            InferElementwiseBinaryOperation,
+            InferGlobalAccPoolLayer,
+            InferLabelSelectLayer,
+            InferLookupLayer,
+            InferPool,
+            InferQuantizedMatrixVectorActivation,
+            InferSplitLayer,
+            InferStreamingEltwise,
+            InferThresholdingLayer,
+            InferUpsample,
+            InferVectorVectorActivation,
         )
 
         # Explicit mapping: kernel name -> transform class
-        # Add more entries as FINN exposes new infer transforms
+        # Maps each hardware kernel to its corresponding inference transformation
         TRANSFORM_MAP = {
-            'MVAU': InferQuantizedMatrixVectorActivation,
-            'VVAU': InferVectorVectorActivation,
-            'Thresholding': InferThresholdingLayer,
+            'AddStreams': InferAddStreamsLayer,
             'ChannelwiseOp': InferChannelwiseLinearLayer,
+            'ConvolutionInputGenerator': InferConvInpGen,
+            'DuplicateStreams': InferDuplicateStreamsLayer,
+            'ElementwiseBinaryOperation': InferElementwiseBinaryOperation,
+            'GlobalAccPool': InferGlobalAccPoolLayer,
+            'LabelSelect': InferLabelSelectLayer,
+            'Lookup': InferLookupLayer,
+            'MVAU': InferQuantizedMatrixVectorActivation,
+            'Pool': InferPool,
+            'StreamingConcat': InferConcatLayer,
+            'StreamingEltwise': InferStreamingEltwise,
+            'StreamingSplit': InferSplitLayer,
+            'Thresholding': InferThresholdingLayer,
+            'UpsampleNearestNeighbour': InferUpsample,
+            'VVAU': InferVectorVectorActivation,
         }
 
         # Enrich discovered kernels with transforms

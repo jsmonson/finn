@@ -56,7 +56,7 @@ from finn.transformation.fpgadataflow.prepare_rtlsim import PrepareRTLSim
 from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
 from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
-from finn.util.basic import make_build_dir, getHWCustomOp
+from finn.util.basic import getHWCustomOp, make_build_dir
 
 tmpdir = os.environ["FINN_BUILD_DIR"]
 
