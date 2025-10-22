@@ -38,7 +38,6 @@ from finn.custom_op.fpgadataflow.convolutioninputgenerator import (
     ConvolutionInputGenerator,
 )
 from finn.custom_op.fpgadataflow.rtlbackend import RTLBackend
-from finn.util.basic import getHWCustomOp
 
 # RTL Convolution Input Generator / Sliding Window Generator (SWG)
 # Matches and extends the functionality of all ConvolutionInputGenerator_* functions
@@ -289,10 +288,10 @@ class ConvolutionInputGenerator_rtl(ConvolutionInputGenerator, RTLBackend):
             if self.get_nodeattr("depthwise"):
                 node = self.onnx_node
                 im2col_out = context[node.output[0]]
-                simd = getHWCustomOp(node).get_nodeattr("SIMD")
-                ofm_h, ofm_w = getHWCustomOp(node).get_nodeattr("OFMDim")
-                k_h, k_w = getHWCustomOp(node).get_nodeattr("ConvKernelDim")
-                ifm_ch = getHWCustomOp(node).get_nodeattr("IFMChannels")
+                simd = self.get_nodeattr("SIMD")
+                ofm_h, ofm_w = self.get_nodeattr("OFMDim")
+                k_h, k_w = self.get_nodeattr("ConvKernelDim")
+                ifm_ch = self.get_nodeattr("IFMChannels")
                 im2col_out = im2col_out.reshape(1, ofm_h, ofm_w, k_h * k_w, ifm_ch // simd, simd)
                 im2col_out = im2col_out.transpose(0, 1, 2, 4, 3, 5)
                 im2col_out = im2col_out.reshape(1, ofm_h, ofm_w, ifm_ch * k_h * k_w)

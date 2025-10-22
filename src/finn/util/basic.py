@@ -34,23 +34,6 @@ from qonnx.custom_op.registry import getCustomOp
 from qonnx.util.basic import roundup_to_integer_multiple
 
 
-def getHWCustomOp(node, model=None, **kwargs):
-    """Wrapper for getCustomOp that handles kernel schema transformations.
-
-    Args:
-        node: ONNX node to get custom op for
-        model: Optional ModelWrapper for kernel schema transformation (default: None)
-        **kwargs: Additional arguments to pass to getCustomOp (e.g., onnx_opset_version)
-
-    Returns:
-        Custom op instance, with kernel model applied if applicable
-    """
-    custom_op = getCustomOp(node, **kwargs)
-    if hasattr(custom_op, "kernel_schema"):
-        custom_op.get_kernel_model(model)
-    return custom_op
-
-
 # test boards used for bnn pynq tests
 test_board_map = ["Pynq-Z1", "KV260_SOM", "ZCU104", "U250"]
 
@@ -103,6 +86,23 @@ part_map = {**pynq_part_map, **alveo_part_map}
 part_map["VEK280"] = "xcve2802-vsvh1760-2MP-e-S"
 part_map["VCK190"] = "xcvc1902-vsva2197-2MP-e-S"
 part_map["V80"] = "xcv80-lsva4737-2MHP-e-s"
+
+
+def getHWCustomOp(node, model=None, **kwargs):
+    """Wrapper for getCustomOp that handles kernel schema transformations.
+
+    Args:
+        node: ONNX node to get custom op for
+        model: Optional ModelWrapper for kernel schema transformation (default: None)
+        **kwargs: Additional arguments to pass to getCustomOp (e.g., onnx_opset_version)
+
+    Returns:
+        Custom op instance, with kernel model applied if applicable
+    """
+    custom_op = getCustomOp(node, **kwargs)
+    if hasattr(custom_op, "kernel_schema"):
+        custom_op.build_design_space(model)
+    return custom_op
 
 
 def get_rtlsim_trace_depth():

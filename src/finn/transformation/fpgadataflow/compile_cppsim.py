@@ -54,7 +54,7 @@ class CompileCppSim(NodeLocalTransformation):
         if is_hls_node(node):
             try:
                 # lookup op_type in registry of CustomOps, read only
-                inst = getHWCustomOp(node)
+                inst = getHWCustomOp(node, self.ref_input_model)
                 # ensure that code is generated
                 assert (
                     inst.get_nodeattr("code_gen_dir_cppsim") != ""
