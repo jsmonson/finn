@@ -32,7 +32,6 @@ import multiprocessing as mp
 import os
 import subprocess
 import warnings
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.util.basic import get_num_default_workers
 from shutil import copytree
@@ -40,14 +39,14 @@ from shutil import copytree
 from finn.transformation.fpgadataflow.replace_verilog_relpaths import (
     ReplaceVerilogRelPaths,
 )
-from finn.util.basic import make_build_dir
+from finn.util.basic import make_build_dir, getHWCustomOp
 from finn.util.fpgadataflow import is_hls_node, is_rtl_node
 
 
 def is_external_input(model, node, i):
     # indicate whether input i of node should be made external
     # True only if input is unconnected and has no initializer
-    # Only esception is second input of FC layers when mem_mode is external
+    # Only exception is second input of FC layers when mem_mode is external
     node_inst = getHWCustomOp(node, model)
     op_type = node.op_type
     producer = model.find_producer(node.input[i])
@@ -114,7 +113,8 @@ class CreateStitchedIP(Transformation):
 
     def is_double_pumped(self, node):
         if node.op_type.startswith("MVAU"):
-            inst = getHWCustomOp(node, model)
+            # No model context, so nodeattr ready only
+            inst = getHWCustomOp(node)
             try:
                 pumped_compute = inst.get_nodeattr("pumpedCompute")
             except AttributeError:
@@ -123,7 +123,8 @@ class CreateStitchedIP(Transformation):
 
     def connect_clk_rst(self, node):
         inst_name = node.name
-        node_inst = getHWCustomOp(node, model)
+        # No model context, so nodeattr ready only
+        node_inst = getHWCustomOp(node)
         clock_intf_name = node_inst.get_verilog_top_module_intf_names()["clk"][0]
         reset_intf_name = node_inst.get_verilog_top_module_intf_names()["rst"][0]
         # make clock and reset external, if they aren't already
@@ -169,7 +170,8 @@ class CreateStitchedIP(Transformation):
 
     def connect_axi(self, node):
         inst_name = node.name
-        node_inst = getHWCustomOp(node, model)
+        # No model context, so nodeattr ready only
+        node_inst = getHWCustomOp(node)
         axilite_intf_name = node_inst.get_verilog_top_module_intf_names()["axilite"]
         aximm_intf_name = node_inst.get_verilog_top_module_intf_names()["aximm"]
         if len(axilite_intf_name) != 0:
@@ -201,7 +203,8 @@ class CreateStitchedIP(Transformation):
 
     def connect_m_axis_external(self, node, idx=None):
         inst_name = node.name
-        node_inst = getHWCustomOp(node, model)
+        # No model context, so ready only
+        node_inst = getHWCustomOp(node)
         output_intf_names = node_inst.get_verilog_top_module_intf_names()["m_axis"]
         # make output axis external
         for i in range(len(output_intf_names)):
@@ -224,7 +227,8 @@ class CreateStitchedIP(Transformation):
 
     def connect_s_axis_external(self, node, idx=None):
         inst_name = node.name
-        node_inst = getHWCustomOp(node, model)
+        # No model context, so ready only
+        node_inst = getHWCustomOp(node)
         input_intf_names = node_inst.get_verilog_top_module_intf_names()["s_axis"]
         # make input axis external
         for i in range(len(input_intf_names)):
@@ -253,7 +257,8 @@ class CreateStitchedIP(Transformation):
 
     def connect_ap_none_external(self, node):
         inst_name = node.name
-        node_inst = getHWCustomOp(node, model)
+        # No model context, so ready only
+        node_inst = getHWCustomOp(node)
         input_intf_names = node_inst.get_verilog_top_module_intf_names()["ap_none"]
         # make external
         for i in range(len(input_intf_names)):
