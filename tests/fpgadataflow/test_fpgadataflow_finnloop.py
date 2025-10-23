@@ -394,6 +394,7 @@ def prepare_loop_ops_for_ipgen_step1(node, fpga_part, clk_ns):
     )
     loop_model = loop_model.transform(SplitLargeFIFOs())
     loop_model = loop_model.transform(RemoveShallowFIFOs())
+    node_inst.set_nodeattr("body", loop_model.graph)
 
 
 def prepare_loop_ops_for_ipgen_step2(node, fpga_part, clk_ns):

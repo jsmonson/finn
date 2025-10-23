@@ -308,13 +308,9 @@ class FINNLoop(HWCustomOp, RTLBackend):
             # reset and call rtlsim, including any pre/post hooks
             self.reset_rtlsim(sim)
             mlo_prehook(sim)
-            self.reset_rtlsim(sim)
             self.rtlsim_multi_io(
                 sim,
                 io_dict,
-                # num_out_values,
-                # sname="",
-                # liveness_threshold=get_liveness_threshold_cycles(),
             )
             self.close_rtlsim(sim)
             odt = self.get_output_datatype(0)
