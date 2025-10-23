@@ -195,7 +195,7 @@ def verify_step(
         all_res = all_res and res
         res_to_str = {True: "SUCCESS", False: "FAIL"}
         res_str = res_to_str[res]
-        if cfg.verify_save_full_context:
+        if cfg.verify_save_full_context and (rtlsim_pre_hook is None):
             verification_output_fn = verify_out_dir + "/verify_%s_%d_%s.npz" % (
                 step_name,
                 b,
@@ -203,6 +203,8 @@ def verify_step(
             )
             np.savez(verification_output_fn, **out_dict)
         else:
+            if cfg.verify_save_full_context:
+                print(f"Warning: Unable to save the full context when using MLO")
             verification_output_fn = verify_out_dir + "/verify_%s_%d_%s.npy" % (
                 step_name,
                 b,
