@@ -280,7 +280,7 @@ class MVAU_rtl(MVAU, RTLBackend):
         weights = model.get_initializer(self.onnx_node.input[1])
         wdt = self.get_input_datatype(1)
         narrow_weights = (
-            0 if np.min(weights) == wdt.min() or self.get_nodeattr("dynamic_input") else 1
+            0 if np.min(weights) == wdt.min() or self.get_nodeattr("dynamic_input") or (self.get_nodeattr("mlo_max_iter") > 1) else 1
         )
         code_gen_dict["$NARROW_WEIGHTS$"] = str(narrow_weights)
         # add general parameters to dictionary
