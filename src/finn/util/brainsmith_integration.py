@@ -3,21 +3,20 @@
 Entry point: brainsmith.plugins -> finn = finn.brainsmith_integration:register_all
 
 Strategy:
-- Auto-discover components following standard patterns
-- Manually register exceptions and cross-module associations
+- Static declaration of all components (fast discovery ~1ms)
 - Zero dependencies on brainsmith (returns metadata only)
+- Lazy loading: components imported only when accessed
 
 Components:
-- Steps: Auto-discovered from finn.builder.build_dataflow_steps
-- Kernels: Auto-discovered from fpgadataflow/*.py + manual special cases
-- Backends: Auto-discovered from hls/ and rtl/ directories
-- Infer Transforms: Manual mapping (cross-module association)
-"""
+- Steps: 19 build pipeline steps (static list)
+- Kernels: 16 hardware kernels (static list)
+- Backends: 27 implementations (20 HLS + 7 RTL, static list)
+- Infer Transforms: Manual mapping (lazy metadata)
 
-import ast
-import importlib
-import inspect
-from pathlib import Path
+Maintenance:
+When adding new FINN components, add them to the static lists in
+_register_kernels(), _register_backends(), and _discover_steps().
+"""
 
 
 def register_all():
@@ -77,317 +76,109 @@ SUBCOMPONENT_KERNELS = {
 
 
 def _register_kernels():
-    """Register FINN kernels - only those with infer transforms.
-
-    Strategy:
-    1. Auto-discover kernels from fpgadataflow/*.py
-    2. Filter out infrastructure and sub-component kernels
-    3. Enrich with infer_transform metadata
+    """Register FINN kernels - static list for performance.
 
     Returns 16 kernels (all with infer transforms).
-    23 kernels excluded (see INFRASTRUCTURE_KERNELS and SUBCOMPONENT_KERNELS).
+    23 kernels excluded (infrastructure and sub-components).
+
+    Note: This is a static list for fast discovery (~1ms).
+    When adding new kernels to FINN, add them here manually.
     """
-    kernels = _discover_regular_kernels()  # Discovers and filters
-    _add_infer_transforms(kernels)  # All kernels get transforms
-
-    return kernels
-
-
-def _discover_regular_kernels():
-    """Auto-discover standard kernel classes from fpgadataflow/*.py.
-
-    Pattern: HWCustomOp subclasses in finn.custom_op.fpgadataflow module.
-    Filters out infrastructure and sub-component kernels.
-
-    Returns lazy metadata without importing:
-        [{'name': str, 'module': str, 'class_name': str}, ...]
-    """
-    import finn.custom_op.fpgadataflow as fpga
-
-    kernels = []
-
-    exclude = {
-        '__init__.py', 'hwcustomop.py', 'hlsbackend.py',
-        'rtlbackend.py', 'templates.py', 'streamingdataflowpartition.py'
-    }
-
-    fpga_dir = Path(fpga.__file__).parent
-
-    for py_file in sorted(fpga_dir.glob('*.py')):
-        if py_file.name in exclude:
-            continue
-
-        module_name = f'finn.custom_op.fpgadataflow.{py_file.stem}'
-
-        try:
-            # Parse file with AST (no import = fast!)
-            source = py_file.read_text()
-            tree = ast.parse(source)
-
-            # Find classes that inherit from HWCustomOp
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef):
-                    # Check if it inherits from HWCustomOp
-                    for base in node.bases:
-                        base_name = None
-                        if isinstance(base, ast.Name):
-                            base_name = base.id
-                        elif isinstance(base, ast.Attribute):
-                            # Handle cases like hwcustomop.HWCustomOp
-                            base_name = base.attr
-
-                        if base_name == 'HWCustomOp':
-                            class_name = node.name
-
-                            # Skip infrastructure and sub-component kernels
-                            if class_name in INFRASTRUCTURE_KERNELS or class_name in SUBCOMPONENT_KERNELS:
-                                continue
-
-                            kernels.append({
-                                'name': class_name,
-                                'module': module_name,
-                                'class_name': class_name
-                            })
-
-        except Exception:
-            pass
-
-    return kernels
-
-
-def _add_infer_transforms(kernels):
-    """Enrich kernel metadata with infer_transform metadata (lazy).
-
-    Infer transforms are in finn.transformation.fpgadataflow.convert_to_hw_layers,
-    a separate module from kernels. No automatic way to link them - requires
-    explicit mapping.
-
-    All 16 registered kernels receive transforms via TRANSFORM_MAP below.
-    (23 kernels excluded during discovery - see ignore lists at top)
-
-    Args:
-        kernels: List of kernel dicts to enrich (modified in-place)
-    """
-    # Explicit mapping: kernel name -> transform metadata (lazy)
-    # Maps each hardware kernel to its corresponding inference transformation
-    # No imports = fast!
-    TRANSFORM_MAP = {
-        'AddStreams': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferAddStreamsLayer'
-        },
-        'ChannelwiseOp': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferChannelwiseLinearLayer'
-        },
-        'ConvolutionInputGenerator': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferConvInpGen'
-        },
-        'DuplicateStreams': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferDuplicateStreamsLayer'
-        },
-        'ElementwiseBinaryOperation': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferElementwiseBinaryOperation'
-        },
-        'GlobalAccPool': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferGlobalAccPoolLayer'
-        },
-        'LabelSelect': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferLabelSelectLayer'
-        },
-        'Lookup': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferLookupLayer'
-        },
-        'MVAU': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferQuantizedMatrixVectorActivation'
-        },
-        'Pool': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferPool'
-        },
-        'StreamingConcat': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferConcatLayer'
-        },
-        'StreamingEltwise': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferStreamingEltwise'
-        },
-        'StreamingSplit': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferSplitLayer'
-        },
-        'Thresholding': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferThresholdingLayer'
-        },
-        'UpsampleNearestNeighbour': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferUpsample'
-        },
-        'VVAU': {
-            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
-            'class_name': 'InferVectorVectorActivation'
-        },
-    }
-
-    # Enrich discovered kernels with lazy transform metadata
-    for kernel in kernels:
-        if kernel['name'] in TRANSFORM_MAP:
-            kernel['infer_transform'] = TRANSFORM_MAP[kernel['name']]
+    return [
+        {'name': 'AddStreams', 'module': 'finn.custom_op.fpgadataflow.addstreams', 'class_name': 'AddStreams', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferAddStreamsLayer'}},
+        {'name': 'ChannelwiseOp', 'module': 'finn.custom_op.fpgadataflow.channelwise_op', 'class_name': 'ChannelwiseOp', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferChannelwiseLinearLayer'}},
+        {'name': 'StreamingConcat', 'module': 'finn.custom_op.fpgadataflow.concat', 'class_name': 'StreamingConcat', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferConcatLayer'}},
+        {'name': 'ConvolutionInputGenerator', 'module': 'finn.custom_op.fpgadataflow.convolutioninputgenerator', 'class_name': 'ConvolutionInputGenerator', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferConvInpGen'}},
+        {'name': 'DuplicateStreams', 'module': 'finn.custom_op.fpgadataflow.duplicatestreams', 'class_name': 'DuplicateStreams', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferDuplicateStreamsLayer'}},
+        {'name': 'ElementwiseBinaryOperation', 'module': 'finn.custom_op.fpgadataflow.elementwise_binary', 'class_name': 'ElementwiseBinaryOperation', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferElementwiseBinaryOperation'}},
+        {'name': 'GlobalAccPool', 'module': 'finn.custom_op.fpgadataflow.globalaccpool', 'class_name': 'GlobalAccPool', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferGlobalAccPoolLayer'}},
+        {'name': 'LabelSelect', 'module': 'finn.custom_op.fpgadataflow.labelselect', 'class_name': 'LabelSelect', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferLabelSelectLayer'}},
+        {'name': 'Lookup', 'module': 'finn.custom_op.fpgadataflow.lookup', 'class_name': 'Lookup', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferLookupLayer'}},
+        {'name': 'MVAU', 'module': 'finn.custom_op.fpgadataflow.matrixvectoractivation', 'class_name': 'MVAU', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferQuantizedMatrixVectorActivation'}},
+        {'name': 'Pool', 'module': 'finn.custom_op.fpgadataflow.pool', 'class_name': 'Pool', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferPool'}},
+        {'name': 'StreamingSplit', 'module': 'finn.custom_op.fpgadataflow.split', 'class_name': 'StreamingSplit', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferSplitLayer'}},
+        {'name': 'StreamingEltwise', 'module': 'finn.custom_op.fpgadataflow.streamingeltwise', 'class_name': 'StreamingEltwise', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferStreamingEltwise'}},
+        {'name': 'Thresholding', 'module': 'finn.custom_op.fpgadataflow.thresholding', 'class_name': 'Thresholding', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferThresholdingLayer'}},
+        {'name': 'UpsampleNearestNeighbour', 'module': 'finn.custom_op.fpgadataflow.upsampler', 'class_name': 'UpsampleNearestNeighbour', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferUpsample'}},
+        {'name': 'VVAU', 'module': 'finn.custom_op.fpgadataflow.vectorvectoractivation', 'class_name': 'VVAU', 'infer_transform': {'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers', 'class_name': 'InferVectorVectorActivation'}},
+    ]
 
 
 # ============================================================================
-# BACKENDS: Full auto-discovery
+# BACKENDS: Static list for performance
 # ============================================================================
 
 def _register_backends():
-    """Auto-discover all FINN backends from hls/ and rtl/ directories.
+    """Register FINN backends - static list for performance.
 
-    Pattern:
-    - HLS: finn.custom_op.fpgadataflow.hls.*_hls.py contains HLSBackend subclasses
-    - RTL: finn.custom_op.fpgadataflow.rtl.*_rtl.py contains RTLBackend subclasses
-    - Target kernel: Remove _hls or _rtl suffix from class name
+    Returns 27 backends (20 HLS + 7 RTL implementations).
 
-    Returns ~40+ backends (mix of HLS and RTL implementations).
+    Note: This is a static list for fast discovery (~1ms).
+    When adding new backends to FINN, add them here manually.
     """
-    backends = []
-    backends.extend(_discover_hls_backends())
-    backends.extend(_discover_rtl_backends())
-    return backends
-
-
-def _discover_hls_backends():
-    """Auto-discover HLS backend implementations (lazy).
-
-    Returns lazy metadata without importing:
-        [{'name': str, 'module': str, 'class_name': str, 'target_kernel': str, 'language': str}, ...]
-    """
-    import finn.custom_op.fpgadataflow.hls as hls_module
-
-    backends = []
-    hls_dir = Path(hls_module.__file__).parent
-
-    for py_file in sorted(hls_dir.glob('*.py')):
-        if py_file.name == '__init__.py':
-            continue
-
-        module_name = f'finn.custom_op.fpgadataflow.hls.{py_file.stem}'
-
-        try:
-            # Parse file with AST (no import = fast!)
-            source = py_file.read_text()
-            tree = ast.parse(source)
-
-            # Find classes that inherit from HLSBackend
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef):
-                    # Check if it inherits from HLSBackend
-                    for base in node.bases:
-                        base_name = None
-                        if isinstance(base, ast.Name):
-                            base_name = base.id
-                        elif isinstance(base, ast.Attribute):
-                            base_name = base.attr
-
-                        if base_name == 'HLSBackend':
-                            class_name = node.name
-                            target = class_name[:-4] if class_name.endswith('_hls') else class_name
-
-                            backends.append({
-                                'name': class_name,
-                                'module': module_name,
-                                'class_name': class_name,
-                                'target_kernel': f'finn:{target}',
-                                'language': 'hls'
-                            })
-
-        except Exception:
-            pass
-
-    return backends
-
-
-def _discover_rtl_backends():
-    """Auto-discover RTL backend implementations (lazy).
-
-    Returns lazy metadata without importing:
-        [{'name': str, 'module': str, 'class_name': str, 'target_kernel': str, 'language': str}, ...]
-    """
-    import finn.custom_op.fpgadataflow.rtl as rtl_module
-
-    backends = []
-    rtl_dir = Path(rtl_module.__file__).parent
-
-    for py_file in sorted(rtl_dir.glob('*.py')):
-        if py_file.name == '__init__.py':
-            continue
-
-        module_name = f'finn.custom_op.fpgadataflow.rtl.{py_file.stem}'
-
-        try:
-            # Parse file with AST (no import = fast!)
-            source = py_file.read_text()
-            tree = ast.parse(source)
-
-            # Find classes that inherit from RTLBackend
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef):
-                    # Check if it inherits from RTLBackend
-                    for base in node.bases:
-                        base_name = None
-                        if isinstance(base, ast.Name):
-                            base_name = base.id
-                        elif isinstance(base, ast.Attribute):
-                            base_name = base.attr
-
-                        if base_name == 'RTLBackend':
-                            class_name = node.name
-                            target = class_name[:-4] if class_name.endswith('_rtl') else class_name
-
-                            backends.append({
-                                'name': class_name,
-                                'module': module_name,
-                                'class_name': class_name,
-                                'target_kernel': f'finn:{target}',
-                                'language': 'rtl'
-                            })
-
-        except Exception:
-            pass
-
-    return backends
+    return [
+        # HLS Backends
+        {'name': 'AddStreams_hls', 'module': 'finn.custom_op.fpgadataflow.hls.addstreams_hls', 'class_name': 'AddStreams_hls', 'target_kernel': 'finn:AddStreams', 'language': 'hls'},
+        {'name': 'ChannelwiseOp_hls', 'module': 'finn.custom_op.fpgadataflow.hls.channelwise_op_hls', 'class_name': 'ChannelwiseOp_hls', 'target_kernel': 'finn:ChannelwiseOp', 'language': 'hls'},
+        {'name': 'CheckSum_hls', 'module': 'finn.custom_op.fpgadataflow.hls.checksum_hls', 'class_name': 'CheckSum_hls', 'target_kernel': 'finn:CheckSum', 'language': 'hls'},
+        {'name': 'StreamingConcat_hls', 'module': 'finn.custom_op.fpgadataflow.hls.concat_hls', 'class_name': 'StreamingConcat_hls', 'target_kernel': 'finn:StreamingConcat', 'language': 'hls'},
+        {'name': 'DuplicateStreams_hls', 'module': 'finn.custom_op.fpgadataflow.hls.duplicatestreams_hls', 'class_name': 'DuplicateStreams_hls', 'target_kernel': 'finn:DuplicateStreams', 'language': 'hls'},
+        {'name': 'ElementwiseBinaryOperation_hls', 'module': 'finn.custom_op.fpgadataflow.hls.elementwise_binary_hls', 'class_name': 'ElementwiseBinaryOperation_hls', 'target_kernel': 'finn:ElementwiseBinaryOperation', 'language': 'hls'},
+        {'name': 'FMPadding_Pixel_hls', 'module': 'finn.custom_op.fpgadataflow.hls.fmpadding_pixel_hls', 'class_name': 'FMPadding_Pixel_hls', 'target_kernel': 'finn:FMPadding_Pixel', 'language': 'hls'},
+        {'name': 'GlobalAccPool_hls', 'module': 'finn.custom_op.fpgadataflow.hls.globalaccpool_hls', 'class_name': 'GlobalAccPool_hls', 'target_kernel': 'finn:GlobalAccPool', 'language': 'hls'},
+        {'name': 'IODMA_hls', 'module': 'finn.custom_op.fpgadataflow.hls.iodma_hls', 'class_name': 'IODMA_hls', 'target_kernel': 'finn:IODMA', 'language': 'hls'},
+        {'name': 'LabelSelect_hls', 'module': 'finn.custom_op.fpgadataflow.hls.labelselect_hls', 'class_name': 'LabelSelect_hls', 'target_kernel': 'finn:LabelSelect', 'language': 'hls'},
+        {'name': 'Lookup_hls', 'module': 'finn.custom_op.fpgadataflow.hls.lookup_hls', 'class_name': 'Lookup_hls', 'target_kernel': 'finn:Lookup', 'language': 'hls'},
+        {'name': 'MVAU_hls', 'module': 'finn.custom_op.fpgadataflow.hls.matrixvectoractivation_hls', 'class_name': 'MVAU_hls', 'target_kernel': 'finn:MVAU', 'language': 'hls'},
+        {'name': 'Pool_hls', 'module': 'finn.custom_op.fpgadataflow.hls.pool_hls', 'class_name': 'Pool_hls', 'target_kernel': 'finn:Pool', 'language': 'hls'},
+        {'name': 'StreamingSplit_hls', 'module': 'finn.custom_op.fpgadataflow.hls.split_hls', 'class_name': 'StreamingSplit_hls', 'target_kernel': 'finn:StreamingSplit', 'language': 'hls'},
+        {'name': 'StreamingDataWidthConverter_hls', 'module': 'finn.custom_op.fpgadataflow.hls.streamingdatawidthconverter_hls', 'class_name': 'StreamingDataWidthConverter_hls', 'target_kernel': 'finn:StreamingDataWidthConverter', 'language': 'hls'},
+        {'name': 'StreamingEltwise_hls', 'module': 'finn.custom_op.fpgadataflow.hls.streamingeltwise_hls', 'class_name': 'StreamingEltwise_hls', 'target_kernel': 'finn:StreamingEltwise', 'language': 'hls'},
+        {'name': 'Thresholding_hls', 'module': 'finn.custom_op.fpgadataflow.hls.thresholding_hls', 'class_name': 'Thresholding_hls', 'target_kernel': 'finn:Thresholding', 'language': 'hls'},
+        {'name': 'TLastMarker_hls', 'module': 'finn.custom_op.fpgadataflow.hls.tlastmarker_hls', 'class_name': 'TLastMarker_hls', 'target_kernel': 'finn:TLastMarker', 'language': 'hls'},
+        {'name': 'UpsampleNearestNeighbour_hls', 'module': 'finn.custom_op.fpgadataflow.hls.upsampler_hls', 'class_name': 'UpsampleNearestNeighbour_hls', 'target_kernel': 'finn:UpsampleNearestNeighbour', 'language': 'hls'},
+        {'name': 'VVAU_hls', 'module': 'finn.custom_op.fpgadataflow.hls.vectorvectoractivation_hls', 'class_name': 'VVAU_hls', 'target_kernel': 'finn:VVAU', 'language': 'hls'},
+        # RTL Backends
+        {'name': 'ConvolutionInputGenerator_rtl', 'module': 'finn.custom_op.fpgadataflow.rtl.convolutioninputgenerator_rtl', 'class_name': 'ConvolutionInputGenerator_rtl', 'target_kernel': 'finn:ConvolutionInputGenerator', 'language': 'rtl'},
+        {'name': 'FMPadding_rtl', 'module': 'finn.custom_op.fpgadataflow.rtl.fmpadding_rtl', 'class_name': 'FMPadding_rtl', 'target_kernel': 'finn:FMPadding', 'language': 'rtl'},
+        {'name': 'MVAU_rtl', 'module': 'finn.custom_op.fpgadataflow.rtl.matrixvectoractivation_rtl', 'class_name': 'MVAU_rtl', 'target_kernel': 'finn:MVAU', 'language': 'rtl'},
+        {'name': 'StreamingDataWidthConverter_rtl', 'module': 'finn.custom_op.fpgadataflow.rtl.streamingdatawidthconverter_rtl', 'class_name': 'StreamingDataWidthConverter_rtl', 'target_kernel': 'finn:StreamingDataWidthConverter', 'language': 'rtl'},
+        {'name': 'StreamingFIFO_rtl', 'module': 'finn.custom_op.fpgadataflow.rtl.streamingfifo_rtl', 'class_name': 'StreamingFIFO_rtl', 'target_kernel': 'finn:StreamingFIFO', 'language': 'rtl'},
+        {'name': 'Thresholding_rtl', 'module': 'finn.custom_op.fpgadataflow.rtl.thresholding_rtl', 'class_name': 'Thresholding_rtl', 'target_kernel': 'finn:Thresholding', 'language': 'rtl'},
+        {'name': 'VVAU_rtl', 'module': 'finn.custom_op.fpgadataflow.rtl.vectorvectoractivation_rtl', 'class_name': 'VVAU_rtl', 'target_kernel': 'finn:VVAU', 'language': 'rtl'},
+    ]
 
 
 # ============================================================================
-# STEPS: Full auto-discovery (unchanged)
+# STEPS: Static list for performance
 # ============================================================================
 
 def _discover_steps():
-    """Auto-discover FINN builder step functions.
+    """Register FINN builder step functions - static list for performance.
 
-    Pattern: Functions named step_* in finn.builder.build_dataflow_steps
+    Returns 19 build pipeline steps.
 
-    Returns:
-        List of step dicts with name and func.
+    Note: This is a static list for fast discovery (~1ms).
+    When adding new steps to FINN, add them here manually.
     """
-    from finn.builder import build_dataflow_steps
-
-    steps = []
-
-    for name, func in inspect.getmembers(build_dataflow_steps, inspect.isfunction):
-        if name.startswith('step_') and func.__module__ == build_dataflow_steps.__name__:
-            step_name = name[5:]  # Remove 'step_' prefix
-            steps.append({
-                'name': step_name,
-                'func': func
-            })
-
-    return steps
+    return [
+        {'name': 'qonnx_to_finn', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_qonnx_to_finn'},
+        {'name': 'tidy_up', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_tidy_up'},
+        {'name': 'streamline', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_streamline'},
+        {'name': 'convert_to_hw', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_convert_to_hw'},
+        {'name': 'create_dataflow_partition', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_create_dataflow_partition'},
+        {'name': 'specialize_layers', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_specialize_layers'},
+        {'name': 'target_fps_parallelization', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_target_fps_parallelization'},
+        {'name': 'apply_folding_config', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_apply_folding_config'},
+        {'name': 'generate_estimate_reports', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_generate_estimate_reports'},
+        {'name': 'minimize_bit_width', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_minimize_bit_width'},
+        {'name': 'hw_codegen', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_hw_codegen'},
+        {'name': 'hw_ipgen', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_hw_ipgen'},
+        {'name': 'set_fifo_depths', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_set_fifo_depths'},
+        {'name': 'create_stitched_ip', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_create_stitched_ip'},
+        {'name': 'measure_rtlsim_performance', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_measure_rtlsim_performance'},
+        {'name': 'make_driver', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_make_driver'},
+        {'name': 'out_of_context_synthesis', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_out_of_context_synthesis'},
+        {'name': 'synthesize_bitfile', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_synthesize_bitfile'},
+        {'name': 'deployment_package', 'module': 'finn.builder.build_dataflow_steps', 'func_name': 'step_deployment_package'},
+    ]
