@@ -38,8 +38,6 @@ from qonnx.custom_op.general.im2col import compute_conv_output_dim
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import (
-
-from finn.util.basic import getHWCustomOp
     calculate_signed_dot_prod_range,
     gen_finn_dt_tensor,
     qonnx_make_model,
@@ -57,6 +55,7 @@ from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
 from finn.transformation.fpgadataflow.prepare_rtlsim import PrepareRTLSim
 from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
+from finn.util.basic import getHWCustomOp
 
 
 def set_up_reference_model(act, idt, wdt, k, ifm_dim, ifm_ch, stride, padding):

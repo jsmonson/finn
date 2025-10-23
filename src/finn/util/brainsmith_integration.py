@@ -14,6 +14,7 @@ Components:
 - Infer Transforms: Manual mapping (cross-module association)
 """
 
+import ast
 import importlib
 import inspect
 from pathlib import Path
@@ -98,11 +99,9 @@ def _discover_regular_kernels():
     Pattern: HWCustomOp subclasses in finn.custom_op.fpgadataflow module.
     Filters out infrastructure and sub-component kernels.
 
-    Returns:
-        List of kernel dicts: [{'name': str, 'class': type}, ...]
-        Only kernels with infer transforms are included.
+    Returns lazy metadata without importing:
+        [{'name': str, 'module': str, 'class_name': str}, ...]
     """
-    from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
     import finn.custom_op.fpgadataflow as fpga
 
     kernels = []
@@ -121,22 +120,34 @@ def _discover_regular_kernels():
         module_name = f'finn.custom_op.fpgadataflow.{py_file.stem}'
 
         try:
-            module = importlib.import_module(module_name)
+            # Parse file with AST (no import = fast!)
+            source = py_file.read_text()
+            tree = ast.parse(source)
 
-            # Find all HWCustomOp subclasses defined in this module
-            for name, cls in inspect.getmembers(module, inspect.isclass):
-                if (cls.__module__ == module.__name__ and
-                    issubclass(cls, HWCustomOp) and
-                    cls is not HWCustomOp):
+            # Find classes that inherit from HWCustomOp
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    # Check if it inherits from HWCustomOp
+                    for base in node.bases:
+                        base_name = None
+                        if isinstance(base, ast.Name):
+                            base_name = base.id
+                        elif isinstance(base, ast.Attribute):
+                            # Handle cases like hwcustomop.HWCustomOp
+                            base_name = base.attr
 
-                    # Skip infrastructure and sub-component kernels
-                    if name in INFRASTRUCTURE_KERNELS or name in SUBCOMPONENT_KERNELS:
-                        continue
+                        if base_name == 'HWCustomOp':
+                            class_name = node.name
 
-                    kernels.append({
-                        'name': name,
-                        'class': cls
-                    })
+                            # Skip infrastructure and sub-component kernels
+                            if class_name in INFRASTRUCTURE_KERNELS or class_name in SUBCOMPONENT_KERNELS:
+                                continue
+
+                            kernels.append({
+                                'name': class_name,
+                                'module': module_name,
+                                'class_name': class_name
+                            })
 
         except Exception:
             pass
@@ -145,7 +156,7 @@ def _discover_regular_kernels():
 
 
 def _add_infer_transforms(kernels):
-    """Enrich kernel metadata with infer_transform classes.
+    """Enrich kernel metadata with infer_transform metadata (lazy).
 
     Infer transforms are in finn.transformation.fpgadataflow.convert_to_hw_layers,
     a separate module from kernels. No automatic way to link them - requires
@@ -157,56 +168,80 @@ def _add_infer_transforms(kernels):
     Args:
         kernels: List of kernel dicts to enrich (modified in-place)
     """
-    # Import available infer transforms
-    try:
-        from finn.transformation.fpgadataflow.convert_to_hw_layers import (
-            InferAddStreamsLayer,
-            InferBinaryMatrixVectorActivation,
-            InferChannelwiseLinearLayer,
-            InferConcatLayer,
-            InferConvInpGen,
-            InferDuplicateStreamsLayer,
-            InferElementwiseBinaryOperation,
-            InferGlobalAccPoolLayer,
-            InferLabelSelectLayer,
-            InferLookupLayer,
-            InferPool,
-            InferQuantizedMatrixVectorActivation,
-            InferSplitLayer,
-            InferStreamingEltwise,
-            InferThresholdingLayer,
-            InferUpsample,
-            InferVectorVectorActivation,
-        )
+    # Explicit mapping: kernel name -> transform metadata (lazy)
+    # Maps each hardware kernel to its corresponding inference transformation
+    # No imports = fast!
+    TRANSFORM_MAP = {
+        'AddStreams': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferAddStreamsLayer'
+        },
+        'ChannelwiseOp': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferChannelwiseLinearLayer'
+        },
+        'ConvolutionInputGenerator': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferConvInpGen'
+        },
+        'DuplicateStreams': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferDuplicateStreamsLayer'
+        },
+        'ElementwiseBinaryOperation': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferElementwiseBinaryOperation'
+        },
+        'GlobalAccPool': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferGlobalAccPoolLayer'
+        },
+        'LabelSelect': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferLabelSelectLayer'
+        },
+        'Lookup': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferLookupLayer'
+        },
+        'MVAU': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferQuantizedMatrixVectorActivation'
+        },
+        'Pool': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferPool'
+        },
+        'StreamingConcat': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferConcatLayer'
+        },
+        'StreamingEltwise': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferStreamingEltwise'
+        },
+        'StreamingSplit': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferSplitLayer'
+        },
+        'Thresholding': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferThresholdingLayer'
+        },
+        'UpsampleNearestNeighbour': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferUpsample'
+        },
+        'VVAU': {
+            'module': 'finn.transformation.fpgadataflow.convert_to_hw_layers',
+            'class_name': 'InferVectorVectorActivation'
+        },
+    }
 
-        # Explicit mapping: kernel name -> transform class
-        # Maps each hardware kernel to its corresponding inference transformation
-        TRANSFORM_MAP = {
-            'AddStreams': InferAddStreamsLayer,
-            'ChannelwiseOp': InferChannelwiseLinearLayer,
-            'ConvolutionInputGenerator': InferConvInpGen,
-            'DuplicateStreams': InferDuplicateStreamsLayer,
-            'ElementwiseBinaryOperation': InferElementwiseBinaryOperation,
-            'GlobalAccPool': InferGlobalAccPoolLayer,
-            'LabelSelect': InferLabelSelectLayer,
-            'Lookup': InferLookupLayer,
-            'MVAU': InferQuantizedMatrixVectorActivation,
-            'Pool': InferPool,
-            'StreamingConcat': InferConcatLayer,
-            'StreamingEltwise': InferStreamingEltwise,
-            'StreamingSplit': InferSplitLayer,
-            'Thresholding': InferThresholdingLayer,
-            'UpsampleNearestNeighbour': InferUpsample,
-            'VVAU': InferVectorVectorActivation,
-        }
-
-        # Enrich discovered kernels with transforms
-        for kernel in kernels:
-            if kernel['name'] in TRANSFORM_MAP:
-                kernel['infer_transform'] = TRANSFORM_MAP[kernel['name']]
-
-    except ImportError:
-        pass
+    # Enrich discovered kernels with lazy transform metadata
+    for kernel in kernels:
+        if kernel['name'] in TRANSFORM_MAP:
+            kernel['infer_transform'] = TRANSFORM_MAP[kernel['name']]
 
 
 # ============================================================================
@@ -230,12 +265,11 @@ def _register_backends():
 
 
 def _discover_hls_backends():
-    """Auto-discover HLS backend implementations.
+    """Auto-discover HLS backend implementations (lazy).
 
-    Returns:
-        List of backend dicts with name, class, target_kernel, language.
+    Returns lazy metadata without importing:
+        [{'name': str, 'module': str, 'class_name': str, 'target_kernel': str, 'language': str}, ...]
     """
-    from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
     import finn.custom_op.fpgadataflow.hls as hls_module
 
     backends = []
@@ -248,21 +282,32 @@ def _discover_hls_backends():
         module_name = f'finn.custom_op.fpgadataflow.hls.{py_file.stem}'
 
         try:
-            module = importlib.import_module(module_name)
+            # Parse file with AST (no import = fast!)
+            source = py_file.read_text()
+            tree = ast.parse(source)
 
-            for name, cls in inspect.getmembers(module, inspect.isclass):
-                if (cls.__module__ == module.__name__ and
-                    issubclass(cls, HLSBackend) and
-                    cls is not HLSBackend):
+            # Find classes that inherit from HLSBackend
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    # Check if it inherits from HLSBackend
+                    for base in node.bases:
+                        base_name = None
+                        if isinstance(base, ast.Name):
+                            base_name = base.id
+                        elif isinstance(base, ast.Attribute):
+                            base_name = base.attr
 
-                    target = name[:-4] if name.endswith('_hls') else name
+                        if base_name == 'HLSBackend':
+                            class_name = node.name
+                            target = class_name[:-4] if class_name.endswith('_hls') else class_name
 
-                    backends.append({
-                        'name': name,
-                        'class': cls,
-                        'target_kernel': f'finn:{target}',
-                        'language': 'hls'
-                    })
+                            backends.append({
+                                'name': class_name,
+                                'module': module_name,
+                                'class_name': class_name,
+                                'target_kernel': f'finn:{target}',
+                                'language': 'hls'
+                            })
 
         except Exception:
             pass
@@ -271,12 +316,11 @@ def _discover_hls_backends():
 
 
 def _discover_rtl_backends():
-    """Auto-discover RTL backend implementations.
+    """Auto-discover RTL backend implementations (lazy).
 
-    Returns:
-        List of backend dicts with name, class, target_kernel, language.
+    Returns lazy metadata without importing:
+        [{'name': str, 'module': str, 'class_name': str, 'target_kernel': str, 'language': str}, ...]
     """
-    from finn.custom_op.fpgadataflow.rtlbackend import RTLBackend
     import finn.custom_op.fpgadataflow.rtl as rtl_module
 
     backends = []
@@ -289,21 +333,32 @@ def _discover_rtl_backends():
         module_name = f'finn.custom_op.fpgadataflow.rtl.{py_file.stem}'
 
         try:
-            module = importlib.import_module(module_name)
+            # Parse file with AST (no import = fast!)
+            source = py_file.read_text()
+            tree = ast.parse(source)
 
-            for name, cls in inspect.getmembers(module, inspect.isclass):
-                if (cls.__module__ == module.__name__ and
-                    issubclass(cls, RTLBackend) and
-                    cls is not RTLBackend):
+            # Find classes that inherit from RTLBackend
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    # Check if it inherits from RTLBackend
+                    for base in node.bases:
+                        base_name = None
+                        if isinstance(base, ast.Name):
+                            base_name = base.id
+                        elif isinstance(base, ast.Attribute):
+                            base_name = base.attr
 
-                    target = name[:-4] if name.endswith('_rtl') else name
+                        if base_name == 'RTLBackend':
+                            class_name = node.name
+                            target = class_name[:-4] if class_name.endswith('_rtl') else class_name
 
-                    backends.append({
-                        'name': name,
-                        'class': cls,
-                        'target_kernel': f'finn:{target}',
-                        'language': 'rtl'
-                    })
+                            backends.append({
+                                'name': class_name,
+                                'module': module_name,
+                                'class_name': class_name,
+                                'target_kernel': f'finn:{target}',
+                                'language': 'rtl'
+                            })
 
         except Exception:
             pass
