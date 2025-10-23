@@ -55,7 +55,7 @@ class HLSSynthIP(NodeLocalTransformation):
 
     def applyNodeLocal(self, node):
         op_type = node.op_type
-        if is_hls_node(node):
+        if is_hls_node(node) or node.op_type == "FINNLoop":
             try:
                 # lookup op_type in registry of CustomOps
                 inst = registry.getCustomOp(node)

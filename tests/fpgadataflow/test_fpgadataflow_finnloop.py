@@ -5,7 +5,12 @@ import onnx
 from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.transformation.general import GiveUniqueNodeNames, RemoveUnusedTensors
+from qonnx.custom_op.registry import getCustomOp
+from qonnx.transformation.general import (
+    GiveReadableTensorNames,
+    GiveUniqueNodeNames,
+    RemoveUnusedTensors,
+)
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.transformation.merge_onnx_models import MergeONNXModels
@@ -19,10 +24,16 @@ from finn.transformation.fpgadataflow.hlssynth_ip import HLSSynthIP
 from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
 from finn.transformation.fpgadataflow.prepare_cppsim import PrepareCppSim
 from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
-
-# from finn.transformation.fpgadataflow.prepare_rtlsim import PrepareRTLSim
+from finn.transformation.fpgadataflow.prepare_rtlsim import PrepareRTLSim
+from finn.transformation.fpgadataflow.replace_verilog_relpaths import (
+    ReplaceVerilogRelPaths,
+)
 from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
-from finn.transformation.fpgadataflow.set_fifo_depths import InsertAndSetFIFODepths
+from finn.transformation.fpgadataflow.set_fifo_depths import (
+    InsertAndSetFIFODepths,
+    RemoveShallowFIFOs,
+    SplitLargeFIFOs,
+)
 from finn.util.mlo_sim import mlo_prehook_func_factory
 
 fpga_part = "xcvc1902-vsva2197-2MP-e-S"
@@ -65,10 +76,10 @@ def create_node(node_type, inputs, outputs, name, extra_params={}):
 def make_loop_modelwrapper(
     mw,
     mh,
-    dtype=DataType["INT4"],
+    dtype=DataType["INT8"],
     elemwise_optype="ElementwiseMul_hls",
     rhs_shape=[1],
-    eltw_param_dtype="INT4",
+    eltw_param_dtype="INT8",
     name_suffix="",
 ):
     elemwise_output_dtype = (
@@ -140,8 +151,8 @@ def make_loop_modelwrapper(
                 "MH": mh,
                 "SIMD": 2,
                 "PE": 2,
-                "inputDataType": "INT4",
-                "weightDataType": "INT4",
+                "inputDataType": "INT8",
+                "weightDataType": "INT8",
                 "outputDataType": "INT32",
                 "ActVal": 0,
                 "binaryXnorMode": 0,
@@ -173,8 +184,8 @@ def make_loop_modelwrapper(
                 "MH": mh,
                 "SIMD": 2,
                 "PE": 2,
-                "inputDataType": "INT4",
-                "weightDataType": "INT4",
+                "inputDataType": "INT8",
+                "weightDataType": "INT8",
                 "outputDataType": "INT32",
                 "ActVal": 0,
                 "binaryXnorMode": 0,
@@ -206,8 +217,8 @@ def make_loop_modelwrapper(
                 "MH": mh,
                 "SIMD": 2,
                 "PE": 2,
-                "inputDataType": "INT4",
-                "weightDataType": "INT4",
+                "inputDataType": "INT8",
+                "weightDataType": "INT8",
                 "outputDataType": "INT32",
                 "ActVal": 0,
                 "binaryXnorMode": 0,
@@ -328,7 +339,7 @@ def make_loop_modelwrapper(
 
 
 def create_chained_loop_bodies(
-    mw, mh, num_copies, elemwise_optype="ElementwiseMul_hls", rhs_shape=[1], eltw_param_dtype="INT4"
+    mw, mh, num_copies, elemwise_optype="ElementwiseMul_hls", rhs_shape=[1], eltw_param_dtype="INT8"
 ):
     loop_body_models = []
 
@@ -338,7 +349,7 @@ def create_chained_loop_bodies(
         loop_body_model = make_loop_modelwrapper(
             mw=mw,
             mh=mh,
-            dtype=DataType["INT4"],
+            dtype=DataType["INT8"],
             elemwise_optype=elemwise_optype,
             rhs_shape=rhs_shape,
             eltw_param_dtype=eltw_param_dtype,
@@ -347,7 +358,7 @@ def create_chained_loop_bodies(
         for node in loop_body_model.graph.node:
             node.metadata_props.append(
                 onnx.StringStringEntryProto(
-                    key="pkg.torch.onnx.name_scopes", value=f"['', 'layers.{i}']"
+                    key="pkg.torch.onnx.name_scopes", value=f"['', 'layers.{num_copies-(i+1)}']"
                 )
             )
             node.metadata_props.append(
@@ -361,6 +372,47 @@ def create_chained_loop_bodies(
     return loop_body_models
 
 
+def prepare_loop_ops_for_ipgen_step1(node, fpga_part, clk_ns):
+    node_inst = getCustomOp(node)
+    loop_model = node_inst.get_nodeattr("body")
+    # go first into subgraph to check if there are other loop ops
+    loop_nodes = loop_model.get_nodes_by_op_type("FINNLoop")
+    for loop_node in loop_nodes:
+        prepare_loop_ops_for_ipgen_step1(loop_node, fpga_part, clk_ns)
+    loop_model = loop_model.transform(PrepareIP(fpga_part, clk_ns))
+    loop_model = loop_model.transform(HLSSynthIP())
+    loop_model = loop_model.transform(ReplaceVerilogRelPaths())
+    loop_model = loop_model.transform(GiveUniqueNodeNames())
+    loop_model = loop_model.transform(GiveReadableTensorNames())
+    if node_inst.get_nodeattr("rtlsim_trace"):
+        loop_model.set_metadata_prop("rtlsim_trace", f"{node.name}_fifosim_trace.wdb")
+    loop_model = loop_model.transform(
+        InsertAndSetFIFODepths(
+            fpga_part,
+            clk_ns,
+        )
+    )
+    loop_model = loop_model.transform(SplitLargeFIFOs())
+    loop_model = loop_model.transform(RemoveShallowFIFOs())
+
+
+def prepare_loop_ops_for_ipgen_step2(node, fpga_part, clk_ns):
+    node_inst = getCustomOp(node)
+    loop_model = node_inst.get_nodeattr("body")
+    # go first into subgraph to check if there are other loop ops
+    loop_nodes = loop_model.get_nodes_by_op_type("FINNLoop")
+    for loop_node in loop_nodes:
+        prepare_loop_ops_for_ipgen_step2(loop_node, fpga_part, clk_ns)
+    loop_model = loop_model.transform(HLSSynthIP())
+    loop_model = loop_model.transform(
+        CreateStitchedIP(
+            fpga_part,
+            clk_ns,
+        )
+    )
+    node_inst.set_nodeattr("body", loop_model.graph)
+
+
 # dimensions
 @pytest.mark.parametrize("dim", [16])
 # iteration count, number of models chained together
@@ -370,15 +422,43 @@ def create_chained_loop_bodies(
 # elementwise shape
 @pytest.mark.parametrize("rhs_shape", [[1], [16]])
 # eltwise param dtype
-@pytest.mark.parametrize("eltw_param_dtype", ["INT4", "FLOAT32"])
+@pytest.mark.parametrize("eltw_param_dtype", ["INT8", "FLOAT32"])
+# tail node
+@pytest.mark.parametrize("tail_node", [False, True])
 @pytest.mark.fpgataflow
-def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_param_dtype):
+def test_fpgadataflow_finnloop(
+    dim, iteration, elemwise_optype, rhs_shape, eltw_param_dtype, tail_node
+):
     loop_body_models = create_chained_loop_bodies(
         dim, dim, iteration, elemwise_optype, rhs_shape, eltw_param_dtype
     )
     model = loop_body_models[0]
     for m in loop_body_models[1:]:
         model = model.transform(MergeONNXModels(m))
+
+    if tail_node:
+        tail_outp = create_tensor_info("tail_outp", [1, 3, 3, dim])
+        tr_node = create_node(
+            "ElementwiseAdd_hls",
+            [model.graph.output[0].name, "tail_add"],
+            ["tail_outp"],
+            "Add_tail",
+            {
+                "lhs_shape": [1, 3, 3, dim],
+                "rhs_shape": [1],
+                "out_shape": [1, 3, 3, dim],
+                "lhs_dtype": "INT8",
+                "rhs_dtype": "INT8",
+                "out_dtype": "INT9",
+            },
+        )
+        model.graph.node.insert(len(model.graph.node), tr_node)
+        model.graph.value_info.append(model.graph.output[0])
+        model.graph.output.pop(0)
+        model.graph.output.append(tail_outp)
+        AddtailParam = gen_finn_dt_tensor(DataType["INT8"], [1])
+        model.set_initializer("tail_add", AddtailParam)
+        model.set_tensor_datatype("tail_add", DataType["INT8"])
 
     # cleanup
     model = model.transform(RemoveUnusedTensors())
@@ -390,7 +470,7 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     model = model.transform(CompileCppSim())
     model = model.transform(SetExecMode("cppsim"))
     # generate reference io pair
-    x = gen_finn_dt_tensor(DataType["INT4"], (1, 3, 3, dim))
+    x = gen_finn_dt_tensor(DataType["INT8"], (1, 3, 3, dim))
     io_dict = {model.graph.input[0].name: x}
     y_dict = oxe.execute_onnx(model, io_dict)
     y_ref = y_dict[model.graph.output[0].name]
@@ -428,28 +508,39 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     # node-by-node rtlsim
     model = model.transform(GiveUniqueNodeNames(), apply_to_subgraphs=True)
     # TODO: allow for node-by-node rtlsim of a finn loop op
-    # model = model.transform(SetExecMode("rtlsim"), apply_to_subgraphs=True)
-    # model = model.transform(PrepareIP(fpga_part, clk_ns), apply_to_subgraphs=True)
-    # model = model.transform(HLSSynthIP(), apply_to_subgraphs=True)
-    # model = model.transform(PrepareRTLSim(), apply_to_subgraphs=True)
-
-    # y_dict = oxe.execute_onnx(model, io_dict)
-    # y_prod = y_dict[model.graph.output[0].name]
-    # assert (y_prod == y_ref).all()
-
-    # FIFO sizing
-    model = model.transform(InsertAndSetFIFODepths(fpga_part, clk_ns), apply_to_subgraphs=True)
-
-    # stitched IP rtlsim
+    model = model.transform(SetExecMode("rtlsim"))
+    loop_nodes = model.get_nodes_by_op_type("FINNLoop")
+    for node in loop_nodes:
+        prepare_loop_ops_for_ipgen_step1(node, fpga_part, clk_ns)
     model = model.transform(
         PrepareIP(fpga_part, clk_ns), apply_to_subgraphs=True, use_preorder_traversal=False
     )
-    model = model.transform(HLSSynthIP(), apply_to_subgraphs=True)
-    model = model.transform(
-        CreateStitchedIP(fpga_part, clk_ns), apply_to_subgraphs=True, use_preorder_traversal=False
-    )
+    loop_nodes = model.get_nodes_by_op_type("FINNLoop")
+    for node in loop_nodes:
+        prepare_loop_ops_for_ipgen_step2(node, fpga_part, clk_ns)
 
-    mlo_prehook = mlo_prehook_func_factory(model)
-    rtlsim_exec(model, io_dict, pre_hook=mlo_prehook)
-    y_prod = io_dict[model.graph.output[0].name]
+    model = model.transform(HLSSynthIP())
+    model.save("finn_loop.onnx")
+    model = model.transform(PrepareRTLSim())
+
+    io_dict = {model.graph.input[0].name: x}
+    y_dict = oxe.execute_onnx(model, io_dict)
+    y_prod = y_dict[model.graph.output[0].name]
     assert (y_prod == y_ref).all()
+
+    ## FIFO sizing
+    # model = model.transform(InsertAndSetFIFODepths(fpga_part, clk_ns), apply_to_subgraphs=True)
+
+    # stitched IP rtlsim
+    # model = model.transform(
+    #    PrepareIP(fpga_part, clk_ns), apply_to_subgraphs=True, use_preorder_traversal=False
+    # )
+    # model = model.transform(HLSSynthIP(), apply_to_subgraphs=True)
+    # model = model.transform(
+    #    CreateStitchedIP(fpga_part, clk_ns), apply_to_subgraphs=True, use_preorder_traversal=False
+    # )
+
+    # mlo_prehook = mlo_prehook_func_factory(model)
+    # rtlsim_exec(model, io_dict, pre_hook=mlo_prehook)
+    # y_prod = io_dict[model.graph.output[0].name]
+    # assert (y_prod == y_ref).all()
