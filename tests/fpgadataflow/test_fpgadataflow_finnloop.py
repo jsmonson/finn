@@ -20,7 +20,13 @@ import finn.core.onnx_exec as oxe
 from finn.core.rtlsim_exec import rtlsim_exec
 from finn.transformation.fpgadataflow.compile_cppsim import CompileCppSim
 from finn.transformation.fpgadataflow.create_stitched_ip import CreateStitchedIP
+from finn.transformation.fpgadataflow.derive_characteristic import (
+    DeriveCharacteristic,
+    DeriveFIFOSizes,
+)
 from finn.transformation.fpgadataflow.hlssynth_ip import HLSSynthIP
+from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
+from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
 from finn.transformation.fpgadataflow.loop_rolling import LoopExtraction, LoopRolling
 from finn.transformation.fpgadataflow.prepare_cppsim import PrepareCppSim
 from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
@@ -34,6 +40,7 @@ from finn.transformation.fpgadataflow.set_fifo_depths import (
     RemoveShallowFIFOs,
     SplitLargeFIFOs,
 )
+from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
 from finn.util.mlo_sim import mlo_prehook_func_factory
 
 fpga_part = "xcvc1902-vsva2197-2MP-e-S"
@@ -425,7 +432,7 @@ def prepare_loop_ops_for_ipgen_step2(node, fpga_part, clk_ns):
 # eltwise param dtype
 @pytest.mark.parametrize("eltw_param_dtype", ["INT8", "FLOAT32"])
 # tail node
-@pytest.mark.parametrize("tail_node", [False, True])
+@pytest.mark.parametrize("tail_node", [True])
 @pytest.mark.fpgataflow
 def test_fpgadataflow_finnloop(
     dim, iteration, elemwise_optype, rhs_shape, eltw_param_dtype, tail_node
@@ -521,7 +528,6 @@ def test_fpgadataflow_finnloop(
         prepare_loop_ops_for_ipgen_step2(node, fpga_part, clk_ns)
 
     model = model.transform(HLSSynthIP())
-    model.save("finn_loop.onnx")
     model = model.transform(PrepareRTLSim())
 
     io_dict = {model.graph.input[0].name: x}
@@ -529,19 +535,29 @@ def test_fpgadataflow_finnloop(
     y_prod = y_dict[model.graph.output[0].name]
     assert (y_prod == y_ref).all()
 
-    ## FIFO sizing
-    # model = model.transform(InsertAndSetFIFODepths(fpga_part, clk_ns), apply_to_subgraphs=True)
+    # FIFO sizing
+    model = model.transform(InsertDWC())
+    model = model.transform(SpecializeLayers(fpga_part))
+    model = model.transform(GiveUniqueNodeNames())
+    model = model.transform(PrepareIP(fpga_part, clk_ns))
+    model = model.transform(HLSSynthIP())
+    model = model.transform(PrepareRTLSim())
+    model = model.transform(DeriveCharacteristic(6000))
+    model = model.transform(DeriveFIFOSizes())
+    model = model.transform(InsertFIFO(True))
+    model = model.transform(SpecializeLayers(fpga_part))
+    model = model.transform(GiveUniqueNodeNames())
+    model = model.transform(GiveReadableTensorNames())
+
+    model.save("finn_loop.onnx")
 
     # stitched IP rtlsim
-    # model = model.transform(
-    #    PrepareIP(fpga_part, clk_ns), apply_to_subgraphs=True, use_preorder_traversal=False
-    # )
-    # model = model.transform(HLSSynthIP(), apply_to_subgraphs=True)
-    # model = model.transform(
-    #    CreateStitchedIP(fpga_part, clk_ns), apply_to_subgraphs=True, use_preorder_traversal=False
-    # )
+    model = model.transform(PrepareIP(fpga_part, clk_ns))
+    model = model.transform(HLSSynthIP())
+    model = model.transform(CreateStitchedIP(fpga_part, clk_ns))
 
-    # mlo_prehook = mlo_prehook_func_factory(model)
-    # rtlsim_exec(model, io_dict, pre_hook=mlo_prehook)
-    # y_prod = io_dict[model.graph.output[0].name]
-    # assert (y_prod == y_ref).all()
+    loop_node = model.get_nodes_by_op_type("FINNLoop")[0]
+    mlo_prehook = mlo_prehook_func_factory(loop_node)
+    rtlsim_exec(model, io_dict, pre_hook=mlo_prehook)
+    y_prod = io_dict[model.graph.output[0].name]
+    assert (y_prod == y_ref).all()

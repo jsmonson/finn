@@ -431,7 +431,7 @@ class HWCustomOp(CustomOp):
         ) as f:
             f.write(template_wrapper)
 
-    def derive_characteristic_fxns(self, period, override_rtlsim_dict=None):
+    def derive_characteristic_fxns(self, period, override_rtlsim_dict=None, pre_hook=None):
         """Return the unconstrained characteristic functions for this node."""
         # ensure rtlsim is ready
         assert self.get_nodeattr("rtlsim_so") != "", "rtlsim not ready for " + self.onnx_node.name
@@ -469,6 +469,8 @@ class HWCustomOp(CustomOp):
         # signal name, note no underscore at the end (new finnxsi behavior)
         sname = "_V"
         self.reset_rtlsim(sim)
+        if pre_hook is not None:
+            pre_hook(sim)
         # create stream tracers for all input and output streams
         for k in txns_in.keys():
             txns_in[k] = sim.trace_stream(k + sname)
