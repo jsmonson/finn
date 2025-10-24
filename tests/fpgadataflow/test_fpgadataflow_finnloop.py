@@ -396,7 +396,7 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
     y_ref = y_dict[model.graph.output[0].name]
 
     # loop extraction and rolling
-    loop_extraction = LoopExtraction(hierarchy_list=["", "layers.0"])
+    loop_extraction = LoopExtraction(hierarchy_list=[["", "layers.0"]])
     model = model.transform(loop_extraction)
 
     assert (
@@ -405,25 +405,24 @@ def test_fpgadataflow_finnloop(dim, iteration, elemwise_optype, rhs_shape, eltw_
 
     model = model.transform(LoopRolling(loop_extraction.loop_body_template))
 
-    # the rhs_style for the elementwise node needs to be set to 'input' for the loop
-    # this requires recompilation of the elementwise node for cppsim
+    # LoopRolling automatically adapts operator attributes for loop context
+    # (e.g., rhs_style changes from "const" to "input" for streamed parameters)
+    # This requires recompilation of the elementwise node for cppsim
     loop_node = model.get_nodes_by_op_type("FINNLoop")[0]
     loop_body_graph = get_by_name(loop_node.attribute, "body").g
     elementwise_node = get_by_name(loop_body_graph.node, elemwise_optype, "op_type")
-    rhs_style_attr = get_by_name(elementwise_node.attribute, "rhs_style")
-    rhs_style_attr.s = b"input"
     code_gen_dir_cppsim_attr = get_by_name(elementwise_node.attribute, "code_gen_dir_cppsim")
     code_gen_dir_cppsim_attr.s = b""  # reset cpp gen directory to force recompilation
     executable_path_attr = get_by_name(elementwise_node.attribute, "executable_path")
     executable_path_attr.s = b""  # reset cpp exec directory to force recompilation
 
-    # recompile element wise node for cppsim
-    # model = model.transform(PrepareCppSim(), apply_to_subgraphs=True)
-    # model = model.transform(CompileCppSim(), apply_to_subgraphs=True)
+    # recompile elementwise node for cppsim
+    model = model.transform(PrepareCppSim(), apply_to_subgraphs=True)
+    model = model.transform(CompileCppSim(), apply_to_subgraphs=True)
 
-    # y_dict = oxe.execute_onnx(model, io_dict)
-    # y_prod = y_dict[model.graph.output[0].name]
-    # assert (y_prod == y_ref).all()
+    y_dict = oxe.execute_onnx(model, io_dict)
+    y_prod = y_dict[model.graph.output[0].name]
+    assert (y_prod == y_ref).all()
 
     # node-by-node rtlsim
     model = model.transform(GiveUniqueNodeNames(), apply_to_subgraphs=True)
