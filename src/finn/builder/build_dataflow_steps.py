@@ -268,7 +268,7 @@ def prepare_loop_ops_fifo_sizing(node, fpga_part, clk_ns):
     loop_model = loop_model.transform(PrepareIP(fpga_part, clk_ns))
     loop_model = loop_model.transform(HLSSynthIP(fpga_part))
     loop_model = loop_model.transform(ReplaceVerilogRelPaths())
-    loop_model = loop_model.transform(GiveUniqueNodeNames())
+    loop_model = loop_model.transform(GiveUniqueNodeNames(prefix=node.name + "_"))
     loop_model = loop_model.transform(GiveReadableTensorNames())
     if node_inst.get_nodeattr("rtlsim_trace"):
         loop_model.set_metadata_prop("rtlsim_trace", f"{node.name}_fifosim_trace.wdb")
