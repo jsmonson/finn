@@ -500,6 +500,7 @@ def step_apply_folding_config(model: ModelWrapper, cfg: DataflowBuildConfig):
             node_inst = getCustomOp(node)
             loop_model = node_inst.get_nodeattr("body")
             loop_model = loop_model.transform(GiveUniqueNodeNames(prefix=node.name + "_"))
+            node_inst.set_nodeattr("body", loop_model.graph)
         model = model.transform(ApplyConfig(cfg.folding_config_file), apply_to_subgraphs=True)
 
     if VerificationStepType.FOLDED_HLS_CPPSIM in cfg._resolve_verification_steps():
