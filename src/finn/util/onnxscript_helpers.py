@@ -1,5 +1,6 @@
 import ast
 from collections.abc import Iterable
+from onnx_ir import _enums
 from onnxscript import ir
 from onnxscript.rewriter._pattern_ir import (
     GraphPattern,
@@ -18,7 +19,7 @@ from onnxscript.rewriter.pattern import (
 )
 from qonnx.util.basic import is_finn_op
 from typing import List, Optional
-from onnx_ir import _enums
+
 
 class SubGraphView(ir.GraphView):
     """Create a read-only view of a subgraph defined by a set of nodes.

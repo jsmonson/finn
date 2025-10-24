@@ -76,20 +76,18 @@ class ElementwiseBinaryOperation_hls(
     def adapt_for_loop_body(self, input_types):
         """
         Adapt elementwise binary operator for loop body execution.
-        
         When an elementwise operator is placed inside a loop, parameters that
         are indexed per iteration (PARAMETER type) need to be received as
         streaming inputs rather than embedded constants. This method changes
         the lhs_style/rhs_style attributes from "const" to "input" as needed.
         """
         from finn.transformation.fpgadataflow.loop_rolling import LoopBodyInputType
-        
+
         # If rhs (input[1]) is a PARAMETER (streamed per iteration),
         # change its style to "input"
         if len(input_types) > 1 and input_types[1] == LoopBodyInputType.PARAMETER:
             if self.rhs_style == "const":
                 self.set_nodeattr("rhs_style", "input")
-        
         # Similarly for lhs if needed
         if len(input_types) > 0 and input_types[0] == LoopBodyInputType.PARAMETER:
             if self.lhs_style == "const":
