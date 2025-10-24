@@ -204,7 +204,7 @@ def verify_step(
             np.savez(verification_output_fn, **out_dict)
         else:
             if cfg.verify_save_full_context:
-                print(f"Warning: Unable to save the full context when using MLO")
+                print("Warning: Unable to save the full context when using MLO")
             verification_output_fn = verify_out_dir + "/verify_%s_%d_%s.npy" % (
                 step_name,
                 b,
