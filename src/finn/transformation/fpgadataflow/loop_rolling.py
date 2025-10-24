@@ -257,7 +257,9 @@ class LoopExtraction(Transformation):
                 nodes += P.get_nodes(hierarchy)
 
         loop_body_graph_view = osh.SubGraphView(graph, "loop-body", nodes)
-        loop_body_model = onnxscript.ir.Model(loop_body_graph_view, ir_version=model.model.ir_version)
+        loop_body_model = onnxscript.ir.Model(
+            loop_body_graph_view, ir_version=model.model.ir_version
+        )
         proto = onnxscript.ir.serde.serialize_model(loop_body_model)
 
         onnx.save(proto, "loop-body-template.onnx")
@@ -287,7 +289,9 @@ def add_finn_datatype_if_needed(tensor):
     if not tensor_has_finn_datatype(tensor):
         if "quant_parameter_tensor_names" not in tensor.meta:
             tensor.meta["quant_parameter_tensor_names"] = {}
-        tensor.meta["quant_parameter_tensor_names"]["finn_datatype"] = osh.tensor_type_to_finn_datatype_string(tensor.type)
+        tensor.meta["quant_parameter_tensor_names"][
+            "finn_datatype"
+        ] = osh.tensor_type_to_finn_datatype_string(tensor.type)
 
 
 def validate_loop_type(loop_node: ir.Node):
@@ -311,26 +315,41 @@ def validate_loop_attributes(loop_node: ir.Node):
 
 
 def tensor_has_finn_datatype(tensor):
-    return "quant_parameter_tensor_names" in tensor.meta and "finn_datatype" in tensor.meta["quant_parameter_tensor_names"]
+    return (
+        "quant_parameter_tensor_names" in tensor.meta
+        and "finn_datatype" in tensor.meta["quant_parameter_tensor_names"]
+    )
+
 
 def finn_datatypes_match(datatype_a, datatype_b):
     return datatype_a == datatype_b
 
+
 def tensor_types_match(value_a, value_b):
     return value_a.type == value_b.type
+
 
 def tensor_shapes_match(value_a, value_b):
     return value_a.shape == value_b.shape
 
+
 def validate_loop_io_tensor_pair(tensor_a, tensor_b):
-    assert tensor_types_match(tensor_a, tensor_b), f"FINNLoop body activation input/output type mismatch {tensor_a.type} != {tensor_b.type}"
-    assert tensor_shapes_match(tensor_a, tensor_b), f"FINNLoop body activation input/output shape mismatch {tensor_a.shape} != {tensor_b.shape}"
+    assert tensor_types_match(
+        tensor_a, tensor_b
+    ), f"FINNLoop body activation input/output type mismatch {tensor_a.type} != {tensor_b.type}"
+    assert tensor_shapes_match(
+        tensor_a, tensor_b
+    ), f"FINNLoop body activation input/output shape mismatch {tensor_a.shape} != {tensor_b.shape}"
 
     add_finn_datatype_if_needed(tensor_a)
     add_finn_datatype_if_needed(tensor_b)
 
-    assert finn_datatypes_match(tensor_a.meta["quant_parameter_tensor_names"]['finn_datatype'],
-                                tensor_b.meta["quant_parameter_tensor_names"]['finn_datatype']), f"FINNLoop body activation input/output finn_datatype mismatch {tensor_a.meta['quant_parameter_tensor_names']['finn_datatype']} != {tensor_b.meta['quant_parameter_tensor_names']['finn_datatype']}"
+    assert finn_datatypes_match(
+        tensor_a.meta["quant_parameter_tensor_names"]["finn_datatype"],
+        tensor_b.meta["quant_parameter_tensor_names"]["finn_datatype"],
+    ), f"""FINNLoop body activation input/output finn_datatype mismatch
+       {tensor_a.meta['quant_parameter_tensor_names']['finn_datatype']} !=
+       {tensor_b.meta['quant_parameter_tensor_names']['finn_datatype']}"""
 
 
 def validate_loop_io_tensors(loop_node: ir.Node):
@@ -340,6 +359,7 @@ def validate_loop_io_tensors(loop_node: ir.Node):
         validate_loop_io_tensor_pair(loop_node.inputs[i], body_graph.inputs[i])
         validate_loop_io_tensor_pair(loop_node.outputs[i], body_graph.outputs[i])
         validate_loop_io_tensor_pair(body_graph.inputs[i], body_graph.outputs[i])
+
 
 def validate_loop_node(loop_node: ir.Node):
     validate_loop_type(loop_node)
@@ -396,7 +416,10 @@ class LoopBodyTemplate:
             nodes.insert(0, graph.node("iteration_ext"))
             nodes.insert(0, graph.node("condition_ext"))
 
-        ir_model = ir.Model(osh.SubGraphView(graph, "inlined_pipe_pattern", nodes), ir_version=self._model_proto.ir_version)
+        ir_model = ir.Model(
+            osh.SubGraphView(graph, "inlined_pipe_pattern", nodes),
+            ir_version=self._model_proto.ir_version,
+        )
 
         pattern = osh.direct_convert_ir_graph_to_pattern(ir_model.graph)
 
@@ -541,6 +564,7 @@ class LoopRolling(Transformation):
         # This must be done after serialization so we can work with protobuf nodes
         import qonnx.custom_op.registry as registry
         from qonnx.util.basic import get_by_name
+
         for loop_node in model_wrapper.get_nodes_by_op_type("FINNLoop"):
             loop_body_graph = get_by_name(loop_node.attribute, "body").g
             for node in loop_body_graph.node:

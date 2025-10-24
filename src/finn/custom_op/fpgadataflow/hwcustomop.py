@@ -535,15 +535,15 @@ class HWCustomOp(CustomOp):
         """
         Called by LoopRolling transformation to allow operators to adapt their
         attributes when being placed inside a loop body.
-        
+
         This base implementation does nothing. Operators that need to modify
         their behavior when placed in loops should override this method.
-        
+
         Args:
             input_types: List of LoopBodyInputType values for each input,
                          indicating whether inputs are ACTIVATION, CONSTANT,
                          PARAMETER, etc.
-        
+
         Example:
             If an operator has a parameter that becomes a streamed input
             in a loop context (PARAMETER type), it might need to change

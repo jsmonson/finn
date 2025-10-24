@@ -678,7 +678,7 @@ def test_finnloop_end2end_mlo(
         board="V80",
         rtlsim_batch_size=100,
         standalone_thresholds=True,
-        loop_body_hierarchy=["", "layers.0"],
+        loop_body_hierarchy=[["", "layers.0"]],
         verify_steps=verif_steps,
         verify_input_npy=tmp_output_dir + "/input.npy",
         verify_expected_output_npy=tmp_output_dir + "/expected_output.npy",
