@@ -431,7 +431,7 @@ class HWCustomOp(CustomOp):
         ) as f:
             f.write(template_wrapper)
 
-    def derive_characteristic_fxns(self, period, override_rtlsim_dict=None):
+    def derive_characteristic_fxns(self, period, override_rtlsim_dict=None, pre_hook=None):
         """Return the unconstrained characteristic functions for this node."""
         # ensure rtlsim is ready
         assert self.get_nodeattr("rtlsim_so") != "", "rtlsim not ready for " + self.onnx_node.name
@@ -469,6 +469,8 @@ class HWCustomOp(CustomOp):
         # signal name, note no underscore at the end (new finnxsi behavior)
         sname = "_V"
         self.reset_rtlsim(sim)
+        if pre_hook is not None:
+            pre_hook(sim)
         # create stream tracers for all input and output streams
         for k in txns_in.keys():
             txns_in[k] = sim.trace_stream(k + sname)
@@ -528,3 +530,23 @@ class HWCustomOp(CustomOp):
         self.set_nodeattr("io_chrc_out", all_txns_out)
         self.set_nodeattr("io_chrc_pads_in", all_pad_in)
         self.set_nodeattr("io_chrc_pads_out", all_pad_out)
+
+    def adapt_for_loop_body(self, input_types):
+        """
+        Called by LoopRolling transformation to allow operators to adapt their
+        attributes when being placed inside a loop body.
+
+        This base implementation does nothing. Operators that need to modify
+        their behavior when placed in loops should override this method.
+
+        Args:
+            input_types: List of LoopBodyInputType values for each input,
+                         indicating whether inputs are ACTIVATION, CONSTANT,
+                         PARAMETER, etc.
+
+        Example:
+            If an operator has a parameter that becomes a streamed input
+            in a loop context (PARAMETER type), it might need to change
+            an attribute like `rhs_style` from "const" to "input".
+        """
+        pass  # Default: no adaptation needed

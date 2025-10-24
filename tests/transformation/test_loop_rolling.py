@@ -7,7 +7,7 @@ import os
 import qonnx.util.basic as util
 import torch
 from brevitas.nn import QuantLinear
-from brevitas.quant import Int8ActPerTensorFloat, Int8Bias, Int8WeightPerTensorFloat
+from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.general import ConvertDivToMul, ConvertSubToAdd

@@ -286,6 +286,8 @@ class InsertAndSetFIFODepths(Transformation):
         self.ind_map = {}
 
     def apply(self, model):
+        model = model.transform(GiveUniqueNodeNames())
+        model = model.transform(GiveReadableTensorNames())
         for x in model.graph.node:
             if x.op_type == "FINNLoop":
                 reset_implementation(getCustomOp(x))

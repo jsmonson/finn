@@ -1,4 +1,4 @@
-# Copyright (c) 2020 Xilinx, Inc.
+# Copyright (C) 2025, Advanced Micro Devices, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -25,11 +25,17 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+try:
+    import finn_xsi.adapter as finnxsi
+except ModuleNotFoundError:
+    finnxsi = None
+
 import copy
 import math
 import numpy as np
 import os
 import shutil
+import subprocess
 from pathlib import Path
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
@@ -43,10 +49,13 @@ from qonnx.util.basic import (
 
 import finn.core.onnx_exec as oxe
 from finn.analysis.fpgadataflow.dataflow_performance import dataflow_performance
+from finn.custom_op.fpgadataflow import templates
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 from finn.custom_op.fpgadataflow.rtlbackend import RTLBackend
-from finn.transformation.fpgadataflow.annotate_cycles import AnnotateCycles
+from finn.util.basic import make_build_dir
 from finn.util.create import adjacency_list
+from finn.util.data_packing import npy_to_rtlsim_input, rtlsim_output_to_npy
+from finn.util.mlo_sim import mlo_prehook_func_factory
 
 
 def collect_ip_dirs(model, ipstitch_path):
@@ -266,24 +275,73 @@ class FINNLoop(HWCustomOp, RTLBackend):
         inst = getCustomOp(node)
         return inst.get_number_output_values()
 
+    def prepare_rtlsim(self):
+        """Creates a xsi emulation library for the RTL code generated
+        for this node, sets the rtlsim_so attribute to its path."""
+
+        vivado_stitch_proj_dir = self.get_nodeattr("code_gen_dir_ipgen")
+        with open(vivado_stitch_proj_dir + "/all_verilog_srcs.txt", "r") as f:
+            all_verilog_srcs = f.read().split()
+        top_module_file_name = os.path.basename(os.path.realpath(self.get_nodeattr("ipgen_path")))
+        top_module_name = top_module_file_name.strip(".v")
+        single_src_dir = make_build_dir("rtlsim_" + top_module_name + "_")
+        rtlsim_so = finnxsi.compile_sim_obj(top_module_name, all_verilog_srcs, single_src_dir)
+        # save generated lib filename in attribute
+        sim_base, sim_rel = rtlsim_so
+        self.set_nodeattr("rtlsim_so", sim_base + "/" + sim_rel)
+
+    def derive_characteristic_fxns(self, period):
+        mlo_prehook = mlo_prehook_func_factory(self.onnx_node)
+        super().derive_characteristic_fxns(period, pre_hook=mlo_prehook)
+
     def execute_node(self, context, graph):
         node = self.onnx_node
         inp_values = context[node.input[0]]
-        loop_body = self.get_nodeattr("body")
-        # for each iteration run execution
-        iteration = self.get_nodeattr("iteration")
-        for i_iter in range(iteration):
-            # set the right parameters
-            input_dict = {}
-            for i, inp in enumerate(node.input):
-                if i == 0:
-                    input_dict[loop_body.graph.input[i].name] = inp_values
-                else:
-                    params = context[node.input[i]]
-                    input_dict[loop_body.graph.input[i].name] = params[i_iter]
-            outp_dict = oxe.execute_onnx(loop_body, input_dict, return_full_exec_context=True)
-            inp_values = outp_dict[loop_body.graph.output[0].name]
-        result = outp_dict[loop_body.graph.output[0].name]
+        if self.get_nodeattr("exec_mode") == "rtlsim":
+            # prepare input io_dict
+            io_dict = {"inputs": {}, "outputs": {}}
+            itensor = inp_values.reshape(self.get_folded_input_shape(0))
+            idt = self.get_input_datatype(0)
+            iwidth = self.get_instream_width(0)
+            # pack input for rtlsim
+            packed_input = npy_to_rtlsim_input(itensor, idt, iwidth)
+            io_dict["inputs"]["in0"] = packed_input
+            io_dict["outputs"]["out0"] = []
+            mlo_prehook = mlo_prehook_func_factory(self.onnx_node)
+            sim = self.get_rtlsim()
+            # reset and call rtlsim, including any pre/post hooks
+            self.reset_rtlsim(sim)
+            mlo_prehook(sim)
+            self.rtlsim_multi_io(
+                sim,
+                io_dict,
+            )
+            self.close_rtlsim(sim)
+            odt = self.get_output_datatype(0)
+            o_folded_shape = self.get_folded_output_shape(0)
+            owidth = self.get_outstream_width(0)
+            packed_output = io_dict["outputs"]["out0"]
+            o_folded_tensor = rtlsim_output_to_npy(
+                packed_output, None, odt, o_folded_shape, owidth, odt.bitwidth()
+            )
+            oshape = self.get_normal_output_shape(0)
+            result = o_folded_tensor.reshape(oshape)
+        else:
+            loop_body = self.get_nodeattr("body")
+            # for each iteration run execution
+            iteration = self.get_nodeattr("iteration")
+            for i_iter in range(iteration):
+                # set the right parameters
+                input_dict = {}
+                for i, inp in enumerate(node.input):
+                    if i == 0:
+                        input_dict[loop_body.graph.input[i].name] = inp_values
+                    else:
+                        params = context[node.input[i]]
+                        input_dict[loop_body.graph.input[i].name] = params[i_iter]
+                outp_dict = oxe.execute_onnx(loop_body, input_dict, return_full_exec_context=True)
+                inp_values = outp_dict[loop_body.graph.output[0].name]
+            result = outp_dict[loop_body.graph.output[0].name]
         context[node.output[0]] = np.asarray(result, dtype=np.float32)
 
     def generate_hdl(self, model, fpgapart, clk):
@@ -323,10 +381,6 @@ class FINNLoop(HWCustomOp, RTLBackend):
             "w",
         ) as f:
             f.write(template_wrapper)
-        # set ipgen_path and ip_path so that HLS-Synth transformation
-        # and stich_ip transformation do not complain
-        self.set_nodeattr("ipgen_path", code_gen_dir)
-        self.set_nodeattr("ip_path", code_gen_dir)
 
     def generate_params(self, model, path):
         iteration = self.get_nodeattr("iteration")
@@ -492,203 +546,28 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 ) as f:
                     f.write(template_wrapper)
 
-    def get_verilog_top_module_intf_names(self):
-        # from wrapper template
-        addr_bits = 64
+    def ipgen_singlenode_code(self, fpgapart=None):
+        prjname = "MakeLoopIP"
+        block_name = self.onnx_node.name
+        vivado_stitch_proj_dir = self.get_nodeattr("code_gen_dir_ipgen")
 
-        intf_names = {}
-        intf_names["clk"] = ["ap_clk"]
-        intf_names["rst"] = ["ap_rst_n"]
-
-        intf_names["s_axis"] = []
-        # AXI4S slave interface from outside loop to loop control externalize
-        # to block diagram interface port and connect to fetch_start component
-        intf_names["s_axis"].append(("in0_V", self.get_instream_width_padded(0)))
-
-        intf_names["m_axis"] = []
-        # AXI4S master interface to drive final loop output externalize
-        # to block diagram interface port and connect to store_end component
-        intf_names["m_axis"].append(("out0_V", self.get_outstream_width_padded(0)))
-
-        intf_names["aximm"] = []
-        # AXI4 master interface for intermediate buffering between layers
-        # TODO: rename because it might not be hbm?
-        intf_names["aximm"].append(["m_axi_hbm", str(addr_bits)])
-        intf_names["axilite"] = []
-
-        # using ap_none field to add control signals
-        intf_names["ap_none"] = []
-        # done_if should be externalize to a block diagram port
-        # and connected to the axil_iw_slv_mlo component
-        intf_names["ap_none"].append("done_if")
-
-        loop_body = self.get_nodeattr("body")
-        loop_body_intf = eval(loop_body.get_metadata_prop("vivado_stitch_ifnames"))
-        for intf in loop_body_intf["aximm"]:
-            intf_names["aximm"] += intf
-
-        return intf_names
-
-    def code_generation_ipi(self):
-        # AXI regs
-        cmd = [
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axis_reg_32""",
-            "set_property CONFIG.TDATA_NUM_BYTES {4} [get_ips axis_reg_32]",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axis_register_slice_8""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {1} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0}] [get_ips axis_register_slice_8]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axis_register_slice_16""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {2} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0}] [get_ips axis_register_slice_16]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axis_register_slice_32""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {4} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0}] [get_ips axis_register_slice_32]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axis_register_slice_64""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {8} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0}] [get_ips axis_register_slice_64]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axis_register_slice_128""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {16} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0}] [get_ips axis_register_slice_128]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axis_register_slice_256""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {32} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0}] [get_ips axis_register_slice_256]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axis_register_slice_512""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {64} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0}] [get_ips axis_register_slice_512]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axisf_register_slice_8""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {1} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0} CONFIG.TUSER_WIDTH {34} \
-            CONFIG.HAS_TKEEP {1} CONFIG.HAS_TLAST {1}] [get_ips axisf_register_slice_8]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axisf_register_slice_16""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {2} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0} CONFIG.TUSER_WIDTH {34} \
-            CONFIG.HAS_TKEEP {1} CONFIG.HAS_TLAST {1}] [get_ips axisf_register_slice_16]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axisf_register_slice_32""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {4} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0} CONFIG.TUSER_WIDTH {34} CONFIG.HAS_TKEEP {1} \
-            CONFIG.HAS_TLAST {1}] [get_ips axisf_register_slice_32]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axisf_register_slice_64""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {8} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0} CONFIG.TUSER_WIDTH {34} CONFIG.HAS_TKEEP {1} \
-            CONFIG.HAS_TLAST {1}] [get_ips axisf_register_slice_64]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axisf_register_slice_128""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {16} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0} CONFIG.TUSER_WIDTH {34} CONFIG.HAS_TKEEP {1} \
-            CONFIG.HAS_TLAST {1}] [get_ips axisf_register_slice_128]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axisf_register_slice_256""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {32} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0} CONFIG.TUSER_WIDTH {34} CONFIG.HAS_TKEEP {1} \
-            CONFIG.HAS_TLAST {1}] [get_ips axisf_register_slice_256]""",
-            """create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 \
-            -module_name axisf_register_slice_512""",
-            """set_property -dict [list CONFIG.TDATA_NUM_BYTES {64} CONFIG.REG_CONFIG {8} \
-            CONFIG.HAS_TKEEP {0} CONFIG.HAS_TLAST {0} CONFIG.TUSER_WIDTH {34} CONFIG.HAS_TKEEP {1} \
-            CONFIG.HAS_TLAST {1}] [get_ips axisf_register_slice_512]""",
-            """create_ip -name axi_register_slice -vendor xilinx.com -library ip -version 2.1 \
-            -module_name axi_register_slice_256""",
-            """set_property -dict [list CONFIG.ADDR_WIDTH {64} CONFIG.DATA_WIDTH {256} \
-            CONFIG.HAS_QOS {0} CONFIG.HAS_REGION {0} CONFIG.REG_AW {1} CONFIG.REG_AR {1} \
-            CONFIG.REG_B {1} CONFIG.ID_WIDTH {2} CONFIG.MAX_BURST_LENGTH {14} \
-            CONFIG.NUM_READ_OUTSTANDING {32} CONFIG.NUM_WRITE_OUTSTANDING {32}] \
-             [get_ips axi_register_slice_256]""",
-            """create_ip -name axi_register_slice -vendor xilinx.com -library ip -version 2.1 \
-            -module_name axi_register_slice_512""",
-            """set_property -dict [list CONFIG.ADDR_WIDTH {64} CONFIG.DATA_WIDTH {512} \
-            CONFIG.HAS_QOS {0} CONFIG.HAS_REGION {0} CONFIG.REG_AW {1} CONFIG.REG_AR {1} \
-            CONFIG.REG_B {1} CONFIG.ID_WIDTH {2} CONFIG.MAX_BURST_LENGTH {14} \
-            CONFIG.NUM_READ_OUTSTANDING {32} CONFIG.NUM_WRITE_OUTSTANDING {32}] \
-             [get_ips axi_register_slice_512]""",
-            """create_ip -name axi_register_slice -vendor xilinx.com -library ip -version 2.1 \
-            -module_name axil_register_slice_64""",
-            """set_property -dict [list CONFIG.PROTOCOL {AXI4LITE} CONFIG.ADDR_WIDTH {64} \
-            CONFIG.HAS_PROT {0} CONFIG.DATA_WIDTH {64} CONFIG.REG_AW {1} CONFIG.REG_AR {1} \
-            CONFIG.REG_W {1} CONFIG.REG_R {1} CONFIG.REG_B {1} ] \
-             [get_ips axil_register_slice_64]""",
-            """create_ip -name axi_datamover -vendor xilinx.com -library ip -version 5.1 \
-              -module_name cdma_datamover_rd""",
-            "set_property -dict [list \
-              CONFIG.c_addr_width {64} \
-              CONFIG.c_enable_s2mm {0} \
-              CONFIG.c_include_mm2s_dre {true} \
-              CONFIG.c_m_axi_mm2s_data_width {256} \
-              CONFIG.c_m_axis_mm2s_tdata_width {256} \
-              CONFIG.c_mm2s_burst_size {64} \
-             ] [get_ips cdma_datamover_rd]",
-            """create_ip -name axi_datamover -vendor xilinx.com -library ip -version 5.1 \
-             -module_name cdma_datamover_wr""",
-            "set_property -dict [list \
-             CONFIG.c_addr_width {64} \
-             CONFIG.c_enable_mm2s {0} \
-             CONFIG.c_include_s2mm_dre {true} \
-             CONFIG.c_m_axi_s2mm_data_width {256} \
-             CONFIG.c_s2mm_burst_size {64} \
-             CONFIG.c_s_axis_s2mm_tdata_width {256} \
-            ] [get_ips cdma_datamover_wr]",
-            """create_ip -name axi_datamover -vendor xilinx.com -library ip -version 5.1 \
-               -module_name cdma_datamover""",
-            "set_property -dict [list \
-               CONFIG.c_include_mm2s_dre {true} \
-               CONFIG.c_include_s2mm_dre {true} \
-               CONFIG.c_addr_width {64} \
-               CONFIG.c_m_axi_mm2s_data_width {256} \
-               CONFIG.c_m_axis_mm2s_tdata_width {256} \
-               CONFIG.c_mm2s_burst_size {64} \
-               CONFIG.c_m_axi_s2mm_data_width {256} \
-               CONFIG.c_s2mm_burst_size {64} \
-               CONFIG.c_s_axis_s2mm_tdata_width {256} \
-               ] [get_ips cdma_datamover]",
-        ]
-
-        source_files = [
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_top.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/krnl_counter.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_a/cdma_a.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_a/cdma_a_rd.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_a/cdma_a_wr.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_a/axi_dma_rd_a.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_a/axi_dma_wr_a.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_u/cdma_u.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_u/cdma_u_wr.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_u/cdma_u_rd.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_u/axi_dma_rd_u.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_u/axi_dma_wr_u.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_x/cdma_x.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_x/cdma_x_rd.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/cdma/cdma_x/cdma_x_wr.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/common/axis_adapter.v",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/common/axis_dwc.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/common/axis_fifo.v",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/common/axis_fifo_adapter.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/common/axis_reg_array_rtl.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/common/axis_reg_array_tmplt.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/common/axis_reg_rtl.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/common/axis_reg_tmplt.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/common/ram_p_c.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/infrastructure/intermediate_frames.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/infrastructure/mux.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/infrastructure/demux.sv",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/mlo/loop_control.sv",
-            f"{self.get_nodeattr('code_gen_dir_ipgen')}/{self.onnx_node.name}_wrapper.v",
-            f"{os.environ['FINN_ROOT']}/finn-rtllib/fifo/hdl/Q_srl.v",
-        ]
-        for f in source_files:
-            cmd += [f"add_files -norecurse {f}"]
+        cmd = []
+        # add all the generated IP dirs to ip_repo_paths
+        ip_dirs = ["list"]
+        # add RTL streamer IP
+        ip_dirs.append("$::env(FINN_ROOT)/finn-rtllib/memstream")
+        loop_model = self.get_nodeattr("body")
+        for node in loop_model.graph.node:
+            node_inst = getCustomOp(node)
+            ip_dir_value = node_inst.get_nodeattr("ip_path")
+            assert os.path.isdir(ip_dir_value), "IP generation directory doesn't exist."
+            ip_dirs += [ip_dir_value]
+        ip_dirs_str = " ".join(ip_dirs)
+        cmd.append("set_property ip_repo_paths [%s] [current_project]" % ip_dirs_str)
+        cmd.append("update_ip_catalog")
 
         # create and instantiate FINNLoop node overarching block design
+        cmd.append("create_bd_design %s_bd_design" % (self.onnx_node.name))
         cmd.append("create_bd_cell -type hier %s" % (self.onnx_node.name))
         clk_name = self.get_verilog_top_module_intf_names()["clk"][0]
         rst_name = self.get_verilog_top_module_intf_names()["rst"][0]
@@ -1096,7 +975,155 @@ class FINNLoop(HWCustomOp, RTLBackend):
             "[get_bd_intf_pins %s/m_axis_0] [get_bd_intf_pins %s/s_axis_core_out]"
             % (finn_ip_name, loop_shell_name)
         )
+        cmd.append("make_bd_pins_external  [get_bd_cells %s]" % block_name)
+        cmd.append("make_bd_intf_pins_external  [get_bd_cells %s]" % block_name)
+        cmd.append("set_property name in0_V [get_bd_intf_ports in0_V_0]")
+        cmd.append("set_property name ap_clk [get_bd_ports ap_clk_0]")
+        cmd.append("set_property name ap_rst_n [get_bd_ports ap_rst_n_0]")
+        cmd.append("set_property name out0_V [get_bd_intf_ports out0_V_0]")
+        cmd.append("set_property name m_axi_hbm [get_bd_intf_ports m_axi_hbm_0]")
+        cmd.append("set_property name done_if [get_bd_ports done_if_0]")
+        # set property name for aximm interfaces
+        ext_signals = loop_body_intf_names["aximm"]
+        for sig in ext_signals:
+            cmd.append(f"set_property name {sig[0][0]} [get_bd_intf_ports {sig[0][0]}_0]")
+        cmd.append("save_bd_design")
+        # cmd.append("validate_bd_design")
+        # cmd.append("save_bd_design")
+        # create wrapper hdl (for rtlsim later on)
+        bd_base = "%s/%s.srcs/sources_1/bd/%s_bd_design" % (
+            vivado_stitch_proj_dir,
+            prjname,
+            block_name,
+        )
+        bd_filename = "%s/%s_bd_design.bd" % (bd_base, block_name)
+        cmd.append("make_wrapper -files [get_files %s] -top" % bd_filename)
+        wrapper_base = "%s/%s.gen/sources_1/bd/%s_bd_design" % (
+            vivado_stitch_proj_dir,
+            prjname,
+            block_name,
+        )
+        wrapper_filename = "%s/hdl/%s_bd_design_wrapper.v" % (wrapper_base, block_name)
+        cmd.append("add_files -norecurse %s" % wrapper_filename)
+        cmd.append("set_property top %s_bd_design_wrapper [current_fileset]" % block_name)
 
+        # export block design itself as an IP core
+        block_vendor = "xilinx_finn"
+        block_library = "finn"
+        block_vlnv = "%s:%s:%s_bd_design:1.0" % (block_vendor, block_library, block_name)
+        cmd.append(
+            (
+                "ipx::package_project -root_dir %s/ip -vendor %s "
+                "-library %s -taxonomy /UserIP -module %s_bd_design -import_files"
+            )
+            % (vivado_stitch_proj_dir, block_vendor, block_library, block_name)
+        )
+        # Allow user to customize clock in deployment of stitched IP
+        cmd.append("set_property ipi_drc {ignore_freq_hz true} [ipx::current_core]")
+        # in some cases, the IP packager seems to infer an aperture of 64K or 4G,
+        # preventing address assignment of the DDR_LOW and/or DDR_HIGH segments
+        # the following is a hotfix to remove this aperture during IODMA packaging
+        cmd.append(
+            "ipx::remove_segment -quiet m_axi_gmem0:APERTURE_0 "
+            "[ipx::get_address_spaces m_axi_gmem0 -of_objects [ipx::current_core]]"
+        )
+        cmd.append("set_property core_revision 2 [ipx::find_open_core %s]" % block_vlnv)
+        cmd.append("ipx::create_xgui_files [ipx::find_open_core %s]" % block_vlnv)
+        # mark bus interface params as user-resolvable to avoid FREQ_MHZ mismatches
+        cmd.append(
+            "set_property value_resolve_type user [ipx::get_bus_parameters "
+            "-of [ipx::get_bus_interfaces -of [ipx::current_core ]]]"
+        )
+        example_data_dir = os.environ["FINN_ROOT"] + "/src/finn/qnn-data/mdd-data"
+        shutil.copytree(example_data_dir, vivado_stitch_proj_dir + "/data")
+
+        template = templates.ip_gen_loop_op
+
+        # transform list into long string separated by '\n'
+        cmd = "\n".join(cmd)
+        template = template.replace("@IP_GEN@", cmd)
+        template = template.replace("@PRJNAME@", prjname)
+        template = template.replace("@PRJFOLDER@", vivado_stitch_proj_dir)
+        template = template.replace("@FPGAPART@", fpgapart)
+        template = template.replace(
+            "@TOP_VERILOG_FILE@",
+            f"{self.get_nodeattr('code_gen_dir_ipgen')}/{self.onnx_node.name}_wrapper.v",
+        )
+        f = open(os.path.join(vivado_stitch_proj_dir, "make_loop_ip.tcl"), "w")
+        f.write(template)
+        f.close()
+
+        # create a shell script and call Vivado
+        make_project_sh = vivado_stitch_proj_dir + "/make_loop_ip.sh"
+        working_dir = os.environ["PWD"]
+        with open(make_project_sh, "w") as f:
+            f.write("#!/bin/bash \n")
+            f.write("cd {}\n".format(vivado_stitch_proj_dir))
+            f.write("vivado -mode batch -source make_loop_ip.tcl\n")
+            f.write("cd {}\n".format(working_dir))
+        bash_command = ["bash", make_project_sh]
+        process_compile = subprocess.Popen(bash_command, stdout=subprocess.PIPE)
+        process_compile.communicate()
+        assert os.path.isfile(wrapper_filename), "IPGen failed: %s not found" % (wrapper_filename)
+        self.set_nodeattr("ipgen_path", wrapper_filename)
+        self.set_nodeattr("ip_path", vivado_stitch_proj_dir + "/ip")
+        self.set_nodeattr("gen_top_module", "%s_bd_design_wrapper" % block_name)
+        self.set_nodeattr("ip_vlnv", block_vlnv)
+
+    def get_verilog_top_module_intf_names(self):
+        # from wrapper template
+        addr_bits = 64
+
+        intf_names = {}
+        intf_names["clk"] = ["ap_clk"]
+        intf_names["rst"] = ["ap_rst_n"]
+
+        intf_names["s_axis"] = []
+        # AXI4S slave interface from outside loop to loop control externalize
+        # to block diagram interface port and connect to fetch_start component
+        intf_names["s_axis"].append(("in0_V", self.get_instream_width_padded(0)))
+
+        intf_names["m_axis"] = []
+        # AXI4S master interface to drive final loop output externalize
+        # to block diagram interface port and connect to store_end component
+        intf_names["m_axis"].append(("out0_V", self.get_outstream_width_padded(0)))
+
+        intf_names["aximm"] = []
+        # AXI4 master interface for intermediate buffering between layers
+        # TODO: rename because it might not be hbm?
+        intf_names["aximm"].append(["m_axi_hbm", str(addr_bits)])
+        intf_names["axilite"] = []
+
+        # using ap_none field to add control signals
+        intf_names["ap_none"] = []
+        # done_if should be externalize to a block diagram port
+        # and connected to the axil_iw_slv_mlo component
+        intf_names["ap_none"].append("done_if")
+
+        loop_body = self.get_nodeattr("body")
+        loop_body_intf = eval(loop_body.get_metadata_prop("vivado_stitch_ifnames"))
+        for intf in loop_body_intf["aximm"]:
+            intf_names["aximm"] += intf
+
+        return intf_names
+
+    def code_generation_ipi(self):
+        vlnv = self.get_nodeattr("ip_vlnv")
+        cmd = []
+        # add all the generated IP dirs to ip_repo_paths
+        ip_dirs = ["list"]
+        # add RTL streamer IP
+        loop_body = self.get_nodeattr("body")
+        loop_body_ipstitch_path = loop_body.get_metadata_prop("vivado_stitch_proj")
+        ip_dirs += collect_ip_dirs(loop_body, loop_body_ipstitch_path)
+        ip_dirs_str = " ".join(ip_dirs)
+        cmd.append(
+            "set_property ip_repo_paths "
+            "[concat [get_property ip_repo_paths [current_project]] %s] "
+            "[current_project]" % ip_dirs_str
+        )
+        cmd.append("update_ip_catalog -rebuild -scan_changes")
+        cmd.append("create_bd_cell -type ip -vlnv %s %s" % (vlnv, self.onnx_node.name))
         return cmd
 
     def get_rtl_file_list(self, abspath=False):

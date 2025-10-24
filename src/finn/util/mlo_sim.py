@@ -61,17 +61,13 @@ def dat_file_to_numpy_array(file_path):
     return byte_array
 
 
-def mlo_prehook_func_factory(model: ModelWrapper) -> Callable[[SimEngine], None]:
+def mlo_prehook_func_factory(node) -> Callable[[SimEngine], None]:
     """Factory that will construct a prehook function to
     setup the axi memory mapped interfaces for MLO validation.
     """
 
     # Get the FINNLoop
-    finnloop_op = None
-    for node in model.graph.node:
-        if node.op_type == "FINNLoop":
-            finnloop_op = getCustomOp(node)
-    assert finnloop_op is not None
+    finnloop_op = getCustomOp(node)
 
     finnloop_body = finnloop_op.get_nodeattr("body")
 

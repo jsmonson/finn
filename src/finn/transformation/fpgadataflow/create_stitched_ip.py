@@ -200,14 +200,13 @@ class CreateStitchedIP(Transformation):
                     self.connect_cmds.append("assign_bd_address")
 
                     if mm_intf_name[0] == "m_axi_hbm":
-                        seg_name = "%s/%s_loop_cont_wrapper/%s/SEG_%s_Reg" % (
-                            inst_name,
+                        seg_name = "%s/%s/SEG_%s_Reg" % (
                             inst_name,
                             mm_intf_name[0],
                             mm_intf_name[0],
                         )
                     else:
-                        seg_name = "%s/finn_design_mlo/%s/SEG_%s_Reg" % (
+                        seg_name = "%s/%s/SEG_%s_Reg" % (
                             inst_name,
                             mm_intf_name[0],
                             mm_intf_name[0],
