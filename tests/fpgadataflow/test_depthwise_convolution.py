@@ -35,6 +35,7 @@ from onnx import TensorProto
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.general.im2col import compute_conv_output_dim
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import (
@@ -55,7 +56,6 @@ from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
 from finn.transformation.fpgadataflow.prepare_rtlsim import PrepareRTLSim
 from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
-from finn.util.basic import getHWCustomOp
 
 
 def set_up_reference_model(act, idt, wdt, k, ifm_dim, ifm_ch, stride, padding):
@@ -187,10 +187,10 @@ def test_depthwise_conv_hw_cppsim(act, pe, k, stride, padding):
     # set SIMD in ConvInputGen node and PE in VVAU node
     for n in new_model.graph.node:
         if n.op_type.startswith("ConvolutionInputGenerator"):
-            convinputgen_node = getHWCustomOp(n, model)
+            convinputgen_node = getHWCustomOp(n)
             convinputgen_node.set_nodeattr("SIMD", pe)
         elif n.op_type.startswith("VVAU"):
-            vvau_node = getHWCustomOp(n, model)
+            vvau_node = getHWCustomOp(n)
             vvau_node.set_nodeattr("PE", pe)
     new_model = new_model.transform(SetExecMode("cppsim"))
     new_model = new_model.transform(PrepareCppSim())
@@ -231,10 +231,10 @@ def test_depthwise_conv_hw_rtlsim(act, pe, k, stride, padding):
     # set SIMD in ConvInputGen node and PE in VVAU node
     for n in new_model.graph.node:
         if n.op_type.startswith("ConvolutionInputGenerator"):
-            convinputgen_node = getHWCustomOp(n, model)
+            convinputgen_node = getHWCustomOp(n)
             convinputgen_node.set_nodeattr("SIMD", pe)
         elif n.op_type.startswith("VVAU"):
-            vvau_node = getHWCustomOp(n, model)
+            vvau_node = getHWCustomOp(n)
             vvau_node.set_nodeattr("PE", pe)
 
     new_model = new_model.transform(SetExecMode("rtlsim"))

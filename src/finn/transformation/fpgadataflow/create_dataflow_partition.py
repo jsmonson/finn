@@ -86,14 +86,14 @@ class CreateDataflowPartition(Transformation):
         p_nodes = parent_model.get_nodes_by_op_type("GenericPartition")
         for partition_ind, p_node in enumerate(p_nodes):
             # go into partition to extract some info
-            p_node_inst = getHWCustomOp(p_node, model)
+            p_node_inst = getHWCustomOp(p_node) # Read only, no model context
             node_model_filename = p_node_inst.get_nodeattr("model")
             p_model = ModelWrapper(node_model_filename)
             # check floorplan (SLR assignment per node)
             inst = getHWCustomOp(p_model.graph.node[0], p_model)
             slr = inst.get_nodeattr("slr")
             for node in p_model.graph.node:
-                inst = getHWCustomOp(node, model)
+                inst = getHWCustomOp(node, p_model)
                 assert slr == inst.get_nodeattr(
                     "slr"
                 ), """all nodes with same partition_id must have the same slr id"""
@@ -101,7 +101,7 @@ class CreateDataflowPartition(Transformation):
             nmemports = 0
             mem_port = ""
             for node in p_model.graph.node:
-                inst = getHWCustomOp(node, model)
+                inst = getHWCustomOp(node, p_model)
                 port = inst.get_nodeattr("mem_port")
                 if port is not None and port != "":
                     nmemports += 1
@@ -110,7 +110,7 @@ class CreateDataflowPartition(Transformation):
             # done, change node type and add info in parent graph
             p_node.op_type = "StreamingDataflowPartition"
             p_node.domain = "finn.custom_op.fpgadataflow"
-            new_p_node_inst = getHWCustomOp(p_node, model)
+            new_p_node_inst = getHWCustomOp(p_node, p_model)
             new_p_node_inst.set_nodeattr("partition_id", partition_ind)
             new_p_node_inst.set_nodeattr("slr", slr)
             new_p_node_inst.set_nodeattr("mem_port", mem_port)

@@ -31,9 +31,8 @@ import os
 import xml.etree.ElementTree as ET
 from qonnx.core.modelwrapper import ModelWrapper
 
-from finn.util.fpgadataflow import is_hls_node, is_rtl_node
-
 from finn.util.basic import getHWCustomOp
+from finn.util.fpgadataflow import is_hls_node, is_rtl_node
 
 
 def post_synth_res(model, override_synth_report_filename=None):

@@ -32,10 +32,9 @@ import numpy as np
 from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model
-
-from finn.util.basic import getHWCustomOp
 
 import finn.core.onnx_exec as oxe
 import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
@@ -116,7 +115,7 @@ def test_fpgadataflow_addstreams(idts, ch, fold, exec_mode):
 
     model = model.transform(to_hw.InferAddStreamsLayer())
     addstreams_node = model.get_nodes_by_op_type("AddStreams")[0]
-    addstreams_node = getHWCustomOp(addstreams_node, model)
+    addstreams_node = getHWCustomOp(addstreams_node)
     addstreams_node.set_nodeattr("PE", pe)
     model = model.transform(SpecializeLayers("xc7z020clg400-1"))
 
@@ -141,7 +140,7 @@ def test_fpgadataflow_addstreams(idts, ch, fold, exec_mode):
 
     if exec_mode == "rtlsim":
         node = model.get_nodes_by_op_type("AddStreams_hls")[0]
-        inst = getHWCustomOp(node, model)
+        inst = getHWCustomOp(node)
         cycles_rtlsim = inst.get_nodeattr("cycles_rtlsim")
         exp_cycles_dict = model.analysis(exp_cycles_per_layer)
         exp_cycles = exp_cycles_dict[node.name]

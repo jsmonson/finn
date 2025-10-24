@@ -32,9 +32,8 @@ import numpy as np
 from onnx import TensorProto, helper
 from qonnx.core.datatype import BipolarType, DataType, IntType
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.util.basic import gen_finn_dt_tensor, roundup_to_integer_multiple
-
 from finn.util.basic import getHWCustomOp
+from qonnx.util.basic import gen_finn_dt_tensor, roundup_to_integer_multiple
 from typing import Optional, Union
 
 from finn.custom_op.fpgadataflow.matrixvectoractivation import MVAU
@@ -170,7 +169,7 @@ def test_minimize_weight_bit_width(wdt: DataType, rww: bool):
 
     # If runtime-writeable weights, specify as a node attribute
     for node in model.graph.node:
-        inst = getHWCustomOp(node, model)
+        inst = getHWCustomOp(node)
         if isinstance(inst, (MVAU, VVAU)):
             inst.set_nodeattr("runtime_writeable_weights", int(rww))
 
@@ -179,7 +178,7 @@ def test_minimize_weight_bit_width(wdt: DataType, rww: bool):
 
     # Iterate through each node to make sure it functioned properly
     for node in model.graph.node:
-        inst = getHWCustomOp(node, model)
+        inst = getHWCustomOp(node)
         if isinstance(inst, (MVAU, VVAU)):
             cur_wdt = DataType[inst.get_nodeattr("weightDataType")]
             exp_wdt = def_wdt if rww else wdt
@@ -275,7 +274,7 @@ def test_minimize_accumulator_width(wdt: DataType, idt: DataType, tdt: DataType,
 
     # If runtime-writeable weights, specify as a node attribute
     for node in model.graph.node:
-        inst = getHWCustomOp(node, model)
+        inst = getHWCustomOp(node)
         if isinstance(inst, (MVAU, VVAU)):
             inst.set_nodeattr("runtime_writeable_weights", int(rww))
             cur_adt = DataType[inst.get_nodeattr("accDataType")]
@@ -286,7 +285,7 @@ def test_minimize_accumulator_width(wdt: DataType, idt: DataType, tdt: DataType,
 
     # Iterate through each node to make sure it functioned properly
     for node in model.graph.node:
-        inst = getHWCustomOp(node, model)
+        inst = getHWCustomOp(node)
         if isinstance(inst, (MVAU, VVAU)):
             cur_adt = DataType[inst.get_nodeattr("accDataType")]
             cur_odt = DataType[inst.get_nodeattr("outputDataType")]

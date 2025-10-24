@@ -27,7 +27,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 import warnings
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.base import NodeLocalTransformation
@@ -62,7 +61,7 @@ class DeriveCharacteristic(NodeLocalTransformation):
         if is_hls_node(node) or is_rtl_node(node):
             try:
                 # lookup op_type in registry of CustomOps
-                inst = getHWCustomOp(node, model)
+                inst = getHWCustomOp(node, self.ref_input_model)
                 inst.derive_characteristic_fxns(period=self.period)
             except KeyError:
                 # exception if op_type is not supported
@@ -134,6 +133,7 @@ class DeriveFIFOSizes(NodeLocalTransformation):
         if is_hls_node(node) or is_rtl_node(node):
             try:
                 # lookup op_type in registry of CustomOps
+                model = self.ref_input_model
                 prod = getHWCustomOp(node, model)
                 assert not (op_type.startswith("StreamingFIFO")), "Found existing FIFOs"
                 period = prod.get_nodeattr("io_chrc_period")
@@ -144,7 +144,6 @@ class DeriveFIFOSizes(NodeLocalTransformation):
                     return (node, False)
 
                 # find consumers
-                model = self.ref_input_model
                 out_fifo_depths = []
                 for output_name in node.output:
                     cons_node = model.find_consumer(output_name)

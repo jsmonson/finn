@@ -32,10 +32,9 @@ import pytest
 import numpy as np
 import os
 from qonnx.core.datatype import DataType
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.util.basic import gen_finn_dt_tensor
-
-from finn.util.basic import getHWCustomOp
 
 from finn.core.rtlsim_exec import rtlsim_exec
 from finn.transformation.fpgadataflow.create_stitched_ip import CreateStitchedIP
@@ -72,7 +71,7 @@ def test_runtime_weights_single_layer():
     model = hls_random_mlp_maker(layer_spec_list)
     model = model.transform(SpecializeLayers(test_fpga_part))
     fcl = model.get_nodes_by_op_type("MVAU_hls")[0]
-    op_inst = getHWCustomOp(fcl, model)
+    op_inst = getHWCustomOp(fcl)
     op_inst.set_nodeattr("mem_mode", "internal_decoupled")
     op_inst.set_nodeattr("runtime_writeable_weights", 1)
     old_weights = model.get_initializer(fcl.input[1])

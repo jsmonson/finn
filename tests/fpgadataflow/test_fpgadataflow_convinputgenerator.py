@@ -34,10 +34,9 @@ from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.general.im2col import compute_conv_output_dim
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model
-
-from finn.util.basic import getHWCustomOp
 
 import finn.core.onnx_exec as oxe
 import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
@@ -186,7 +185,7 @@ def test_fpgadataflow_slidingwindow(
     assert (y_produced == y_expected).all()
     model = model.transform(SpecializeLayers("xc7z020clg400-1"))
     # set simd
-    inst = getHWCustomOp(model.graph.node[0], model)
+    inst = getHWCustomOp(model.graph.node[0])
     inst.set_nodeattr("SIMD", simd)
     optype = model.graph.node[0].op_type
     if optype == "ConvolutionInputGenerator_rtl":
@@ -220,7 +219,7 @@ def test_fpgadataflow_slidingwindow(
     if exec_mode == "rtlsim":
         nodes = model.get_nodes_by_op_type("ConvolutionInputGenerator_rtl")
         node = nodes[0]
-        inst = getHWCustomOp(node, model)
+        inst = getHWCustomOp(node)
         cycles_rtlsim = inst.get_nodeattr("cycles_rtlsim")
         exp_cycles_dict = model.analysis(exp_cycles_per_layer)
         exp_cycles = exp_cycles_dict[node.name]

@@ -37,6 +37,7 @@ from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.general.im2col import compute_conv_output_dim
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import GiveReadableTensorNames, GiveUniqueNodeNames
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
@@ -63,7 +64,7 @@ from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
 from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
 from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
-from finn.util.basic import get_liveness_threshold_cycles, getHWCustomOp
+from finn.util.basic import get_liveness_threshold_cycles
 
 finnxsi = xsi if xsi.is_available() else None
 
@@ -269,7 +270,7 @@ def test_fpgadataflow_conv_dynamic(cfg):
     model = model.transform(absorb.AbsorbConsecutiveTransposes())
     model = model.transform(SpecializeLayers("xc7z020clg400-1"))
     parent_model = model.transform(CreateDataflowPartition())
-    sdp_inst = getHWCustomOp(parent_model.get_nodes_by_op_type("StreamingDataflowPartition", model)[0])
+    sdp_inst = getHWCustomOp(parent_model.get_nodes_by_op_type("StreamingDataflowPartition")[0])
     model = ModelWrapper(sdp_inst.get_nodeattr("model"))
     assert len(model.get_nodes_by_op_type("ConvolutionInputGenerator_rtl")) == 2
     if pad_mode == "VALID":
@@ -279,20 +280,20 @@ def test_fpgadataflow_conv_dynamic(cfg):
     dyn_nodes = model.get_nodes_by_op_type("ConvolutionInputGenerator_rtl")
     dyn_nodes += model.get_nodes_by_op_type("FMPadding_rtl")
     for swg_node in dyn_nodes:
-        getHWCustomOp(swg_node, model).set_nodeattr("SIMD", 4)
-        getHWCustomOp(swg_node, model).set_nodeattr("dynamic_mode", 1)
-        getHWCustomOp(swg_node, model).set_nodeattr("inFIFODepths", [16])
-        getHWCustomOp(swg_node, model).set_nodeattr("outFIFODepths", [16])
+        getHWCustomOp(swg_node).set_nodeattr("SIMD", 4)
+        getHWCustomOp(swg_node).set_nodeattr("dynamic_mode", 1)
+        getHWCustomOp(swg_node).set_nodeattr("inFIFODepths", [16])
+        getHWCustomOp(swg_node).set_nodeattr("outFIFODepths", [16])
     comp_nodes = model.get_nodes_by_op_type("MVAU_hls")
     comp_nodes += model.get_nodes_by_op_type("MVAU_rtl")
     comp_nodes += model.get_nodes_by_op_type("VVAU_hls")
     comp_nodes += model.get_nodes_by_op_type("VVAU_rtl")
     for comp_node in comp_nodes:
         if depthwise:
-            getHWCustomOp(comp_node, model).set_nodeattr("PE", 4)
+            getHWCustomOp(comp_node).set_nodeattr("PE", 4)
         else:
-            getHWCustomOp(comp_node, model).set_nodeattr("SIMD", 4)
-            getHWCustomOp(comp_node, model).set_nodeattr("PE", 4)
+            getHWCustomOp(comp_node).set_nodeattr("SIMD", 4)
+            getHWCustomOp(comp_node).set_nodeattr("PE", 4)
     model = model.transform(InsertDWC())
     model = model.transform(InsertFIFO(create_shallow_fifos=True))
     model = model.transform(SpecializeLayers("xc7z020clg400-1"))
@@ -320,21 +321,21 @@ def test_fpgadataflow_conv_dynamic(cfg):
         conv1_idim_w = int_dim_w + pad1[1] + pad1[3]
         # get config for the new dimensions
         swg_nodes = model.get_nodes_by_op_type("ConvolutionInputGenerator_rtl")
-        swg0 = getHWCustomOp(swg_nodes[0], model)
+        swg0 = getHWCustomOp(swg_nodes[0])
         update_tensor_dim(model, swg0.onnx_node.input[0], (conv0_idim_h, conv0_idim_w))
         update_tensor_dim(model, swg0.onnx_node.output[0], (int_dim_h, int_dim_w))
         swg_config0 = swg0.get_dynamic_config((conv0_idim_h, conv0_idim_w))
-        swg1 = getHWCustomOp(swg_nodes[1], model)
+        swg1 = getHWCustomOp(swg_nodes[1])
         update_tensor_dim(model, swg1.onnx_node.input[0], (conv1_idim_h, conv1_idim_w))
         update_tensor_dim(model, swg1.onnx_node.output[0], (odim_h, odim_w))
         swg_config1 = swg1.get_dynamic_config((conv1_idim_h, conv1_idim_w))
         if pad_mode != "VALID":
             pad_nodes = model.get_nodes_by_op_type("FMPadding_rtl")
-            padder0 = getHWCustomOp(pad_nodes[0], model)
+            padder0 = getHWCustomOp(pad_nodes[0])
             update_tensor_dim(model, padder0.onnx_node.input[0], (idim_h, idim_w))
             update_tensor_dim(model, padder0.onnx_node.output[0], (conv0_idim_h, conv0_idim_w))
             pad_config0 = padder0.get_dynamic_config((idim_h, idim_w), pad0)
-            padder1 = getHWCustomOp(pad_nodes[1], model)
+            padder1 = getHWCustomOp(pad_nodes[1])
             update_tensor_dim(model, padder1.onnx_node.input[0], (int_dim_h, int_dim_w))
             update_tensor_dim(model, padder1.onnx_node.output[0], (conv1_idim_h, conv1_idim_w))
             pad_config1 = padder1.get_dynamic_config((int_dim_h, int_dim_w), pad1)
@@ -348,13 +349,13 @@ def test_fpgadataflow_conv_dynamic(cfg):
             configs = [("s_axilite_0", swg_config0), ("s_axilite_1", swg_config1)]
         # adjust folded shapes for I/O FIFOs
         # (since rtlsim_exec uses folded shape info to fold global i/o tensors)
-        first_node = getHWCustomOp(model.graph.node[0], model)
+        first_node = getHWCustomOp(model.graph.node[0])
         first_node_shp = list(first_node.get_folded_input_shape())
         first_node_shp[1] = idim_h
         first_node_shp[2] = idim_w
         first_node.set_nodeattr("folded_shape", first_node_shp)
         update_tensor_dim(model, first_node.onnx_node.input[0], (idim_h, idim_w))
-        last_node = getHWCustomOp(model.graph.node[-1], model)
+        last_node = getHWCustomOp(model.graph.node[-1])
         last_node_shp = list(last_node.get_folded_output_shape())
         last_node_shp[1] = odim_h
         last_node_shp[2] = odim_w
@@ -559,7 +560,7 @@ def test_fpgadataflow_slidingwindow_rtl_dynamic(
         if i > 0:  # skip re-programming for initial FM dimension
             # Necessary update of node and tensor attributes to make rtlsim work:
             swg_node = model.get_nodes_by_op_type("ConvolutionInputGenerator_rtl")[0]
-            swg_inst = getHWCustomOp(swg_node, model)
+            swg_inst = getHWCustomOp(swg_node)
             update_tensor_dim(model, swg_node.input[0], ifm_dim)
             update_tensor_dim(model, swg_node.output[0], ofm_dim)
 
@@ -569,7 +570,7 @@ def test_fpgadataflow_slidingwindow_rtl_dynamic(
 
             # Also update FIFO nodes and corresponding tensors
             fifo_node = model.get_nodes_by_op_type("StreamingFIFO_rtl")[0]
-            fifo_inst = getHWCustomOp(fifo_node, model)
+            fifo_inst = getHWCustomOp(fifo_node)
             shape = fifo_inst.get_nodeattr("folded_shape")
             shape[1] = ifm_dim_h
             shape[2] = ifm_dim_w
@@ -577,7 +578,7 @@ def test_fpgadataflow_slidingwindow_rtl_dynamic(
             update_tensor_dim(model, fifo_node.input[0], ifm_dim)
 
             fifo_node = model.get_nodes_by_op_type("StreamingFIFO_rtl")[1]
-            fifo_inst = getHWCustomOp(fifo_node, model)
+            fifo_inst = getHWCustomOp(fifo_node)
             shape = fifo_inst.get_nodeattr("folded_shape")
             shape[1] = ofm_dim_h
             shape[2] = ofm_dim_w

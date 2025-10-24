@@ -33,11 +33,10 @@ import numpy as np
 from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import GiveReadableTensorNames, GiveUniqueNodeNames
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model
-
-from finn.util.basic import getHWCustomOp
 
 import finn.core.onnx_exec as oxe
 from finn.core.rtlsim_exec import rtlsim_exec
@@ -144,7 +143,7 @@ def test_fpgadataflow_checksum():
 
     # set checksum output hook
     for n in model.graph.node:
-        n0 = getHWCustomOp(n, model)
+        n0 = getHWCustomOp(n)
         n0.set_nodeattr("output_hook", "checksum")
 
     model = model.transform(InsertHook())

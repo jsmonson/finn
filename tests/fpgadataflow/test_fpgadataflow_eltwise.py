@@ -34,11 +34,10 @@ import onnx.parser as oprs
 import qonnx.core.data_layout as dl
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import gen_finn_dt_tensor
-
-from finn.util.basic import getHWCustomOp
 
 import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
 from finn.analysis.fpgadataflow.exp_cycles_per_layer import exp_cycles_per_layer
@@ -119,7 +118,7 @@ def test_fpgadataflow_eltwise(dt0, ch, fold, do_abs, exec_mode):
 
     assert len(model.graph.node) == 1
     assert model.graph.node[0].op_type == "StreamingEltwise_hls"
-    getHWCustomOp(model.graph.node[0], model).set_nodeattr("PE", pe)
+    getHWCustomOp(model.graph.node[0]).set_nodeattr("PE", pe)
     if exec_mode == "cppsim":
         model = model.transform(PrepareCppSim())
         model = model.transform(CompileCppSim())
@@ -136,7 +135,7 @@ def test_fpgadataflow_eltwise(dt0, ch, fold, do_abs, exec_mode):
     assert (y_produced == y_expected).all(), exec_mode + " failed"
     if exec_mode == "rtlsim":
         node = model.get_nodes_by_op_type("StreamingEltwise_hls")[0]
-        inst = getHWCustomOp(node, model)
+        inst = getHWCustomOp(node)
         cycles_rtlsim = inst.get_nodeattr("cycles_rtlsim")
         exp_cycles_dict = model.analysis(exp_cycles_per_layer)
         exp_cycles = exp_cycles_dict[node.name]

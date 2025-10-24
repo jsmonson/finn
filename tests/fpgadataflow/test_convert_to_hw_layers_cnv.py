@@ -35,6 +35,7 @@ import os
 import torch
 from brevitas.export import export_qonnx
 from qonnx.core.modelwrapper import ModelWrapper
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.bipolar_to_xnor import ConvertBipolarMatMulToXnorPopcount
 from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.general import (
@@ -46,8 +47,6 @@ from qonnx.transformation.infer_data_layouts import InferDataLayouts
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.transformation.lower_convs_to_matmul import LowerConvsToMatMul
 from qonnx.util.cleanup import cleanup as qonnx_cleanup
-
-from finn.util.basic import getHWCustomOp
 
 import finn.core.onnx_exec as oxe
 import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
@@ -110,7 +109,7 @@ def test_convert_to_hw_layers_cnv_w1a1(fused_activation):
     model = model.transform(SpecializeLayers("xc7z020clg400-1"))
     for node in model.graph.node:
         if node.op_type == "MVAU_hls":
-            inst = getHWCustomOp(node, model)
+            inst = getHWCustomOp(node)
             inst.set_nodeattr("mem_mode", "internal_decoupled")
             mw = inst.get_nodeattr("MW")
             mh = inst.get_nodeattr("MH")

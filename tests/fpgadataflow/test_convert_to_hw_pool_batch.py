@@ -32,11 +32,10 @@ import numpy as np
 from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
+from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model
-
-from finn.util.basic import getHWCustomOp
 
 import finn.core.onnx_exec as oxe
 import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
@@ -180,10 +179,10 @@ def test_convert_to_hw_pool(idt, odt, pool_config, ifm_ch, pe, op_type, exec_mod
     new_model = new_model.transform(GiveUniqueNodeNames())
     new_model = new_model.transform(to_hw.InferConvInpGen())
     # to test cppsim, set preferred_impl_style for swg to hls
-    inst = getHWCustomOp(new_model.get_nodes_by_op_type("ConvolutionInputGenerator", model)[0])
+    inst = getHWCustomOp(new_model.get_nodes_by_op_type("ConvolutionInputGenerator")[0])
     inst.set_nodeattr("preferred_impl_style", "hls")
     if pad != 0:
-        inst = getHWCustomOp(new_model.get_nodes_by_op_type("FMPadding", model)[0])
+        inst = getHWCustomOp(new_model.get_nodes_by_op_type("FMPadding")[0])
         inst.set_nodeattr("preferred_impl_style", "hls")
     y_produced = oxe.execute_onnx(new_model, input_dict)["outp"]
     assert (y_produced == y_expected).all()
@@ -192,10 +191,10 @@ def test_convert_to_hw_pool(idt, odt, pool_config, ifm_ch, pe, op_type, exec_mod
     # Folding
     for n in new_model.graph.node:
         if n.op_type.startswith("ConvolutionInputGenerator"):
-            inst = getHWCustomOp(n, model)
+            inst = getHWCustomOp(n)
             inst.set_nodeattr("SIMD", pe)
         elif n.op_type.startswith("Pool"):
-            inst = getHWCustomOp(n, model)
+            inst = getHWCustomOp(n)
             inst.set_nodeattr("PE", pe)
 
     if stride <= k:
@@ -238,7 +237,7 @@ def test_convert_to_hw_pool(idt, odt, pool_config, ifm_ch, pe, op_type, exec_mod
 
     if exec_mode == "rtlsim":
         node = new_model.get_nodes_by_op_type("Pool_hls")[0]
-        inst = getHWCustomOp(node, model)
+        inst = getHWCustomOp(node)
         cycles_rtlsim = inst.get_nodeattr("cycles_rtlsim")
         exp_cycles_dict = new_model.analysis(exp_cycles_per_layer)
         exp_cycles = exp_cycles_dict[node.name]
