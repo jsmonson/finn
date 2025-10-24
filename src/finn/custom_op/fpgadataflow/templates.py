@@ -259,7 +259,7 @@ ipx::archive_core $Top.zip [ipx::current_core]
 """
 
 ip_gen_loop_op = """
-create_project @PRJNAME@ @PRJFOLDER@ -part xcvc1902-vsva2197-2MP-e-S
+create_project @PRJNAME@ @PRJFOLDER@ -part @FPGAPART@
 set_msg_config -id {[BD 41-1753]} -suppress
 create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 -module_name axis_reg_32
 set_property CONFIG.TDATA_NUM_BYTES {4} [get_ips axis_reg_32]
@@ -359,5 +359,80 @@ add_files -norecurse "$::env(FINN_ROOT)/finn-rtllib/mlo/loop_control.sv"
 add_files -norecurse "@TOP_VERILOG_FILE@"
 add_files -norecurse "$::env(FINN_ROOT)/finn-rtllib/fifo/hdl/Q_srl.v"
 
-@CMD@
+@IP_GEN@
+
+# Core Cleanup Operations
+set core [ipx::current_core]
+
+# Remove all XCI references to subcores
+set impl_files [ipx::get_file_groups xilinx_implementation -of $core]
+foreach xci [ipx::get_files -of $impl_files {*.xci}] {
+    ipx::remove_file [get_property NAME $xci] $impl_files
+}
+
+# Finalize and Save
+ipx::update_checksums $core
+ipx::save_core $core
+
+# Remove stale subcore references from component.xml
+file rename -force ip/component.xml ip/component.bak
+set ifile [open ip/component.bak r]
+set ofile [open ip/component.xml w]
+set buf [list]
+set kill 0
+while { [eof $ifile] != 1 } {
+    gets $ifile line
+    if { [string match {*<spirit:fileSet>*} $line] == 1 } {
+        foreach l $buf { puts $ofile $l }
+        set buf [list $line]
+    } elseif { [llength $buf] > 0 } {
+        lappend buf $line
+
+        if { [string match {*</spirit:fileSet>*} $line] == 1 } {
+            if { $kill == 0 } { foreach l $buf { puts $ofile $l } }
+            set buf [list]
+            set kill 0
+        } elseif { [string match {*<xilinx:subCoreRef>*} $line] == 1 } {
+            set kill 1
+        }
+    } else {
+        puts $ofile $line
+    }
+}
+close $ifile
+close $ofile
+
+# export list of used Verilog files (for rtlsim later on)
+proc find_xci_files {dir} {
+    set xci_files [list]
+    foreach file [glob -nocomplain -directory $dir *] {
+        if {[file isdirectory $file]} {
+            # Recursively search subdirectories
+            set subdir_files [find_xci_files $file]
+            set xci_files [concat $xci_files $subdir_files]
+        } elseif {[string match *.xci $file]} {
+            # Add .xci files with absolute paths to the list
+            lappend xci_files [file normalize $file]
+        }
+    }
+    return $xci_files
+}
+set xci_files [find_xci_files "ip/src"]
+foreach xci_file $xci_files {
+    read_ip $xci_file
+    set ip [get_ips -of_objects [get_files $xci_file]]
+    foreach ip_instance $ip {
+        set ip_name [get_property NAME $ip_instance]
+        if {[string match *FINNLoop* $ip_name]} {
+            continue
+        }
+        generate_target all $ip_instance
+    }
+}
+
+set all_v_files [get_files -filter {USED_IN_SYNTHESIS == 1 && (FILE_TYPE == Verilog || FILE_TYPE == SystemVerilog || FILE_TYPE =="Verilog Header" || FILE_TYPE == XCI)}]
+
+set fp [open @PRJFOLDER@/all_verilog_srcs.txt w]
+foreach vf $all_v_files {puts $fp $vf}
+close $fp
 """

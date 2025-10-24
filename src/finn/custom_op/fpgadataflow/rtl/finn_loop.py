@@ -546,7 +546,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 ) as f:
                     f.write(template_wrapper)
 
-    def ipgen_singlenode_code(self):
+    def ipgen_singlenode_code(self, fpgapart=None):
         prjname = "MakeLoopIP"
         block_name = self.onnx_node.name
         vivado_stitch_proj_dir = self.get_nodeattr("code_gen_dir_ipgen")
@@ -1034,106 +1034,17 @@ class FINNLoop(HWCustomOp, RTLBackend):
             "set_property value_resolve_type user [ipx::get_bus_parameters "
             "-of [ipx::get_bus_interfaces -of [ipx::current_core ]]]"
         )
-        # add a rudimentary driver mdd to get correct ranges in xparameters.h later on
         example_data_dir = os.environ["FINN_ROOT"] + "/src/finn/qnn-data/mdd-data"
         shutil.copytree(example_data_dir, vivado_stitch_proj_dir + "/data")
-        # Core Cleanup Operations
-        cmd.append(
-            """
-            set core [ipx::current_core]
-
-# Remove all XCI references to subcores
-set impl_files [ipx::get_file_groups xilinx_implementation -of $core]
-foreach xci [ipx::get_files -of $impl_files {*.xci}] {
-    ipx::remove_file [get_property NAME $xci] $impl_files
-}
-
-# Finalize and Save
-ipx::update_checksums $core
-ipx::save_core $core
-
-# Remove stale subcore references from component.xml
-file rename -force ip/component.xml ip/component.bak
-set ifile [open ip/component.bak r]
-set ofile [open ip/component.xml w]
-set buf [list]
-set kill 0
-while { [eof $ifile] != 1 } {
-    gets $ifile line
-    if { [string match {*<spirit:fileSet>*} $line] == 1 } {
-        foreach l $buf { puts $ofile $l }
-        set buf [list $line]
-    } elseif { [llength $buf] > 0 } {
-        lappend buf $line
-
-        if { [string match {*</spirit:fileSet>*} $line] == 1 } {
-            if { $kill == 0 } { foreach l $buf { puts $ofile $l } }
-            set buf [list]
-            set kill 0
-        } elseif { [string match {*<xilinx:subCoreRef>*} $line] == 1 } {
-            set kill 1
-        }
-    } else {
-        puts $ofile $line
-    }
-}
-close $ifile
-close $ofile
-"""
-        )
-
-        # export list of used Verilog files (for rtlsim later on)
-        cmd.append(
-            """
-proc find_xci_files {dir} {
-    set xci_files [list]
-    foreach file [glob -nocomplain -directory $dir *] {
-        if {[file isdirectory $file]} {
-            # Recursively search subdirectories
-            set subdir_files [find_xci_files $file]
-            set xci_files [concat $xci_files $subdir_files]
-        } elseif {[string match *.xci $file]} {
-            # Add .xci files with absolute paths to the list
-            lappend xci_files [file normalize $file]
-        }
-    }
-    return $xci_files
-}"""
-        )
-        cmd.append('set xci_files [find_xci_files "ip/src"]')
-        cmd.append(
-            """
-foreach xci_file $xci_files {
-    read_ip $xci_file
-    set ip [get_ips -of_objects [get_files $xci_file]]
-    foreach ip_instance $ip {
-        set ip_name [get_property NAME $ip_instance]
-        if {[string match *FINNLoop* $ip_name]} {
-            continue
-        }
-        generate_target all $ip_instance
-    }
-}
-        """
-        )
-        cmd.append(
-            "set all_v_files [get_files -filter {USED_IN_SYNTHESIS == 1 "
-            + "&& (FILE_TYPE == Verilog || FILE_TYPE == SystemVerilog "
-            + '|| FILE_TYPE =="Verilog Header" || FILE_TYPE == XCI)}]'
-        )
-        v_file_list = "%s/all_verilog_srcs.txt" % vivado_stitch_proj_dir
-        cmd.append("set fp [open %s w]" % v_file_list)
-        # write each verilog filename to all_verilog_srcs.txt
-        cmd.append("foreach vf $all_v_files {puts $fp $vf}")
-        cmd.append("close $fp")
 
         template = templates.ip_gen_loop_op
 
         # transform list into long string separated by '\n'
         cmd = "\n".join(cmd)
-        template = template.replace("@CMD@", cmd)
+        template = template.replace("@IP_GEN@", cmd)
         template = template.replace("@PRJNAME@", prjname)
         template = template.replace("@PRJFOLDER@", vivado_stitch_proj_dir)
+        template = template.replace("@FPGAPART@", fpgapart)
         template = template.replace(
             "@TOP_VERILOG_FILE@",
             f"{self.get_nodeattr('code_gen_dir_ipgen')}/{self.onnx_node.name}_wrapper.v",

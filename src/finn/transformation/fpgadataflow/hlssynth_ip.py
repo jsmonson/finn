@@ -50,7 +50,8 @@ class HLSSynthIP(NodeLocalTransformation):
       NodeLocalTransformation for more details.
     """
 
-    def __init__(self, num_workers=None):
+    def __init__(self, fpgapart=None, num_workers=None):
+        self.fpgapart = fpgapart
         super().__init__(num_workers=num_workers)
 
     def applyNodeLocal(self, node):
@@ -70,7 +71,7 @@ class HLSSynthIP(NodeLocalTransformation):
                     or os.path.isfile(inst.get_nodeattr("ipgen_path"))
                 ) or not inst.get_nodeattr("code_gen_dir_ipgen") in inst.get_nodeattr("ipgen_path"):
                     # call the compilation function for this node
-                    inst.ipgen_singlenode_code()
+                    inst.ipgen_singlenode_code(self.fpgapart)
                 else:
                     warnings.warn("Using pre-existing IP for %s" % node.name)
                 # ensure that executable path is now set
