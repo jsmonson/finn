@@ -441,7 +441,7 @@ def prepare_loop_ops_for_ipgen_step2(node, fpga_part, clk_ns):
 # eltwise param dtype
 @pytest.mark.parametrize("eltw_param_dtype", ["INT8", "FLOAT32"])
 # tail node
-@pytest.mark.parametrize("tail_node", [True])
+@pytest.mark.parametrize("tail_node", [False, True])
 @pytest.mark.fpgataflow
 def test_fpgadataflow_finnloop(
     dim, iteration, elemwise_optype, rhs_shape, eltw_param_dtype, tail_node
