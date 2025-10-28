@@ -222,7 +222,7 @@ def rtlsim_exec_cppxsi(
     instream_names = [x[0] for x in ifnames["s_axis"]]
     outstream_names = [x[0] for x in ifnames["m_axis"]]
     instream_descrs = [
-        (instream_names[i], instream_iters[i], instream_iters[i] + throttle_cycles)
+        (instream_names[i], int(instream_iters[i]), int(instream_iters[i] + throttle_cycles))
         for i in range(len(instream_names))
     ]
     instream_descrs_str = str(instream_descrs).replace("[", "").replace("]", "")
@@ -230,7 +230,7 @@ def rtlsim_exec_cppxsi(
     instream_descrs_str = instream_descrs_str.replace("'", '"')
 
     outstream_descrs = [
-        (outstream_names[i], outstream_iters[i], outstream_iters[i])
+        (outstream_names[i], int(outstream_iters[i]), int(outstream_iters[i]))
         for i in range(len(outstream_names))
     ]
     outstream_descrs_str = str(outstream_descrs).replace("[", "").replace("]", "")
