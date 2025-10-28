@@ -52,6 +52,7 @@ from finn.analysis.fpgadataflow.dataflow_performance import dataflow_performance
 from finn.custom_op.fpgadataflow import templates
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 from finn.custom_op.fpgadataflow.rtlbackend import RTLBackend
+from finn.transformation.fpgadataflow.annotate_cycles import AnnotateCycles
 from finn.util.basic import make_build_dir
 from finn.util.create import adjacency_list
 from finn.util.data_packing import npy_to_rtlsim_input, rtlsim_output_to_npy
@@ -249,7 +250,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
 
         for node in loop_body.graph.node:
             cnode = getCustomOp(node)
-            if cnode.get_nodeattr("cycles_estimate") is not None:
+            if cnode.get_nodeattr("cycles_estimate"):
                 check_if_cycles_annotated = True
                 break
         if not check_if_cycles_annotated:
