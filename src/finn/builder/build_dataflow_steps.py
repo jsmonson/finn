@@ -261,23 +261,29 @@ def prepare_for_stitched_ip_rtlsim(verify_model, cfg):
     return verify_model
 
 
-def prepare_loop_ops_fifo_sizing(node, fpga_part, clk_ns):
+def prepare_loop_ops_fifo_sizing(node, cfg):
     node_inst = getCustomOp(node)
     loop_model = node_inst.get_nodeattr("body")
     loop_model = loop_model.transform(GiveUniqueNodeNames(prefix=node.name + "_"))
     # go first into subgraph to check if there are other loop ops
     loop_nodes = loop_model.get_nodes_by_op_type("FINNLoop")
     for loop_node in loop_nodes:
-        prepare_loop_ops_fifo_sizing(loop_node, fpga_part, clk_ns)
-    loop_model = loop_model.transform(PrepareIP(fpga_part, clk_ns))
-    loop_model = loop_model.transform(HLSSynthIP(fpga_part))
+        prepare_loop_ops_fifo_sizing(loop_node, cfg)
+    loop_model = loop_model.transform(
+        PrepareIP(cfg._resolve_fpga_part(), cfg._resolve_hls_clk_period())
+    )
+    loop_model = loop_model.transform(HLSSynthIP(cfg._resolve_hls_clk_period()))
     loop_model = loop_model.transform(ReplaceVerilogRelPaths())
     if node_inst.get_nodeattr("rtlsim_trace"):
         loop_model.set_metadata_prop("rtlsim_trace", f"{node.name}_fifosim_trace.wdb")
     loop_model = loop_model.transform(
         InsertAndSetFIFODepths(
-            fpga_part,
-            clk_ns,
+            cfg._resolve_fpga_part(),
+            cfg._resolve_hls_clk_period(),
+            swg_exception=cfg.default_swg_exception,
+            vivado_ram_style=cfg.large_fifo_mem_style,
+            fifosim_input_throttle=cfg.fifosim_input_throttle,
+            cfg_n_inferences=cfg.fifosim_n_inferences,
         )
     )
     loop_model = loop_model.transform(SplitLargeFIFOs())
@@ -287,18 +293,20 @@ def prepare_loop_ops_fifo_sizing(node, fpga_part, clk_ns):
     node_inst.set_nodeattr("body", loop_model.graph)
 
 
-def prepare_loop_ops_ipgen(node, fpga_part, clk_ns):
+def prepare_loop_ops_ipgen(node, cfg):
     node_inst = getCustomOp(node)
     loop_model = node_inst.get_nodeattr("body")
     # go first into subgraph to check if there are other loop ops
     loop_nodes = loop_model.get_nodes_by_op_type("FINNLoop")
     for loop_node in loop_nodes:
-        prepare_loop_ops_ipgen(loop_node, fpga_part, clk_ns)
-    loop_model = loop_model.transform(HLSSynthIP(fpga_part))
+        prepare_loop_ops_ipgen(loop_node, cfg)
+    loop_model = loop_model.transform(HLSSynthIP(cfg._resolve_hls_clk_period()))
     loop_model = loop_model.transform(
         CreateStitchedIP(
-            fpga_part,
-            clk_ns,
+            cfg._resolve_fpga_part(),
+            cfg.synth_clk_period_ns,
+            vitis=cfg.stitched_ip_gen_dcp,
+            signature=cfg.signature,
         )
     )
     node_inst.set_nodeattr("body", loop_model.graph)
@@ -578,7 +586,7 @@ def step_hw_codegen(model: ModelWrapper, cfg: DataflowBuildConfig):
     model = model.transform(GiveUniqueNodeNames())
     loop_nodes = model.get_nodes_by_op_type("FINNLoop")
     for node in loop_nodes:
-        prepare_loop_ops_fifo_sizing(node, cfg._resolve_fpga_part(), cfg.synth_clk_period_ns)
+        prepare_loop_ops_fifo_sizing(node, cfg)
     model = model.transform(
         PrepareIP(cfg._resolve_fpga_part(), cfg._resolve_hls_clk_period()),
         apply_to_subgraphs=True,
@@ -593,7 +601,7 @@ def step_hw_ipgen(model: ModelWrapper, cfg: DataflowBuildConfig):
 
     loop_nodes = model.get_nodes_by_op_type("FINNLoop")
     for node in loop_nodes:
-        prepare_loop_ops_ipgen(node, cfg._resolve_fpga_part(), cfg.synth_clk_period_ns)
+        prepare_loop_ops_ipgen(node, cfg)
     model = model.transform(HLSSynthIP(cfg._resolve_fpga_part()))
     model = model.transform(ReplaceVerilogRelPaths())
     # report_dir = cfg.output_dir + "/report"
