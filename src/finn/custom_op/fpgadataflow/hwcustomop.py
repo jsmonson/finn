@@ -474,8 +474,13 @@ class HWCustomOp(CustomOp):
             txns_in[k] = sim.trace_stream(k + sname)
         for k in txns_out.keys():
             txns_out[k] = sim.trace_stream(k + sname)
-        self.rtlsim_multi_io(sim, io_dict)
-        total_cycle_count = self.get_nodeattr("cycles_rtlsim")
+        total_cycle_count = finnxsi.rtlsim_multi_io(
+            sim,
+            io_dict,
+            num_out_values = self.get_number_output_values(),
+            sname=sname,
+            liveness_threshold=period,
+        )
         assert (
             total_cycle_count <= period
         ), """Total cycle count from rtl simulation is higher than
