@@ -14,10 +14,10 @@ This package provides tools for building and deploying quantized neural networks
 on FPGAs and other accelerators.
 """
 
+import importlib.util
 import os
 import warnings
 from pathlib import Path
-import importlib.util
 
 
 def _setup_environment():

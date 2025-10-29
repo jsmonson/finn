@@ -38,12 +38,16 @@ import warnings
 from brevitas_examples import bnn_pynq, imagenet_classification
 from pkgutil import get_data
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
 
 from finn.core.onnx_exec import execute_onnx
 from finn.transformation.fpgadataflow.make_zynq_proj import ZynqBuild
 from finn.transformation.fpgadataflow.vitis_build import VitisBuild, VitisOptStrategy
-from finn.util.basic import alveo_default_platform, alveo_part_map, pynq_part_map
+from finn.util.basic import (
+    alveo_default_platform,
+    alveo_part_map,
+    getHWCustomOp,
+    pynq_part_map,
+)
 
 # map of (wbits,abits) -> model
 example_map = {
@@ -165,7 +169,7 @@ def execute_parent(parent_path, child_path, input_tensor_npy, return_full_ctx=Fa
     iname = parent_model.graph.input[0].name
     oname = parent_model.graph.output[0].name
     sdp_node = parent_model.get_nodes_by_op_type("StreamingDataflowPartition")[0]
-    sdp_node = getCustomOp(sdp_node)
+    sdp_node = getHWCustomOp(sdp_node, parent_model)
     sdp_node.set_nodeattr("model", child_path)
     sdp_node.set_nodeattr("return_full_exec_context", 1 if return_full_ctx else 0)
     ret = execute_onnx(parent_model, {iname: input_tensor_npy}, True)

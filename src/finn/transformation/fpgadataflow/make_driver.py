@@ -36,13 +36,12 @@ import shutil
 import subprocess
 import warnings
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.base import Transformation
 from string import Template
 from typing import Dict, Tuple
 
 import finn.util
-from finn.util.basic import make_build_dir
+from finn.util.basic import getHWCustomOp, make_build_dir
 from finn.util.data_packing import get_driver_shapes, to_external_tensor
 
 from . import template_driver
@@ -313,11 +312,11 @@ class MakePYNQDriver(Transformation):
                 init_tensor = None
 
             if producer is None:  # input dma?
-                sdp_inst = getCustomOp(node)
+                sdp_inst = getHWCustomOp(node, model)
                 idma_name = sdp_inst.get_nodeattr("instance_name")
                 df_model = ModelWrapper(sdp_inst.get_nodeattr("model"))
                 assert df_model.graph.node[0].op_type == "IODMA_hls"
-                iodma_node = getCustomOp(df_model.graph.node[0])
+                iodma_node = getHWCustomOp(df_model.graph.node[0], df_model)
                 if iodma_node.get_nodeattr("burstMode") == "wrap":  # input weights dma?
                     init_tensor = df_model.get_initializer(iodma_node.onnx_node.input[0])
                     ext_weight_dma_cnt += 1
@@ -362,13 +361,13 @@ class MakePYNQDriver(Transformation):
         for sdp_ind, sdp_node in enumerate(model.graph.node):
             assert sdp_node.op_type == "StreamingDataflowPartition"
             # get dataflow model
-            sdp_node = getCustomOp(sdp_node)
+            sdp_node = getHWCustomOp(sdp_node, model)
             dataflow_model_filename = sdp_node.get_nodeattr("model")
             dataflow_model = ModelWrapper(dataflow_model_filename)
             rt_layer_ind = 0
             for node in dataflow_model.graph.node:
                 if node.op_type.startswith("MVAU") or node.op_type.startswith("Thresholding"):
-                    node_inst = getCustomOp(node)
+                    node_inst = getHWCustomOp(node, dataflow_model)
                     is_rt_weights = node_inst.get_nodeattr("runtime_writeable_weights")
                     if is_rt_weights == 1:
                         fcl_w = dataflow_model.get_initializer(node.input[1])

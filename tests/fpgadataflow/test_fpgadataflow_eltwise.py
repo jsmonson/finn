@@ -34,7 +34,6 @@ import onnx.parser as oprs
 import qonnx.core.data_layout as dl
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import gen_finn_dt_tensor
@@ -49,6 +48,7 @@ from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
 from finn.transformation.fpgadataflow.prepare_rtlsim import PrepareRTLSim
 from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
+from finn.util.basic import getHWCustomOp
 
 
 def build_model(shp, dt0, dt1, do_abs):
@@ -118,7 +118,7 @@ def test_fpgadataflow_eltwise(dt0, ch, fold, do_abs, exec_mode):
 
     assert len(model.graph.node) == 1
     assert model.graph.node[0].op_type == "StreamingEltwise_hls"
-    getCustomOp(model.graph.node[0]).set_nodeattr("PE", pe)
+    getHWCustomOp(model.graph.node[0]).set_nodeattr("PE", pe)
     if exec_mode == "cppsim":
         model = model.transform(PrepareCppSim())
         model = model.transform(CompileCppSim())
@@ -135,7 +135,7 @@ def test_fpgadataflow_eltwise(dt0, ch, fold, do_abs, exec_mode):
     assert (y_produced == y_expected).all(), exec_mode + " failed"
     if exec_mode == "rtlsim":
         node = model.get_nodes_by_op_type("StreamingEltwise_hls")[0]
-        inst = getCustomOp(node)
+        inst = getHWCustomOp(node)
         cycles_rtlsim = inst.get_nodeattr("cycles_rtlsim")
         exp_cycles_dict = model.analysis(exp_cycles_per_layer)
         exp_cycles = exp_cycles_dict[node.name]

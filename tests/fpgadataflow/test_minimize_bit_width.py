@@ -32,7 +32,6 @@ import numpy as np
 from onnx import TensorProto, helper
 from qonnx.core.datatype import BipolarType, DataType, IntType
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.util.basic import gen_finn_dt_tensor, roundup_to_integer_multiple
 from typing import Optional, Union
 
@@ -44,6 +43,7 @@ from finn.transformation.fpgadataflow.minimize_accumulator_width import (
 from finn.transformation.fpgadataflow.minimize_weight_bit_width import (
     MinimizeWeightBitWidth,
 )
+from finn.util.basic import getHWCustomOp
 
 
 def make_unit_test_model(wdt: DataType, idt: DataType, tdt: Optional[DataType] = None):
@@ -169,7 +169,7 @@ def test_minimize_weight_bit_width(wdt: DataType, rww: bool):
 
     # If runtime-writeable weights, specify as a node attribute
     for node in model.graph.node:
-        inst = getCustomOp(node)
+        inst = getHWCustomOp(node)
         if isinstance(inst, (MVAU, VVAU)):
             inst.set_nodeattr("runtime_writeable_weights", int(rww))
 
@@ -178,7 +178,7 @@ def test_minimize_weight_bit_width(wdt: DataType, rww: bool):
 
     # Iterate through each node to make sure it functioned properly
     for node in model.graph.node:
-        inst = getCustomOp(node)
+        inst = getHWCustomOp(node)
         if isinstance(inst, (MVAU, VVAU)):
             cur_wdt = DataType[inst.get_nodeattr("weightDataType")]
             exp_wdt = def_wdt if rww else wdt
@@ -274,7 +274,7 @@ def test_minimize_accumulator_width(wdt: DataType, idt: DataType, tdt: DataType,
 
     # If runtime-writeable weights, specify as a node attribute
     for node in model.graph.node:
-        inst = getCustomOp(node)
+        inst = getHWCustomOp(node)
         if isinstance(inst, (MVAU, VVAU)):
             inst.set_nodeattr("runtime_writeable_weights", int(rww))
             cur_adt = DataType[inst.get_nodeattr("accDataType")]
@@ -285,7 +285,7 @@ def test_minimize_accumulator_width(wdt: DataType, idt: DataType, tdt: DataType,
 
     # Iterate through each node to make sure it functioned properly
     for node in model.graph.node:
-        inst = getCustomOp(node)
+        inst = getHWCustomOp(node)
         if isinstance(inst, (MVAU, VVAU)):
             cur_adt = DataType[inst.get_nodeattr("accDataType")]
             cur_odt = DataType[inst.get_nodeattr("outputDataType")]

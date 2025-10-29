@@ -35,7 +35,6 @@ import warnings
 from copy import deepcopy
 from functools import partial
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.bipolar_to_xnor import ConvertBipolarMatMulToXnorPopcount
 from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.general import (
@@ -121,7 +120,11 @@ from finn.transformation.qonnx.quant_act_to_multithreshold import (
 from finn.transformation.streamline import Streamline
 from finn.transformation.streamline.reorder import MakeMaxPoolNHWC
 from finn.transformation.streamline.round_thresholds import RoundAndClipThresholds
-from finn.util.basic import get_liveness_threshold_cycles, get_rtlsim_trace_depth
+from finn.util.basic import (
+    get_liveness_threshold_cycles,
+    get_rtlsim_trace_depth,
+    getHWCustomOp,
+)
 from finn.util.test import execute_parent
 
 
@@ -225,7 +228,7 @@ def prepare_for_stitched_ip_rtlsim(verify_model, cfg):
         # switch impl_style=vivado components to rtl
         # StreamingFIFO must have impl_style=rtl
         for fifo_layer in verify_model.get_nodes_by_op_type("StreamingFIFO_rtl"):
-            inst = getCustomOp(fifo_layer)
+            inst = getHWCustomOp(fifo_layer, verify_model)
             if inst.get_nodeattr("impl_style") != "rtl":
                 inst.set_nodeattr("impl_style", "rtl")
                 inst.set_nodeattr("code_gen_dir_ipgen", "")
@@ -379,7 +382,7 @@ def step_create_dataflow_partition(model: ModelWrapper, cfg: DataflowBuildConfig
     sdp_nodes = parent_model.get_nodes_by_op_type("StreamingDataflowPartition")
     assert len(sdp_nodes) == 1, "Only a single StreamingDataflowPartition supported."
     sdp_node = sdp_nodes[0]
-    sdp_node = getCustomOp(sdp_node)
+    sdp_node = getHWCustomOp(sdp_node, parent_model)
     dataflow_model_filename = sdp_node.get_nodeattr("model")
     if cfg.save_intermediate_models:
         parent_model.save(cfg.output_dir + "/intermediate_models/dataflow_parent.onnx")
