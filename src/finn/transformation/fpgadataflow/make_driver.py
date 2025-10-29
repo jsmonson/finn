@@ -368,7 +368,7 @@ class MakePYNQDriver(Transformation):
             rt_layer_ind = 0
             for node in dataflow_model.graph.node:
                 if node.op_type.startswith("MVAU") or node.op_type.startswith("Thresholding"):
-                    node_inst = getHWCustomOp(node, model)
+                    node_inst = getHWCustomOp(node, dataflow_model)
                     is_rt_weights = node_inst.get_nodeattr("runtime_writeable_weights")
                     if is_rt_weights == 1:
                         fcl_w = dataflow_model.get_initializer(node.input[1])
