@@ -39,7 +39,7 @@ from shutil import copytree
 from finn.transformation.fpgadataflow.replace_verilog_relpaths import (
     ReplaceVerilogRelPaths,
 )
-from finn.util.basic import make_build_dir, getHWCustomOp
+from finn.util.basic import getHWCustomOp, make_build_dir
 from finn.util.fpgadataflow import is_hls_node, is_rtl_node
 
 
@@ -354,9 +354,9 @@ class CreateStitchedIP(Transformation):
                     if producer is None:
                         continue
                     j = list(producer.output).index(node.input[i])
-                    src_intf_name = getHWCustomOp(producer, model).get_verilog_top_module_intf_names()[
-                        "m_axis"
-                    ][j][0]
+                    src_intf_name = getHWCustomOp(
+                        producer, model
+                    ).get_verilog_top_module_intf_names()["m_axis"][j][0]
                     dst_intf_name = node_inst.get_verilog_top_module_intf_names()["s_axis"][i][0]
                     self.connect_cmds.append(
                         "connect_bd_intf_net [get_bd_intf_pins %s/%s] "

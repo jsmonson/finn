@@ -505,7 +505,9 @@ def get_driver_shapes(model: ModelWrapper) -> Dict:
         first_node = successor_df_model.find_consumer(
             successor_df_model.graph.input[successor_input_num].name
         )
-        i_tensor_shape_folded = tuple(getHWCustomOp(first_node, successor_df_model).get_folded_input_shape())
+        i_tensor_shape_folded = tuple(
+            getHWCustomOp(first_node, successor_df_model).get_folded_input_shape()
+        )
         # generate dummy folded i/o tensors and their packed versions
         i_tensor_dummy_folded = gen_finn_dt_tensor(i_tensor_dt, i_tensor_shape_folded)
         i_tensor_dummy_packed = finnpy_to_packed_bytearray(i_tensor_dummy_folded, i_tensor_dt)
@@ -543,7 +545,9 @@ def get_driver_shapes(model: ModelWrapper) -> Dict:
         last_node = predecessor_df_model.find_producer(
             predecessor_df_model.graph.output[predecessor_output_num].name
         )
-        o_tensor_shape_folded = tuple(getHWCustomOp(last_node, predecessor_df_model).get_folded_output_shape())
+        o_tensor_shape_folded = tuple(
+            getHWCustomOp(last_node, predecessor_df_model).get_folded_output_shape()
+        )
         o_tensor_dummy_folded = gen_finn_dt_tensor(o_tensor_dt, o_tensor_shape_folded)
         o_tensor_dummy_packed = finnpy_to_packed_bytearray(o_tensor_dummy_folded, o_tensor_dt)
         o_tensor_shape_packed = o_tensor_dummy_packed.shape

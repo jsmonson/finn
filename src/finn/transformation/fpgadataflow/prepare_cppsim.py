@@ -36,7 +36,7 @@ from qonnx.util.basic import get_num_default_workers
 from finn.util.basic import getHWCustomOp, make_build_dir
 from finn.util.fpgadataflow import is_hls_node
 
-from finn.util.basic import getHWCustomOp
+
 def _codegen_single_node(node, model):
     """Calls C++ code generation for one node. Resulting code can be used
     to simulate node using cppsim."""

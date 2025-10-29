@@ -32,7 +32,6 @@ import os
 import subprocess
 from enum import Enum
 from qonnx.core.modelwrapper import ModelWrapper
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.general import (
     GiveReadableTensorNames,
@@ -51,7 +50,7 @@ from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
 from finn.transformation.fpgadataflow.insert_iodma import InsertIODMA
 from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
-from finn.util.basic import make_build_dir
+from finn.util.basic import getHWCustomOp, make_build_dir
 
 from . import templates
 

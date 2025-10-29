@@ -31,7 +31,6 @@ import numpy as np
 import warnings
 from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.general import (
     GiveReadableTensorNames,
@@ -48,6 +47,7 @@ from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
 from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
 from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
+from finn.util.basic import getHWCustomOp
 from finn.util.fpgadataflow import is_hls_node, is_rtl_node
 
 

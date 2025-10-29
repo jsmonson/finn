@@ -42,7 +42,6 @@ from brevitas.export import export_qonnx
 from dataset_loading import cifar, mnist
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.bipolar_to_xnor import ConvertBipolarMatMulToXnorPopcount
 from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.general import (
@@ -94,7 +93,7 @@ from finn.transformation.streamline.reorder import (
     MoveScalarLinearPastInvariants,
 )
 from finn.transformation.streamline.round_thresholds import RoundAndClipThresholds
-from finn.util.basic import get_finn_root, make_build_dir, test_board_map
+from finn.util.basic import get_finn_root, getHWCustomOp, make_build_dir, test_board_map
 from finn.util.pytorch import ToTensor
 from finn.util.test import (
     execute_parent,

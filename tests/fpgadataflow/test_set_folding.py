@@ -32,7 +32,6 @@ import numpy as np
 from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
 from qonnx.core.modelwrapper import ModelWrapper
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.util.basic import qonnx_make_model
 
@@ -41,6 +40,7 @@ from finn.transformation.fpgadataflow.create_dataflow_partition import (
     CreateDataflowPartition,
 )
 from finn.transformation.fpgadataflow.set_folding import SetFolding
+from finn.util.basic import getHWCustomOp
 from finn.util.test import load_test_checkpoint_or_skip
 
 

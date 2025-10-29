@@ -120,7 +120,11 @@ from finn.transformation.qonnx.quant_act_to_multithreshold import (
 from finn.transformation.streamline import Streamline
 from finn.transformation.streamline.reorder import MakeMaxPoolNHWC
 from finn.transformation.streamline.round_thresholds import RoundAndClipThresholds
-from finn.util.basic import get_liveness_threshold_cycles, get_rtlsim_trace_depth, getHWCustomOp
+from finn.util.basic import (
+    get_liveness_threshold_cycles,
+    get_rtlsim_trace_depth,
+    getHWCustomOp,
+)
 from finn.util.test import execute_parent
 
 

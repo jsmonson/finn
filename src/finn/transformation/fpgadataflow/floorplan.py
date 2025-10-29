@@ -28,13 +28,12 @@
 
 import json
 import warnings
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.general import ApplyConfig
 from qonnx.util.basic import get_by_name
 
 from finn.analysis.fpgadataflow.floorplan_params import floorplan_params
-from finn.util.basic import make_build_dir
+from finn.util.basic import getHWCustomOp, make_build_dir
 
 
 class Floorplan(Transformation):

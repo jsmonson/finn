@@ -27,13 +27,12 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from qonnx.core.modelwrapper import ModelWrapper
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.create_generic_partitions import PartitionFromLambda
 from qonnx.util.basic import get_by_name
 
 from finn.transformation.fpgadataflow.externalize_params import ExternalizeParams
-from finn.util.basic import make_build_dir
+from finn.util.basic import getHWCustomOp, make_build_dir
 
 
 class CreateDataflowPartition(Transformation):
@@ -86,7 +85,7 @@ class CreateDataflowPartition(Transformation):
         p_nodes = parent_model.get_nodes_by_op_type("GenericPartition")
         for partition_ind, p_node in enumerate(p_nodes):
             # go into partition to extract some info
-            p_node_inst = getHWCustomOp(p_node) # Read only, no model context
+            p_node_inst = getHWCustomOp(p_node)  # Read only, no model context
             node_model_filename = p_node_inst.get_nodeattr("model")
             p_model = ModelWrapper(node_model_filename)
             # check floorplan (SLR assignment per node)

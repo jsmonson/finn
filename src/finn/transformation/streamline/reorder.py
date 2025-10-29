@@ -36,13 +36,13 @@ from onnx import helper as oh
 from qonnx.core.datatype import DataType
 from qonnx.core.onnx_exec import execute_node
 from qonnx.transformation.base import Transformation
-
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import SortGraph
 from qonnx.transformation.infer_data_layouts import InferDataLayouts
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import get_by_name
+
+from finn.util.basic import getHWCustomOp
 
 
 class MoveAddPastMul(Transformation):

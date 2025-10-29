@@ -36,13 +36,12 @@ import shutil
 import subprocess
 import warnings
 from qonnx.core.modelwrapper import ModelWrapper
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from string import Template
 from typing import Dict, Tuple
 
 import finn.util
-from finn.util.basic import make_build_dir
+from finn.util.basic import getHWCustomOp, make_build_dir
 from finn.util.data_packing import get_driver_shapes, to_external_tensor
 
 from . import template_driver

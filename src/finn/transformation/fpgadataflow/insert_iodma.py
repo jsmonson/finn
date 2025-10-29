@@ -30,10 +30,11 @@ import math
 import numpy as np
 from onnx import TensorProto
 from onnx import helper as oh
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.general import SortGraph
 from qonnx.util.basic import get_by_name
+
+from finn.util.basic import getHWCustomOp
 
 
 class InsertIODMA(Transformation):

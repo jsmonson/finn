@@ -32,9 +32,9 @@ import os
 from finn import xsi
 from finn.util.basic import (
     get_finn_root,
-    getHWCustomOp,
     get_liveness_threshold_cycles,
     get_vivado_root,
+    getHWCustomOp,
     launch_process_helper,
     make_build_dir,
 )

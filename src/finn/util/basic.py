@@ -33,7 +33,6 @@ import tempfile
 from qonnx.custom_op.registry import getCustomOp
 from qonnx.util.basic import roundup_to_integer_multiple
 
-
 # test boards used for bnn pynq tests
 test_board_map = ["Pynq-Z1", "KV260_SOM", "ZCU104", "U250"]
 

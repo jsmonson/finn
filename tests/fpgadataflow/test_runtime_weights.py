@@ -32,7 +32,6 @@ import pytest
 import numpy as np
 import os
 from qonnx.core.datatype import DataType
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.general import GiveUniqueNodeNames
 from qonnx.util.basic import gen_finn_dt_tensor
 
@@ -42,6 +41,7 @@ from finn.transformation.fpgadataflow.hlssynth_ip import HLSSynthIP
 from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
 from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
+from finn.util.basic import getHWCustomOp
 from finn.util.create import hls_random_mlp_maker
 
 test_fpga_part = "xczu3eg-sbva484-1-e"

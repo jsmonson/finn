@@ -42,7 +42,12 @@ from qonnx.core.modelwrapper import ModelWrapper
 from finn.core.onnx_exec import execute_onnx
 from finn.transformation.fpgadataflow.make_zynq_proj import ZynqBuild
 from finn.transformation.fpgadataflow.vitis_build import VitisBuild, VitisOptStrategy
-from finn.util.basic import alveo_default_platform, alveo_part_map, getHWCustomOp, pynq_part_map
+from finn.util.basic import (
+    alveo_default_platform,
+    alveo_part_map,
+    getHWCustomOp,
+    pynq_part_map,
+)
 
 # map of (wbits,abits) -> model
 example_map = {

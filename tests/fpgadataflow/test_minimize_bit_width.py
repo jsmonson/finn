@@ -32,7 +32,6 @@ import numpy as np
 from onnx import TensorProto, helper
 from qonnx.core.datatype import BipolarType, DataType, IntType
 from qonnx.core.modelwrapper import ModelWrapper
-from finn.util.basic import getHWCustomOp
 from qonnx.util.basic import gen_finn_dt_tensor, roundup_to_integer_multiple
 from typing import Optional, Union
 
@@ -44,6 +43,7 @@ from finn.transformation.fpgadataflow.minimize_accumulator_width import (
 from finn.transformation.fpgadataflow.minimize_weight_bit_width import (
     MinimizeWeightBitWidth,
 )
+from finn.util.basic import getHWCustomOp
 
 
 def make_unit_test_model(wdt: DataType, idt: DataType, tdt: Optional[DataType] = None):

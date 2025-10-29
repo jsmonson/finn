@@ -32,11 +32,11 @@ import warnings
 from onnx import helper as oh
 from qonnx.core.datatype import DataType
 from qonnx.transformation.base import Transformation
-
-from finn.util.basic import getHWCustomOp
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.util.basic import get_by_name
+
+from finn.util.basic import getHWCustomOp
 
 
 class AbsorbSignBiasIntoMultiThreshold(Transformation):
