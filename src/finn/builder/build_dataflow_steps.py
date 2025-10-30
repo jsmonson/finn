@@ -305,8 +305,7 @@ def prepare_loop_ops_ipgen(node, cfg):
         CreateStitchedIP(
             cfg._resolve_fpga_part(),
             cfg.synth_clk_period_ns,
-            vitis=cfg.stitched_ip_gen_dcp,
-            signature=cfg.signature,
+            vitis=False,
         )
     )
     node_inst.set_nodeattr("body", loop_model.graph)
