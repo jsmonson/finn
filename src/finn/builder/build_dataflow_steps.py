@@ -35,7 +35,6 @@ import warnings
 from copy import deepcopy
 from functools import partial
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.bipolar_to_xnor import ConvertBipolarMatMulToXnorPopcount
 from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.general import (
@@ -125,6 +124,11 @@ from finn.transformation.streamline.reorder import MakeMaxPoolNHWC
 from finn.transformation.streamline.round_thresholds import RoundAndClipThresholds
 from finn.util.basic import get_liveness_threshold_cycles, get_rtlsim_trace_depth
 from finn.util.mlo_sim import is_mlo, mlo_prehook_func_factory
+from finn.util.basic import (
+    get_liveness_threshold_cycles,
+    get_rtlsim_trace_depth,
+    getHWCustomOp,
+)
 from finn.util.test import execute_parent
 
 
@@ -231,7 +235,7 @@ def prepare_for_stitched_ip_rtlsim(verify_model, cfg):
         # switch impl_style=vivado components to rtl
         # StreamingFIFO must have impl_style=rtl
         for fifo_layer in verify_model.get_nodes_by_op_type("StreamingFIFO_rtl"):
-            inst = getCustomOp(fifo_layer)
+            inst = getHWCustomOp(fifo_layer, verify_model)
             if inst.get_nodeattr("impl_style") != "rtl":
                 inst.set_nodeattr("impl_style", "rtl")
                 inst.set_nodeattr("code_gen_dir_ipgen", "")
@@ -262,7 +266,7 @@ def prepare_for_stitched_ip_rtlsim(verify_model, cfg):
 
 
 def prepare_loop_ops_fifo_sizing(node, cfg):
-    node_inst = getCustomOp(node)
+    node_inst = getHWCustomOp(node) # No model context: read only
     loop_model = node_inst.get_nodeattr("body")
     loop_model = loop_model.transform(GiveUniqueNodeNames(prefix=node.name + "_"))
     # go first into subgraph to check if there are other loop ops
@@ -294,7 +298,7 @@ def prepare_loop_ops_fifo_sizing(node, cfg):
 
 
 def prepare_loop_ops_ipgen(node, cfg):
-    node_inst = getCustomOp(node)
+    node_inst = getHWCustomOp(node) # No model context: read only
     loop_model = node_inst.get_nodeattr("body")
     # go first into subgraph to check if there are other loop ops
     loop_nodes = loop_model.get_nodes_by_op_type("FINNLoop")
@@ -435,7 +439,7 @@ def step_create_dataflow_partition(model: ModelWrapper, cfg: DataflowBuildConfig
     sdp_nodes = parent_model.get_nodes_by_op_type("StreamingDataflowPartition")
     assert len(sdp_nodes) == 1, "Only a single StreamingDataflowPartition supported."
     sdp_node = sdp_nodes[0]
-    sdp_node = getCustomOp(sdp_node)
+    sdp_node = getHWCustomOp(sdp_node, parent_model)
     dataflow_model_filename = sdp_node.get_nodeattr("model")
     if cfg.save_intermediate_models:
         parent_model.save(cfg.output_dir + "/intermediate_models/dataflow_parent.onnx")
@@ -511,7 +515,7 @@ def step_apply_folding_config(model: ModelWrapper, cfg: DataflowBuildConfig):
         model = model.transform(GiveUniqueNodeNames())
         loop_nodes = model.get_nodes_by_op_type("FINNLoop")
         for node in loop_nodes:
-            node_inst = getCustomOp(node)
+            node_inst = getHWCustomOp(node, model)
             loop_model = node_inst.get_nodeattr("body")
             loop_model = loop_model.transform(GiveUniqueNodeNames(prefix=node.name + "_"))
             node_inst.set_nodeattr("body", loop_model.graph)
@@ -674,7 +678,7 @@ def step_set_fifo_depths(model: ModelWrapper, cfg: DataflowBuildConfig):
             model = model.transform(GiveUniqueNodeNames())
             loop_nodes = model.get_nodes_by_op_type("FINNLoop")
             for loop_node in loop_nodes:
-                loop_inst = getCustomOp(loop_node)
+                loop_inst = getHWCustomOp(loop_node, model)
                 loop_body = loop_inst.get_nodeattr("body")
                 loop_body = loop_body.transform(GiveUniqueNodeNames(prefix=loop_node.name + "_"))
                 loop_inst.set_nodeattr("body", loop_body.graph)

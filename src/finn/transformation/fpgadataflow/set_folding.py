@@ -33,7 +33,6 @@ import functools
 import inspect
 import numpy as np
 import warnings
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.general import GiveUniqueNodeNames
 
@@ -42,6 +41,7 @@ from qonnx.transformation.general import GiveUniqueNodeNames
 import finn.custom_op.fpgadataflow.hls.elementwise_binary_hls as elementwise_binary_hls
 from finn.analysis.fpgadataflow.dataflow_performance import dataflow_performance
 from finn.transformation.fpgadataflow.annotate_cycles import AnnotateCycles
+from finn.util.basic import getHWCustomOp
 from finn.util.fpgadataflow import is_hls_node, is_rtl_node
 
 
@@ -154,7 +154,7 @@ class SetFolding(Transformation):
             if not (is_hls_node(node) or is_rtl_node(node)):
                 continue
             op_type = node.op_type
-            node_inst = getCustomOp(node)
+            node_inst = getHWCustomOp(node, model)
             if op_type in ["MVAU_hls", "MVAU_rtl"]:
                 max_simd = node_inst.get_nodeattr("MW")
                 max_pe = node_inst.get_nodeattr("MH")
@@ -214,7 +214,7 @@ class SetFolding(Transformation):
                 # which must be identical to this node
                 swu_node = model.find_producer(node.input[0])
                 if swu_node.op_type.startswith("ConvolutionInputGenerator"):
-                    swu_node_inst = getCustomOp(swu_node)
+                    swu_node_inst = getHWCustomOp(swu_node, model)
                     swu_node_inst.set_nodeattr("SIMD", pe)
                     # enable parallel_window mode of RTL SWG if needed
                     if swu_node.op_type == "ConvolutionInputGenerator_rtl":

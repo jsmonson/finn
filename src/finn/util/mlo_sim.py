@@ -33,8 +33,9 @@
 import numpy as np
 from finn_xsi.sim_engine import SimEngine
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
 from typing import Callable
+
+from finn.util.basic import getHWCustomOp
 
 
 def is_mlo(model: ModelWrapper) -> bool:
@@ -67,7 +68,7 @@ def mlo_prehook_func_factory(node) -> Callable[[SimEngine], None]:
     """
 
     # Get the FINNLoop
-    finnloop_op = getCustomOp(node)
+    finnloop_op = getHWCustomOp(node) # No model context: read only
 
     finnloop_body = finnloop_op.get_nodeattr("body")
 
