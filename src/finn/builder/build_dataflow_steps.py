@@ -403,22 +403,20 @@ def step_create_dataflow_partition(model: ModelWrapper, cfg: DataflowBuildConfig
 def step_specialize_layers(model: ModelWrapper, cfg: DataflowBuildConfig):
     """Specialize layers to HLS/RTL backends.
 
-    Two modes of operation:
+    This step operates in two phases:
 
-    1. Automatic Mode (kernel_selections is None):
-       Uses built-in heuristics to automatically specialize all eligible nodes.
-       Zero configuration required - sensible defaults for RTL/HLS selection.
-       Optionally uses specialize_layers_config_file for per-node preferences.
+    1. Explicit Specialization (if kernel_selections is set):
+       Applies priority-based backend selection for specified kernels.
+       Allows precise control with automatic fallback.
 
-    2. Explicit Mode (kernel_selections is set):
-       Uses class-based priority lists for precise control over backend selection.
-       Allows multiple backend variants with automatic fallback.
+    2. Automatic Specialization (always runs):
+       Uses built-in heuristics to specialize remaining generic nodes.
+       Skips nodes already specialized in phase 1.
 
-    Example (Automatic):
-        cfg = DataflowBuildConfig(board="ZCU104")
-        # All nodes automatically specialized
+    This sequential approach allows combining explicit priority control for
+    high-value kernels while ensuring all other nodes are specialized automatically.
 
-    Example (Explicit):
+    Example (Hybrid):
         from finn.custom_op.fpgadataflow.matrixvectoractivation import MVAU
         from finn.custom_op.fpgadataflow.hls.matrixvectoractivation_hls import MVAU_hls
         from finn.custom_op.fpgadataflow.rtl.matrixvectoractivation_rtl import MVAU_rtl
@@ -426,15 +424,16 @@ def step_specialize_layers(model: ModelWrapper, cfg: DataflowBuildConfig):
         cfg = DataflowBuildConfig(
             board="ZCU104",
             kernel_selections=[
-                (MVAU, [MVAU_rtl, MVAU_hls]),  # Try RTL first, fallback to HLS
+                (MVAU, [MVAU_rtl, MVAU_hls]),  # Explicit: RTL-first for MVAUs
             ]
+            # All other kernels (VVAU, DWC, etc.) use automatic specialization
         )
     """
     fpga_part = cfg._resolve_fpga_part()
 
+    # Phase 1: Explicit specialization for specified kernels (if configured)
     if cfg.kernel_selections is not None:
-        # EXPLICIT MODE: Use class-based SpecializeKernel
-        print("Using explicit kernel specialization (kernel_selections provided)")
+        print("Applying explicit kernel specialization (kernel_selections provided)")
 
         for kernel_class, backend_variants in cfg.kernel_selections:
             # Ensure backend_variants is a list
@@ -445,28 +444,28 @@ def step_specialize_layers(model: ModelWrapper, cfg: DataflowBuildConfig):
             kernel_name = kernel_class.__name__
             variant_names = [v.__name__ for v in backend_variants]
 
-            print(f"Specializing kernel {kernel_name} with backend variants: {variant_names}")
+            print(f"  Specializing {kernel_name} with backend variants: {variant_names}")
 
             model = model.transform(
                 SpecializeKernel(kernel_class, backend_variants, fpga_part)
             )
 
-        # Clean up and re-infer after specialization
+        # Clean up after explicit specialization
         model = model.transform(GiveUniqueNodeNames())
         model = model.transform(InferShapes())
         model = model.transform(InferDataTypes())
-    else:
-        # AUTOMATIC MODE: Use heuristic-based SpecializeLayers
-        print("Using automatic layer specialization (kernel_selections not provided)")
 
-        if cfg.specialize_layers_config_file is not None:
-            model = model.transform(GiveUniqueNodeNames())
-            model = model.transform(ApplyConfig(cfg.specialize_layers_config_file))
+    # Phase 2: Automatic specialization for remaining generic nodes (always runs)
+    print("Applying automatic specialization for remaining nodes")
 
-        model = model.transform(SpecializeLayers(fpga_part))
+    if cfg.specialize_layers_config_file is not None:
         model = model.transform(GiveUniqueNodeNames())
-        model = model.transform(InferShapes())
-        model = model.transform(InferDataTypes())
+        model = model.transform(ApplyConfig(cfg.specialize_layers_config_file))
+
+    model = model.transform(SpecializeLayers(fpga_part))
+    model = model.transform(GiveUniqueNodeNames())
+    model = model.transform(InferShapes())
+    model = model.transform(InferDataTypes())
 
     return model
 
