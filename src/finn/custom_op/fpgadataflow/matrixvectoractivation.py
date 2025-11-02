@@ -174,12 +174,15 @@ class MVAU(HWCustomOp):
 
     def verify_node(self):
         info_messages = []
-        # verify that "backend" is set to "fpgadataflow"
+        # verify that "backend" is set to a valid fpgadataflow value
         backend_value = self.get_nodeattr("backend")
-        if backend_value == "fpgadataflow":
+        valid_backends = {"fpgadataflow", "hls", "rtl"}
+        if backend_value in valid_backends:
             info_messages.append("Attribute backend is set correctly")
         else:
-            info_messages.append('Attribute backend should be set to "fpgadataflow"')
+            info_messages.append(
+                f'Attribute backend should be one of {valid_backends}, got "{backend_value}"'
+            )
 
         # verify that all necessary attributes exist
         # TODO collect automatically from get_nodeattr_types

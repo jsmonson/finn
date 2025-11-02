@@ -43,7 +43,16 @@ class HWCustomOp(CustomOp):
     """HWCustomOp class all custom ops that can be implemented with either
     HLS or RTL backend are based on. Contains different functions every fpgadataflow
     custom node should have. Some as abstract methods, these have to be filled
-    when writing a new fpgadataflow custom op node."""
+    when writing a new fpgadataflow custom op node.
+
+    The backend attribute has dual semantics:
+    - "fpgadataflow": Generic HWCustomOp (not yet specialized to HLS/RTL)
+    - "hls": HLS-specialized implementation
+    - "rtl": RTL-specialized implementation
+
+    This allows nodes to live in any domain (e.g., finn.custom_op.fpgadataflow or
+    brainsmith.kernels.*) while the backend attribute indicates implementation style.
+    """
 
     def __init__(self, onnx_node, **kwargs):
         super().__init__(onnx_node, **kwargs)
@@ -51,7 +60,11 @@ class HWCustomOp(CustomOp):
 
     def get_nodeattr_types(self):
         return {
-            "backend": ("s", True, "fpgadataflow"),
+            # Backend attribute indicates implementation style:
+            # - "fpgadataflow": generic/unspecialized HWCustomOp
+            # - "hls": HLS-specialized implementation (e.g., MVAU_hls)
+            # - "rtl": RTL-specialized implementation (e.g., MVAU_rtl)
+            "backend": ("s", True, "fpgadataflow", {"fpgadataflow", "hls", "rtl"}),
             "preferred_impl_style": ("s", False, "", {"", "hls", "rtl"}),
             "code_gen_dir_ipgen": ("s", False, ""),
             "ipgen_path": ("s", False, ""),

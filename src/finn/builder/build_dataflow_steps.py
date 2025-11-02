@@ -109,6 +109,7 @@ from finn.transformation.fpgadataflow.set_fifo_depths import (
     xsi_fifosim,
 )
 from finn.transformation.fpgadataflow.set_folding import SetFolding
+from finn.transformation.fpgadataflow.specialize_kernel import SpecializeKernel
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
 from finn.transformation.fpgadataflow.synth_ooc import SynthOutOfContext
 from finn.transformation.fpgadataflow.vitis_build import VitisBuild
@@ -400,19 +401,73 @@ def step_create_dataflow_partition(model: ModelWrapper, cfg: DataflowBuildConfig
 
 
 def step_specialize_layers(model: ModelWrapper, cfg: DataflowBuildConfig):
-    """Convert HW nodes to either an HLS or RTL variant of the node. HW nodes
-    get converted either based on pre-determined rules (details can be found
-    in `specialize_layers` source code) or the user provides a configuration file
-    which contains the desired setting. If the user preference cannot be fulfilled,
-    a warning will be printed and the implementation style will be set to a default."""
+    """Specialize layers to HLS/RTL backends.
 
-    if cfg.specialize_layers_config_file is not None:
+    Two modes of operation:
+
+    1. Automatic Mode (kernel_selections is None):
+       Uses built-in heuristics to automatically specialize all eligible nodes.
+       Zero configuration required - sensible defaults for RTL/HLS selection.
+       Optionally uses specialize_layers_config_file for per-node preferences.
+
+    2. Explicit Mode (kernel_selections is set):
+       Uses class-based priority lists for precise control over backend selection.
+       Allows multiple backend variants with automatic fallback.
+
+    Example (Automatic):
+        cfg = DataflowBuildConfig(board="ZCU104")
+        # All nodes automatically specialized
+
+    Example (Explicit):
+        from finn.custom_op.fpgadataflow.matrixvectoractivation import MVAU
+        from finn.custom_op.fpgadataflow.hls.matrixvectoractivation_hls import MVAU_hls
+        from finn.custom_op.fpgadataflow.rtl.matrixvectoractivation_rtl import MVAU_rtl
+
+        cfg = DataflowBuildConfig(
+            board="ZCU104",
+            kernel_selections=[
+                (MVAU, [MVAU_rtl, MVAU_hls]),  # Try RTL first, fallback to HLS
+            ]
+        )
+    """
+    fpga_part = cfg._resolve_fpga_part()
+
+    if cfg.kernel_selections is not None:
+        # EXPLICIT MODE: Use class-based SpecializeKernel
+        print("Using explicit kernel specialization (kernel_selections provided)")
+
+        for kernel_class, backend_variants in cfg.kernel_selections:
+            # Ensure backend_variants is a list
+            if not isinstance(backend_variants, list):
+                backend_variants = [backend_variants]
+
+            # Get class names for logging
+            kernel_name = kernel_class.__name__
+            variant_names = [v.__name__ for v in backend_variants]
+
+            print(f"Specializing kernel {kernel_name} with backend variants: {variant_names}")
+
+            model = model.transform(
+                SpecializeKernel(kernel_class, backend_variants, fpga_part)
+            )
+
+        # Clean up and re-infer after specialization
         model = model.transform(GiveUniqueNodeNames())
-        model = model.transform(ApplyConfig(cfg.specialize_layers_config_file))
-    model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()))
-    model = model.transform(GiveUniqueNodeNames())
-    model = model.transform(InferShapes())
-    model = model.transform(InferDataTypes())
+        model = model.transform(InferShapes())
+        model = model.transform(InferDataTypes())
+    else:
+        # AUTOMATIC MODE: Use heuristic-based SpecializeLayers
+        print("Using automatic layer specialization (kernel_selections not provided)")
+
+        if cfg.specialize_layers_config_file is not None:
+            model = model.transform(GiveUniqueNodeNames())
+            model = model.transform(ApplyConfig(cfg.specialize_layers_config_file))
+
+        model = model.transform(SpecializeLayers(fpga_part))
+        model = model.transform(GiveUniqueNodeNames())
+        model = model.transform(InferShapes())
+        model = model.transform(InferDataTypes())
+
     return model
 
 

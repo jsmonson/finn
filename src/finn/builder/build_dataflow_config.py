@@ -373,9 +373,27 @@ class DataflowBuildConfig:
     #: If set to commit hash specified version will be used
     cpp_driver_version: Optional[str] = "latest"
 
-    #: (Optional) List of (kernel_name, backend_name) tuples specifying which
-    #: hardware backends to use for each kernel type during hardware inference.
-    #: Used by BrainSmith integration for kernel-specific hardware mapping.
+    #: (Optional) List of (kernel_class, backend_variants) tuples specifying which
+    #: hardware backend variants to try for each kernel type during specialization.
+    #:
+    #: If set, step_specialize_layers uses explicit priority-based specialization
+    #: (SpecializeKernel transformation) for fine-grained control.
+    #: If None, step_specialize_layers uses automatic heuristic-based specialization
+    #: (SpecializeLayers transformation) for zero-config operation.
+    #:
+    #: Each tuple contains:
+    #:   - kernel_class: The base HWCustomOp class (e.g., MVAU, VVAU)
+    #:   - backend_variants: List of specialized variant classes in priority order
+    #:                       (e.g., [MVAU_rtl, MVAU_hls] tries RTL first, falls back to HLS)
+    #:
+    #: Example:
+    #:   from finn.custom_op.fpgadataflow.matrixvectoractivation import MVAU
+    #:   from finn.custom_op.fpgadataflow.hls.matrixvectoractivation_hls import MVAU_hls
+    #:   from finn.custom_op.fpgadataflow.rtl.matrixvectoractivation_rtl import MVAU_rtl
+    #:
+    #:   cfg.kernel_selections = [
+    #:       (MVAU, [MVAU_rtl, MVAU_hls]),  # Try RTL first, fallback to HLS
+    #:   ]
     kernel_selections: Optional[List[tuple]] = None
 
     def _resolve_hls_clk_period(self):

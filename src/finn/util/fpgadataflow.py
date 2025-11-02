@@ -30,46 +30,67 @@ from qonnx.util.basic import get_by_name, is_finn_op
 
 
 def is_fpgadataflow_node(node):
-    """Returns True if given node is fpgadataflow node. Otherwise False."""
+    """Returns True if given node is fpgadataflow node. Otherwise False.
+
+    Recognizes nodes with backend attribute set to "fpgadataflow" (generic),
+    "hls" (HLS-specialized), or "rtl" (RTL-specialized).
+    """
     is_node = False
     if node is not None:
         if is_finn_op(node.domain):
             n_backend = get_by_name(node.attribute, "backend")
             if n_backend is not None:
                 backend_value = n_backend.s.decode("UTF-8")
-                if backend_value == "fpgadataflow":
+                # Recognize all fpgadataflow nodes: generic, HLS, and RTL
+                if backend_value in ("fpgadataflow", "hls", "rtl"):
                     is_node = True
 
     return is_node
 
 
 def is_hls_node(node):
-    """Returns True if given node is hls node. Otherwise False."""
+    """Returns True if given node is hls node. Otherwise False.
+
+    Checks the backend attribute first (modern approach), then falls back
+    to domain-based detection (legacy approach) for backwards compatibility.
+    """
     is_node = False
     if node is not None:
-        if node.domain.endswith(".custom_op.fpgadataflow.hls") or (
-            node.domain.startswith("brainsmith.kernels") and node.domain.endswith(".hls")
-        ):
-            n_backend = get_by_name(node.attribute, "backend")
-            if n_backend is not None:
-                backend_value = n_backend.s.decode("UTF-8")
-                if backend_value == "fpgadataflow":
+        n_backend = get_by_name(node.attribute, "backend")
+        if n_backend is not None:
+            backend_value = n_backend.s.decode("UTF-8")
+            # Modern approach: backend attribute indicates implementation style
+            if backend_value == "hls":
+                is_node = True
+            # Legacy approach: domain indicates implementation style
+            elif backend_value == "fpgadataflow":
+                if node.domain.endswith(".custom_op.fpgadataflow.hls") or (
+                    node.domain.startswith("brainsmith.kernels") and node.domain.endswith(".hls")
+                ):
                     is_node = True
 
     return is_node
 
 
 def is_rtl_node(node):
-    """Returns True if given node is rtl node. Otherwise False."""
+    """Returns True if given node is rtl node. Otherwise False.
+
+    Checks the backend attribute first (modern approach), then falls back
+    to domain-based detection (legacy approach) for backwards compatibility.
+    """
     is_node = False
     if node is not None:
-        if node.domain.endswith(".custom_op.fpgadataflow.rtl") or (
-            node.domain.startswith("brainsmith.kernels") and node.domain.endswith(".rtl")
-        ):
-            n_backend = get_by_name(node.attribute, "backend")
-            if n_backend is not None:
-                backend_value = n_backend.s.decode("UTF-8")
-                if backend_value == "fpgadataflow":
+        n_backend = get_by_name(node.attribute, "backend")
+        if n_backend is not None:
+            backend_value = n_backend.s.decode("UTF-8")
+            # Modern approach: backend attribute indicates implementation style
+            if backend_value == "rtl":
+                is_node = True
+            # Legacy approach: domain indicates implementation style
+            elif backend_value == "fpgadataflow":
+                if node.domain.endswith(".custom_op.fpgadataflow.rtl") or (
+                    node.domain.startswith("brainsmith.kernels") and node.domain.endswith(".rtl")
+                ):
                     is_node = True
 
     return is_node

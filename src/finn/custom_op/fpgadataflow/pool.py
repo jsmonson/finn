@@ -30,6 +30,7 @@ import numpy as np
 from qonnx.core.datatype import DataType
 
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
+from finn.util.fpgadataflow import is_fpgadataflow_node
 
 
 class Pool(HWCustomOp):
@@ -162,12 +163,13 @@ class Pool(HWCustomOp):
 
     def verify_node(self):
         info_messages = []
-        # verify that "backend" is set to "fpgadataflow"
-        backend_value = self.get_nodeattr("backend")
-        if backend_value == "fpgadataflow":
+        # verify that "backend" is set to a valid fpgadataflow value
+        if is_fpgadataflow_node(self.onnx_node):
             info_messages.append("Attribute backend is set correctly")
         else:
-            info_messages.append('Attribute backend should be set to "fpgadataflow"')
+            info_messages.append(
+                'Attribute backend should be one of: "fpgadataflow", "hls", "rtl"'
+            )
 
         # verify the number of inputs
         if len(self.onnx_node.input) == 1:
