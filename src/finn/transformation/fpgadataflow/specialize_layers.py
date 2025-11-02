@@ -282,10 +282,16 @@ class SpecializeLayers(Transformation):
                 node.output,
                 domain=f"{node.domain}.{impl_style}",
             )
-            # add all attributes
+            # Copy all attributes except preferred_impl_style and backend
             for attribute in node.attribute:
-                if attribute.name != "preferred_impl_style":
+                if attribute.name not in ["preferred_impl_style", "backend"]:
                     new_node.attribute.append(attribute)
+
+            # Set backend attribute to match implementation style
+            new_node.attribute.append(
+                helper.make_attribute("backend", impl_style)
+            )
+
             graph.node.insert(node_ind, new_node)
             # remove old nodes
             graph.node.remove(node)
