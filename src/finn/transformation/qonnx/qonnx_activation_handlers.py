@@ -30,7 +30,8 @@ import warnings
 from abc import ABC, abstractmethod
 from onnx import TensorProto, helper
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
+
+from finn.util.basic import getHWCustomOp
 
 np_default_dtype = np.float32
 
@@ -94,7 +95,7 @@ class QuantActBaseHandler(ABC):
 
     def _extract_output_datatype(self):
         """Get the output datatype for the MultiThreshold node."""
-        q_inst = getCustomOp(self._q_node)
+        q_inst = getHWCustomOp(self._q_node, self._model)
         dtype = q_inst.get_integer_datatype(self._model)
         dtype = dtype.name
         return dtype
@@ -154,7 +155,7 @@ class QuantActBaseHandler(ABC):
 
         # Get the MultiThreshold node instance to work with
         mt_node = graph.node[running_node_index - 1]
-        mt_inst = getCustomOp(mt_node)
+        mt_inst = getHWCustomOp(mt_node, model)
 
         # Set scale and bias
         # If these values are scalar then they can be set as attributes
@@ -297,7 +298,7 @@ class QuantReluHandler(QuantActBaseHandler):
 
     def _check_compatibility(self):
         if self._q_node.op_type == "Quant":
-            q_inst = getCustomOp(self._q_node)
+            q_inst = getHWCustomOp(self._q_node, self._model)
             narrow = q_inst.get_nodeattr("narrow")
             signed = q_inst.get_nodeattr("signed")
             if not self._model.get_initializer(self._q_node.input[2]) == 0:
@@ -328,7 +329,7 @@ class QuantReluHandler(QuantActBaseHandler):
             bias = np.array([0.0], dtype=np_default_dtype)
         elif act_node.op_type == "Selu":
             # Gather parameters
-            q_inst = getCustomOp(self._q_node)
+            q_inst = getHWCustomOp(self._q_node, self._model)
             if self._q_node.op_type == "Quant":
                 bit_width = self._model.get_initializer(self._q_node.input[3])
                 narrow = q_inst.get_nodeattr("narrow")
@@ -376,7 +377,7 @@ class QuantReluHandler(QuantActBaseHandler):
                     thresholds[c][t] = min_threshold[c] + step[c] * t
 
         elif act_node.op_type == "Selu":
-            q_inst = getCustomOp(self._q_node)
+            q_inst = getHWCustomOp(self._q_node, self._model)
             narrow = q_inst.get_nodeattr("narrow")
             if narrow:
                 num_distinct_values = 2**bit_width - 1
@@ -499,7 +500,7 @@ class QuantIdentityHandler(QuantActBaseHandler):
 
     def _calculate_act_bias(self):
         # Gather parameters
-        q_inst = getCustomOp(self._q_node)
+        q_inst = getHWCustomOp(self._q_node, self._model)
         if self._q_node.op_type == "Quant":
             bit_width = self._model.get_initializer(self._q_node.input[3])
             narrow = q_inst.get_nodeattr("narrow")
@@ -527,7 +528,7 @@ class QuantIdentityHandler(QuantActBaseHandler):
     def _calculate_thresholds(self):
         # Gather parameters
         quant_scale = self._model.get_initializer(self._q_node.input[1])
-        q_inst = getCustomOp(self._q_node)
+        q_inst = getHWCustomOp(self._q_node, self._model)
         if self._q_node.op_type == "Quant":
             bit_width = self._model.get_initializer(self._q_node.input[3])
             narrow = q_inst.get_nodeattr("narrow")

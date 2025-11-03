@@ -30,7 +30,6 @@
 import numpy as np
 from onnx import TensorProto, helper
 from qonnx.core.datatype import DataType
-from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.general import (
     GiveReadableTensorNames,
@@ -48,6 +47,7 @@ from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
 from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
 from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
+from finn.util.basic import getHWCustomOp
 from finn.util.fpgadataflow import is_hls_node, is_rtl_node
 
 
@@ -102,8 +102,8 @@ class RemoveShallowFIFOs(Transformation):
                 is_first_node = True
             if (
                 node.op_type.startswith("StreamingFIFO")
-                and getCustomOp(node).get_nodeattr("depth") <= self.shallow_threshold
-                and (not is_first_node or getCustomOp(node).get_nodeattr("mlo_max_iter"))
+                and getHWCustomOp(node, model).get_nodeattr("depth") <= self.shallow_threshold
+                and (not is_first_node or getHWCustomOp(node, model).get_nodeattr("mlo_max_iter"))
             ):
                 # bypass shallow fifos
                 shallow_fifos.append(node)
@@ -176,7 +176,7 @@ class CapConvolutionFIFODepths(Transformation):
                     continue
                 if not fifo_cons.op_type.startswith("MVAU"):
                     continue
-                op_inst = getCustomOp(node)
+                op_inst = getHWCustomOp(node, model)
                 depth = op_inst.get_nodeattr("depth")
                 # SWG has an internal buffer of 1 row, so we use this as a
                 # rule of thumb to set FIFO depth to be no larger than 1 row
@@ -292,7 +292,7 @@ class InsertAndSetFIFODepths(Transformation):
         model = model.transform(GiveReadableTensorNames())
         for x in model.graph.node:
             if x.op_type == "FINNLoop":
-                reset_implementation(getCustomOp(x))
+                reset_implementation(getHWCustomOp(x, model))
                 return (model, False)
 
         # these optypes may potentially be param nodes in an mlo
@@ -312,7 +312,7 @@ class InsertAndSetFIFODepths(Transformation):
             )
             op_type = node.op_type
             assert not op_type.startswith("StreamingFIFO"), "Found existing StreamingFIFO node"
-            node = getCustomOp(node)
+            node = getHWCustomOp(node, model)
             ifd = node.get_nodeattr("inFIFODepths")
             ofd = node.get_nodeattr("outFIFODepths")
             if self.max_depth is not None:
@@ -368,7 +368,7 @@ class InsertAndSetFIFODepths(Transformation):
         fifo_nodes = model.get_nodes_by_op_type("StreamingFIFO_rtl")
         for node in fifo_nodes:
             fifos[node.name] = 0
-            node = getCustomOp(node)
+            node = getHWCustomOp(node, model)
             node.set_nodeattr("depth_monitor", 1)
             node.set_nodeattr("impl_style", "rtl")
             # check depths and fix as necessary
@@ -409,7 +409,7 @@ class InsertAndSetFIFODepths(Transformation):
 
         # set up rate limit for input throttling
         if self.fifosim_input_throttle:
-            first_node = getCustomOp(model.graph.node[0])
+            first_node = getHWCustomOp(model.graph.node[0], model)
             inp_fold = np.prod(first_node.get_folded_input_shape()[:-1])
             throttle_cycles = max(0, max_cycles - inp_fold)
         else:
@@ -433,7 +433,7 @@ class InsertAndSetFIFODepths(Transformation):
                 assert node.name in fifos, "FIFO node not found in size dictionary"
                 # set depth of FIFO
                 depth = optimize_depth(fifos[node.name])
-                node_inst = getCustomOp(node)
+                node_inst = getHWCustomOp(node, model)
                 node_inst.set_nodeattr("depth", depth)
                 node_inst.set_nodeattr("depth_monitor", 0)
                 # exception for top-level IO FIFOs which cause a bug in simulation
@@ -456,7 +456,7 @@ class InsertAndSetFIFODepths(Transformation):
                 # change back and reset implementation
                 if node.op_type in mlo_optypes:
                     if node.name in modified_mlo_nodes and node.op_type.startswith("MVAU"):
-                        node_inst = getCustomOp(node)
+                        node_inst = getHWCustomOp(node, model)
                         node_inst.set_nodeattr("mlo_max_iter", self.mlo_max_iter)
                         node_inst.set_nodeattr("mem_mode", "internal_decoupled")
                         reset_implementation(node_inst)
@@ -465,7 +465,7 @@ class InsertAndSetFIFODepths(Transformation):
         sorted_ind_map = dict(sorted(self.ind_map.items(), key=lambda item: item[1]))
         for k, v in sorted_ind_map.items():
             node = model.get_node_from_name(k)
-            node_inst = getCustomOp(node)
+            node_inst = getHWCustomOp(node, model)
             node_inst.set_nodeattr("mlo_max_iter", self.mlo_max_iter)
             # remove initializer again
             param_input = node.input[1]
@@ -490,12 +490,12 @@ class InsertAndSetFIFODepths(Transformation):
         for op_type in mlo_optypes:
             nodes = model.get_nodes_by_op_type(op_type)
             for node in nodes:
-                node_inst = getCustomOp(node)
+                node_inst = getHWCustomOp(node, model)
                 if node_inst.get_nodeattr("mlo_max_iter"):
                     # Check if there is a FIFO inserted at param input
                     fifo_node = model.find_producer(node.input[1])
                     if fifo_node and fifo_node.op_type.startswith("StreamingFIFO"):
-                        fifo_inst = getCustomOp(fifo_node)
+                        fifo_inst = getHWCustomOp(fifo_node, model)
                         fifo_inst.set_nodeattr("depth", 0)
                         fifo_inst.set_nodeattr("mlo_max_iter", 1)
 
@@ -514,7 +514,7 @@ class InsertAndSetFIFODepths(Transformation):
         # reflect final values in attributes
         for node in model.graph.node:
             if not node.op_type.startswith("StreamingFIFO"):
-                node_inst = getCustomOp(node)
+                node_inst = getHWCustomOp(node, model)
                 fifodepth_in = []
                 for node_inp in node.input:
                     prod = model.find_producer(node_inp)
@@ -529,7 +529,7 @@ class InsertAndSetFIFODepths(Transformation):
                     else:
                         # there is a producer for this input
                         if prod.op_type.startswith("StreamingFIFO"):
-                            prod_inst = getCustomOp(prod)
+                            prod_inst = getHWCustomOp(prod, model)
                             fifodepth_in.append(prod_inst.get_nodeattr("depth"))
                         else:
                             # explicitly no FIFO on this dynamic input
@@ -548,7 +548,7 @@ class InsertAndSetFIFODepths(Transformation):
                     else:
                         # there is a consumer for this input
                         if cons.op_type.startswith("StreamingFIFO"):
-                            cons_inst = getCustomOp(cons)
+                            cons_inst = getHWCustomOp(cons, model)
                             fifodepth_out.append(cons_inst.get_nodeattr("depth"))
                         else:
                             # explicitly no FIFO on this dynamic output
@@ -635,7 +635,7 @@ class SplitLargeFIFOs(Transformation):
         for node in graph.node:
             node_ind += 1
             if node.op_type == ("StreamingFIFO_rtl"):
-                n_inst = getCustomOp(node)
+                n_inst = getHWCustomOp(node, model)
                 depth = n_inst.get_nodeattr("depth")
                 cfgs = get_fifo_split_configs(depth, self.max_qsrl_depth, self.max_vivado_depth)
                 if len(cfgs) > 1:

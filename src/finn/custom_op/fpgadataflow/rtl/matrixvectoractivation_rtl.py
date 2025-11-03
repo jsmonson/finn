@@ -165,7 +165,6 @@ class MVAU_rtl(MVAU, RTLBackend):
         node_name = self.onnx_node.name
         code_gen_dir = self.get_nodeattr("code_gen_dir_ipgen")
         rtllib_dir = os.path.join(os.environ["FINN_ROOT"], "finn-rtllib/mvu/")
-        rtllib_fifo_dir = os.path.join(os.environ["FINN_ROOT"], "finn-rtllib/fifo/hdl/")
         sourcefiles = [
             "mvu_pkg.sv",
             "mvu_vvu_axi.sv",
