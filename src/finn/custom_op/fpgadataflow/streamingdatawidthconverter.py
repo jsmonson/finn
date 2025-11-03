@@ -154,9 +154,7 @@ class StreamingDataWidthConverter(HWCustomOp):
         if is_fpgadataflow_node(self.onnx_node):
             info_messages.append("Attribute backend is set correctly")
         else:
-            info_messages.append(
-                'Attribute backend should be one of: "fpgadataflow", "hls", "rtl"'
-            )
+            info_messages.append('Attribute backend should be one of: "fpgadataflow", "hls", "rtl"')
 
         # verify the number of inputs
         if len(self.onnx_node.input) == 1:

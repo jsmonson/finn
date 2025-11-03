@@ -302,13 +302,6 @@ def _register_backends():
             "language": "hls",
         },
         {
-            "name": "FMPadding_Pixel_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.fmpadding_pixel_hls",
-            "class_name": "FMPadding_Pixel_hls",
-            "target_kernel": "finn:FMPadding_Pixel",
-            "language": "hls",
-        },
-        {
             "name": "GlobalAccPool_hls",
             "module": "finn.custom_op.fpgadataflow.hls.globalaccpool_hls",
             "class_name": "GlobalAccPool_hls",
@@ -384,13 +377,6 @@ def _register_backends():
             "module": "finn.custom_op.fpgadataflow.rtl.convolutioninputgenerator_rtl",
             "class_name": "ConvolutionInputGenerator_rtl",
             "target_kernel": "finn:ConvolutionInputGenerator",
-            "language": "rtl",
-        },
-        {
-            "name": "FMPadding_rtl",
-            "module": "finn.custom_op.fpgadataflow.rtl.fmpadding_rtl",
-            "class_name": "FMPadding_rtl",
-            "target_kernel": "finn:FMPadding",
             "language": "rtl",
         },
         {

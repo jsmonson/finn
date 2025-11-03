@@ -8,30 +8,32 @@
 ############################################################################
 
 import tempfile
-import numpy as np
-from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.core.datatype import DataType
-from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model
 from onnx import TensorProto, helper
+from qonnx.core.datatype import DataType
+from qonnx.core.modelwrapper import ModelWrapper
+from qonnx.util.basic import gen_finn_dt_tensor, qonnx_make_model
 
-# Import the classes we're testing
-from finn.transformation.fpgadataflow.specialize_kernel import SpecializeKernel
-from finn.builder.build_dataflow_steps import step_specialize_layers
 from finn.builder.build_dataflow_config import DataflowBuildConfig
-
-# Import kernel classes for testing
-from finn.custom_op.fpgadataflow.matrixvectoractivation import MVAU
+from finn.builder.build_dataflow_steps import step_specialize_layers
 from finn.custom_op.fpgadataflow.hls.matrixvectoractivation_hls import MVAU_hls
-from finn.custom_op.fpgadataflow.rtl.matrixvectoractivation_rtl import MVAU_rtl
-from finn.custom_op.fpgadataflow.streamingdatawidthconverter import StreamingDataWidthConverter
 from finn.custom_op.fpgadataflow.hls.streamingdatawidthconverter_hls import (
     StreamingDataWidthConverter_hls,
 )
+from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
+
+# Import kernel classes for testing
+from finn.custom_op.fpgadataflow.matrixvectoractivation import MVAU
+from finn.custom_op.fpgadataflow.rtl.matrixvectoractivation_rtl import MVAU_rtl
 from finn.custom_op.fpgadataflow.rtl.streamingdatawidthconverter_rtl import (
     StreamingDataWidthConverter_rtl,
 )
-from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
 from finn.custom_op.fpgadataflow.rtlbackend import RTLBackend
+from finn.custom_op.fpgadataflow.streamingdatawidthconverter import (
+    StreamingDataWidthConverter,
+)
+
+# Import the classes we're testing
+from finn.transformation.fpgadataflow.specialize_kernel import SpecializeKernel
 
 
 def make_test_mvau_model(backend="fpgadataflow"):
@@ -159,6 +161,7 @@ def test_mvau_rtl_specialization():
 
     # Check backend attribute
     from qonnx.util.basic import get_by_name
+
     backend_attr = get_by_name(node.attribute, "backend")
     backend_value = backend_attr.s.decode("UTF-8")
     assert backend_value == "rtl", f"Expected backend='rtl', got '{backend_value}'"
@@ -177,6 +180,7 @@ def test_mvau_hls_fallback():
     # Modify to use 1-bit weights (should force HLS fallback)
     node = model.graph.node[0]
     from qonnx.util.basic import get_by_name
+
     wdt_attr = get_by_name(node.attribute, "weightDataType")
     wdt_attr.s = "BIPOLAR".encode("UTF-8")
 
@@ -224,6 +228,7 @@ def test_dwc_rtl_specialization():
     assert node.op_type == "StreamingDataWidthConverter_rtl"
 
     from qonnx.util.basic import get_by_name
+
     backend_attr = get_by_name(node.attribute, "backend")
     backend_value = backend_attr.s.decode("UTF-8")
     assert backend_value == "rtl"
@@ -255,6 +260,7 @@ def test_kernel_name_filtering():
     assert node.op_type == "MVAU", "Original op_type should be preserved"
 
     from qonnx.util.basic import get_by_name
+
     backend_attr = get_by_name(node.attribute, "backend")
     backend_value = backend_attr.s.decode("UTF-8")
     assert backend_value == "fpgadataflow", "Original backend should be preserved"
@@ -292,6 +298,7 @@ def test_build_step_integration():
         assert node.op_type == "MVAU_rtl", f"Expected MVAU_rtl, got {node.op_type}"
 
         from qonnx.util.basic import get_by_name
+
         backend_attr = get_by_name(node.attribute, "backend")
         backend_value = backend_attr.s.decode("UTF-8")
         assert backend_value == "rtl"
@@ -322,6 +329,7 @@ def test_already_specialized_nodes():
     assert node.op_type == "MVAU_hls", "Op type should remain MVAU_hls"
 
     from qonnx.util.basic import get_by_name
+
     backend_attr = get_by_name(node.attribute, "backend")
     backend_value = backend_attr.s.decode("UTF-8")
     assert backend_value == "hls", "Backend should remain 'hls'"
@@ -419,7 +427,9 @@ def test_sequential_specialization():
 
         # Check DWC specialized via automatic (should be RTL due to integer width ratio)
         dwc_node = model_transformed.graph.node[1]
-        assert dwc_node.op_type == "StreamingDataWidthConverter_rtl", f"Expected DWC_rtl, got {dwc_node.op_type}"
+        assert (
+            dwc_node.op_type == "StreamingDataWidthConverter_rtl"
+        ), f"Expected DWC_rtl, got {dwc_node.op_type}"
         print(f"✓ DWC specialized via automatic selection: {dwc_node.op_type}")
 
     print("✓ Sequential specialization test passed")
@@ -429,15 +439,15 @@ def test_backend_style_detection():
     """Test backend style detection with various naming patterns."""
     print("\n=== Test 9: Backend Style Detection ===")
 
-    from finn.transformation.fpgadataflow.specialize_kernel import SpecializeKernel
-
     # Create mock classes for testing (these won't be in registry, but we're just testing detection)
     class MVAU_rtl_v2(MVAU, RTLBackend):
         """RTL variant with version suffix."""
+
         pass
 
     class CustomKernel_optimized(MVAU, HLSBackend):
         """HLS variant without standard suffix."""
+
         pass
 
     # Test suffix detection
@@ -449,16 +459,18 @@ def test_backend_style_detection():
     assert issubclass(MVAU_rtl_v2, RTLBackend), "MVAU_rtl_v2 should inherit RTLBackend"
 
     print(f"✓ CustomKernel_optimized class name: {CustomKernel_optimized.__name__}")
-    assert issubclass(CustomKernel_optimized, HLSBackend), "CustomKernel_optimized should inherit HLSBackend"
+    assert issubclass(
+        CustomKernel_optimized, HLSBackend
+    ), "CustomKernel_optimized should inherit HLSBackend"
 
     print("✓ Backend style detection test passed")
 
 
 def run_all_tests():
     """Run all tests."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Testing Class-Based Kernel Specialization")
-    print("="*60)
+    print("=" * 60)
 
     try:
         test_class_metadata_extraction()
@@ -471,23 +483,26 @@ def run_all_tests():
         test_sequential_specialization()
         test_backend_style_detection()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("✓ ALL TESTS PASSED")
-        print("="*60)
+        print("=" * 60)
         return True
     except AssertionError as e:
         print(f"\n✗ TEST FAILED: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     except Exception as e:
         print(f"\n✗ UNEXPECTED ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
 
 if __name__ == "__main__":
     import sys
+
     success = run_all_tests()
     sys.exit(0 if success else 1)

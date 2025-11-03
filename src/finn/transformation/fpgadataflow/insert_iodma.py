@@ -34,9 +34,8 @@ from qonnx.transformation.base import Transformation
 from qonnx.transformation.general import SortGraph
 from qonnx.util.basic import get_by_name
 
-from finn.util.fpgadataflow import is_fpgadataflow_node
-
 from finn.util.basic import getHWCustomOp
+from finn.util.fpgadataflow import is_fpgadataflow_node
 
 
 class InsertIODMA(Transformation):

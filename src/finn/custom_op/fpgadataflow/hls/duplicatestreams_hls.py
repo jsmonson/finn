@@ -49,9 +49,7 @@ class DuplicateStreams_hls(DuplicateStreams, HLSBackend):
         if is_fpgadataflow_node(self.onnx_node):
             info_messages.append("Attribute backend is set correctly")
         else:
-            info_messages.append(
-                'Attribute backend should be one of: "fpgadataflow", "hls", "rtl"'
-            )
+            info_messages.append('Attribute backend should be one of: "fpgadataflow", "hls", "rtl"')
 
         # verify that all necessary attributes exist
         try:

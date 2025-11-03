@@ -446,9 +446,7 @@ def step_specialize_layers(model: ModelWrapper, cfg: DataflowBuildConfig):
 
             print(f"  Specializing {kernel_name} with backend variants: {variant_names}")
 
-            model = model.transform(
-                SpecializeKernel(kernel_class, backend_variants, fpga_part)
-            )
+            model = model.transform(SpecializeKernel(kernel_class, backend_variants, fpga_part))
 
         # Clean up after explicit specialization
         model = model.transform(GiveUniqueNodeNames())

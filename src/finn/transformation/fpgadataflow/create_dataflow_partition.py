@@ -31,10 +31,9 @@ from qonnx.transformation.base import Transformation
 from qonnx.transformation.create_generic_partitions import PartitionFromLambda
 from qonnx.util.basic import get_by_name
 
-from finn.util.fpgadataflow import is_fpgadataflow_node
-
 from finn.transformation.fpgadataflow.externalize_params import ExternalizeParams
 from finn.util.basic import getHWCustomOp, make_build_dir
+from finn.util.fpgadataflow import is_fpgadataflow_node
 
 
 class CreateDataflowPartition(Transformation):

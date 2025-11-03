@@ -60,7 +60,7 @@ class SpecializeKernel(Transformation):
 
             # Check if this is a generic fpgadataflow node (only instantiate after string match)
             node_inst = getHWCustomOp(node, model)
-            if not hasattr(node_inst, 'get_nodeattr'):
+            if not hasattr(node_inst, "get_nodeattr"):
                 node_ind += 1
                 continue
 
@@ -106,7 +106,12 @@ class SpecializeKernel(Transformation):
                 if hasCustomOp(variant_domain, variant_optype):
                     # Check if constraints are met for this backend variant
                     if self._check_backend_constraints(node, backend_style, model):
-                        selected_variant = (variant_class, variant_optype, backend_style, variant_domain)
+                        selected_variant = (
+                            variant_class,
+                            variant_optype,
+                            backend_style,
+                            variant_domain,
+                        )
                         break
                 else:
                     # Warn if backend doesn't exist
@@ -119,7 +124,7 @@ class SpecializeKernel(Transformation):
                 variant_names = [v.__name__ for v in self.backend_variants]
                 warnings.warn(
                     f"Could not specialize kernel {node.name} (op_type={node.op_type}). "
-                    f"None of the backend variants {variant_names} met constraints or were available."
+                    f"No available backend variants in {variant_names} met constraints."
                 )
                 node_ind += 1
                 continue
@@ -142,9 +147,7 @@ class SpecializeKernel(Transformation):
                     new_node.attribute.append(attribute)
 
             # Set the new backend attribute value
-            new_node.attribute.append(
-                helper.make_attribute("backend", backend_style)
-            )
+            new_node.attribute.append(helper.make_attribute("backend", backend_style))
 
             # Replace the node
             graph.node.insert(node_ind, new_node)
