@@ -30,7 +30,7 @@ import os
 from qonnx.transformation.base import Transformation
 from shutil import copy2
 
-from finn.util.basic import make_build_dir, getHWCustomOp
+from finn.util.basic import getHWCustomOp, make_build_dir
 from finn.util.fpgadataflow import is_hls_node
 from finn.util.vivado import out_of_context_synth
 

@@ -122,13 +122,12 @@ from finn.transformation.qonnx.quant_act_to_multithreshold import (
 from finn.transformation.streamline import Streamline
 from finn.transformation.streamline.reorder import MakeMaxPoolNHWC
 from finn.transformation.streamline.round_thresholds import RoundAndClipThresholds
-from finn.util.basic import get_liveness_threshold_cycles, get_rtlsim_trace_depth
-from finn.util.mlo_sim import is_mlo, mlo_prehook_func_factory
 from finn.util.basic import (
     get_liveness_threshold_cycles,
     get_rtlsim_trace_depth,
     getHWCustomOp,
 )
+from finn.util.mlo_sim import is_mlo, mlo_prehook_func_factory
 from finn.util.test import execute_parent
 
 
@@ -266,7 +265,7 @@ def prepare_for_stitched_ip_rtlsim(verify_model, cfg):
 
 
 def prepare_loop_ops_fifo_sizing(node, cfg):
-    node_inst = getHWCustomOp(node) # No model context: read only
+    node_inst = getHWCustomOp(node)  # No model context: read only
     loop_model = node_inst.get_nodeattr("body")
     loop_model = loop_model.transform(GiveUniqueNodeNames(prefix=node.name + "_"))
     # go first into subgraph to check if there are other loop ops
@@ -298,7 +297,7 @@ def prepare_loop_ops_fifo_sizing(node, cfg):
 
 
 def prepare_loop_ops_ipgen(node, cfg):
-    node_inst = getHWCustomOp(node) # No model context: read only
+    node_inst = getHWCustomOp(node)  # No model context: read only
     loop_model = node_inst.get_nodeattr("body")
     # go first into subgraph to check if there are other loop ops
     loop_nodes = loop_model.get_nodes_by_op_type("FINNLoop")

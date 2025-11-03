@@ -68,7 +68,7 @@ def mlo_prehook_func_factory(node) -> Callable[[SimEngine], None]:
     """
 
     # Get the FINNLoop
-    finnloop_op = getHWCustomOp(node) # No model context: read only
+    finnloop_op = getHWCustomOp(node)  # No model context: read only
 
     finnloop_body = finnloop_op.get_nodeattr("body")
 

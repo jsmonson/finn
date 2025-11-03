@@ -477,7 +477,7 @@ class HWCustomOp(CustomOp):
         total_cycle_count = finnxsi.rtlsim_multi_io(
             sim,
             io_dict,
-            num_out_values = self.get_number_output_values(),
+            num_out_values=self.get_number_output_values(),
             sname=sname,
             liveness_threshold=period,
         )

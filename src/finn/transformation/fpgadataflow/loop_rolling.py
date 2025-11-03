@@ -563,6 +563,7 @@ class LoopRolling(Transformation):
         # "const" to "input" for streamed parameters)
         # This must be done after serialization so we can work with protobuf nodes
         from qonnx.util.basic import get_by_name
+
         from finn.util.basic import getHWCustomOp
 
         for loop_node in model_wrapper.get_nodes_by_op_type("FINNLoop"):
