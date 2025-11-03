@@ -260,14 +260,19 @@ class Thresholding(HWCustomOp):
         out_bias = self.get_nodeattr("ActVal")
         # MT expects inputs to be in the shape (N,C,H,W) or (N, C)
         # if 4D then input values in context are (N,H,W,C) and need to
-        # be transposed.
+        # be transposed. Same for 3D input values
         # if 2D then inputs can be passed directly to MT function
         is_4d = len(inp_values.shape) == 4
         if is_4d:
             inp_values = np.transpose(inp_values, (0, 3, 1, 2))
+        is_3d = len(inp_values.shape) == 3
+        if is_3d:
+            inp_values = np.transpose(inp_values, (0, 2, 1))
         y = multithreshold(inp_values, th_val, out_bias=out_bias)
         if is_4d:
             y = y.transpose(0, 2, 3, 1)
+        if is_3d:
+            y = y.transpose(0, 2, 1)
         act = DataType[self.get_nodeattr("outputDataType")]
         if act == DataType["BIPOLAR"]:
             # binary to bipolar
