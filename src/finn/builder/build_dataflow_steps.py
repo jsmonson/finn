@@ -492,7 +492,7 @@ def step_target_fps_parallelization(model: ModelWrapper, cfg: DataflowBuildConfi
         model = model.transform(GiveUniqueNodeNames())
         loop_nodes = model.get_nodes_by_op_type("FINNLoop")
         for node in loop_nodes:
-            node_inst = getCustomOp(node)
+            node_inst = getHWCustomOp(node)
             loop_model = node_inst.get_nodeattr("body")
             loop_model = loop_model.transform(GiveUniqueNodeNames(prefix=node.name + "_"))
             node_inst.set_nodeattr("body", loop_model.graph)
