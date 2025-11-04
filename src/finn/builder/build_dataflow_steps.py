@@ -109,7 +109,6 @@ from finn.transformation.fpgadataflow.set_fifo_depths import (
     xsi_fifosim,
 )
 from finn.transformation.fpgadataflow.set_folding import SetFolding
-from finn.transformation.fpgadataflow.specialize_kernel import SpecializeKernel
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
 from finn.transformation.fpgadataflow.synth_ooc import SynthOutOfContext
 from finn.transformation.fpgadataflow.vitis_build import VitisBuild
@@ -401,72 +400,19 @@ def step_create_dataflow_partition(model: ModelWrapper, cfg: DataflowBuildConfig
 
 
 def step_specialize_layers(model: ModelWrapper, cfg: DataflowBuildConfig):
-    """Specialize layers to HLS/RTL backends.
-
-    This step operates in two phases:
-
-    1. Explicit Specialization (if kernel_selections is set):
-       Applies priority-based backend selection for specified kernels.
-       Allows precise control with automatic fallback.
-
-    2. Automatic Specialization (always runs):
-       Uses built-in heuristics to specialize remaining generic nodes.
-       Skips nodes already specialized in phase 1.
-
-    This sequential approach allows combining explicit priority control for
-    high-value kernels while ensuring all other nodes are specialized automatically.
-
-    Example (Hybrid):
-        from finn.custom_op.fpgadataflow.matrixvectoractivation import MVAU
-        from finn.custom_op.fpgadataflow.hls.matrixvectoractivation_hls import MVAU_hls
-        from finn.custom_op.fpgadataflow.rtl.matrixvectoractivation_rtl import MVAU_rtl
-
-        cfg = DataflowBuildConfig(
-            board="ZCU104",
-            kernel_selections=[
-                (MVAU, [MVAU_rtl, MVAU_hls]),  # Explicit: RTL-first for MVAUs
-            ]
-            # All other kernels (VVAU, DWC, etc.) use automatic specialization
-        )
-    """
-    fpga_part = cfg._resolve_fpga_part()
-
-    # Phase 1: Explicit specialization for specified kernels (if configured)
-    if cfg.kernel_selections is not None:
-        print("Applying explicit kernel specialization (kernel_selections provided)")
-
-        for kernel_class, backend_variants in cfg.kernel_selections:
-            # Ensure backend_variants is a list
-            if not isinstance(backend_variants, list):
-                backend_variants = [backend_variants]
-
-            # Get class names for logging
-            kernel_name = kernel_class.__name__
-            variant_names = [v.__name__ for v in backend_variants]
-
-            print(f"  Specializing {kernel_name} with backend variants: {variant_names}")
-
-            model = model.transform(
-                SpecializeKernel(kernel_class, backend_variants, fpga_part)
-            )
-
-        # Clean up after explicit specialization
-        model = model.transform(GiveUniqueNodeNames())
-        model = model.transform(InferShapes())
-        model = model.transform(InferDataTypes())
-
-    # Phase 2: Automatic specialization for remaining generic nodes (always runs)
-    print("Applying automatic specialization for remaining nodes")
+    """Convert HW nodes to either an HLS or RTL variant of the node. HW nodes
+    get converted either based on pre-determined rules (details can be found
+    in `specialize_layers` source code) or the user provides a configuration file
+    which contains the desired setting. If the user preference cannot be fulfilled,
+    a warning will be printed and the implementation style will be set to a default."""
 
     if cfg.specialize_layers_config_file is not None:
         model = model.transform(GiveUniqueNodeNames())
         model = model.transform(ApplyConfig(cfg.specialize_layers_config_file))
-
-    model = model.transform(SpecializeLayers(fpga_part))
+    model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()))
     model = model.transform(GiveUniqueNodeNames())
     model = model.transform(InferShapes())
     model = model.transform(InferDataTypes())
-
     return model
 
 

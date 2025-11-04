@@ -18,9 +18,19 @@ Strategy:
 
 Components:
 - Steps: 19 build pipeline steps (static list)
-- Kernels: 16 hardware kernels (static list)
-- Backends: 27 implementations (20 HLS + 7 RTL, static list)
+- Kernels: 18 hardware kernels (16 computational + 2 infrastructure)
+- Backends: 27 implementations (17 HLS + 10 RTL, static list)
 - Infer Transforms: Manual mapping (lazy metadata)
+
+Infrastructure Kernels:
+Infrastructure kernels (DuplicateStreams, StreamingFIFO, StreamingDataWidthConverter)
+are marked with is_infrastructure=True and are filtered out of InferKernelList
+when kernel_classes=None. They are inserted by topology transforms (InsertFIFO,
+InsertDWC, InsertDuplicateStreams) rather than pattern matching.
+
+Legacy Components:
+CheckSum_hls, TLastMarker_hls, IODMA_hls are legacy FINN backend-only components
+(no base kernel class) and are not registered in Brainsmith.
 
 Maintenance:
 When adding new FINN components, add them to the static lists in
@@ -56,49 +66,32 @@ def register_all():
 # KERNELS: Hybrid auto-discovery + manual enrichment
 # ============================================================================
 
-# Kernels that are intentionally NOT registered (no infer transforms)
-# These kernels are either:
-# 1. Infrastructure: Inserted by build pipeline or manually placed
-# 2. Sub-components: Created by other transforms, not from ONNX directly
-
-INFRASTRUCTURE_KERNELS = {
-    "StreamingFIFO",  # Inserted by InsertFIFO/SetFIFODepths
-    "StreamingDataWidthConverter",  # AXI width alignment
-    "TLastMarker",  # AXI stream utility
-    "CheckSum",  # Data verification
-    "IODMA",  # DMA interface, manually placed
-}
+# Kernels that are intentionally NOT registered (sub-components only)
+# These are created by other transforms, not from ONNX directly
+# Note: Infrastructure kernels are now registered with is_infrastructure=True
 
 SUBCOMPONENT_KERNELS = {
     # Created by other infer transforms
     "FMPadding",  # Created by InferConvInpGen when padding needed
     "FMPadding_Pixel",  # Variant of FMPadding
-    # Already hardware targets (output of InferElementwiseBinaryOperation)
-    "ElementwiseAdd",
-    "ElementwiseSub",
-    "ElementwiseMul",
-    "ElementwiseDiv",
-    "ElementwiseAnd",
-    "ElementwiseOr",
-    "ElementwiseXor",
-    "ElementwiseBitwiseAnd",
-    "ElementwiseBitwiseOr",
-    "ElementwiseBitwiseXor",
-    "ElementwiseBitShift",
-    "ElementwiseEqual",
-    "ElementwiseGreater",
-    "ElementwiseGreaterOrEqual",
-    "ElementwiseLess",
-    "ElementwiseLessOrEqual",
-    # Note: ElementwiseBinaryOperation has its own infer transform, registered separately
+    # Note: Specialized elementwise operations (ElementwiseAdd, etc.) are now registered
+    # as full kernels for backend specialization support
 }
 
 
 def _register_kernels():
     """Register FINN kernels - static list for performance.
 
-    Returns 16 kernels (all with infer transforms).
-    23 kernels excluded (infrastructure and sub-components).
+    Returns 18 kernels:
+    - 16 computational kernels (with infer transforms)
+    - 2 infrastructure kernels (marked with is_infrastructure=True)
+
+    Infrastructure kernels are inserted by topology transforms (InsertFIFO,
+    InsertDWC, etc.) rather than pattern matching, and are filtered out of
+    InferKernelList when kernel_classes=None.
+
+    Note: CheckSum, TLastMarker, IODMA are legacy FINN backend-only components
+    (no base kernel class) and are not registered in Brainsmith.
 
     Note: This is a static list for fast discovery (~1ms).
     When adding new kernels to FINN, add them here manually.
@@ -144,6 +137,7 @@ def _register_kernels():
             "name": "DuplicateStreams",
             "module": "finn.custom_op.fpgadataflow.duplicatestreams",
             "class_name": "DuplicateStreams",
+            "is_infrastructure": True,  # Inserted by topology transforms (InsertDuplicateStreams)
             "infer_transform": {
                 "module": "finn.transformation.fpgadataflow.convert_to_hw_layers",
                 "class_name": "InferDuplicateStreamsLayer",
@@ -157,6 +151,87 @@ def _register_kernels():
                 "module": "finn.transformation.fpgadataflow.convert_to_hw_layers",
                 "class_name": "InferElementwiseBinaryOperation",
             },
+        },
+        # Specialized elementwise operations (output of InferElementwiseBinaryOperation)
+        {
+            "name": "ElementwiseAdd",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseAdd",
+        },
+        {
+            "name": "ElementwiseSub",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseSub",
+        },
+        {
+            "name": "ElementwiseMul",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseMul",
+        },
+        {
+            "name": "ElementwiseDiv",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseDiv",
+        },
+        {
+            "name": "ElementwiseAnd",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseAnd",
+        },
+        {
+            "name": "ElementwiseOr",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseOr",
+        },
+        {
+            "name": "ElementwiseXor",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseXor",
+        },
+        {
+            "name": "ElementwiseEqual",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseEqual",
+        },
+        {
+            "name": "ElementwiseLess",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseLess",
+        },
+        {
+            "name": "ElementwiseLessOrEqual",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseLessOrEqual",
+        },
+        {
+            "name": "ElementwiseGreater",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseGreater",
+        },
+        {
+            "name": "ElementwiseGreaterOrEqual",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseGreaterOrEqual",
+        },
+        {
+            "name": "ElementwiseBitwiseAnd",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseBitwiseAnd",
+        },
+        {
+            "name": "ElementwiseBitwiseOr",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseBitwiseOr",
+        },
+        {
+            "name": "ElementwiseBitwiseXor",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseBitwiseXor",
+        },
+        {
+            "name": "ElementwiseBitShift",
+            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
+            "class_name": "ElementwiseBitShift",
         },
         {
             "name": "GlobalAccPool",
@@ -248,6 +323,21 @@ def _register_kernels():
                 "class_name": "InferVectorVectorActivation",
             },
         },
+        # Infrastructure kernels (inserted by topology transforms, not pattern matching)
+        {
+            "name": "StreamingFIFO",
+            "module": "finn.custom_op.fpgadataflow.streamingfifo",
+            "class_name": "StreamingFIFO",
+            "is_infrastructure": True,  # Inserted by InsertFIFO/InsertAndSetFIFODepths
+        },
+        {
+            "name": "StreamingDataWidthConverter",
+            "module": "finn.custom_op.fpgadataflow.streamingdatawidthconverter",
+            "class_name": "StreamingDataWidthConverter",
+            "is_infrastructure": True,  # Inserted by InsertDWC (stream width mismatch correction)
+        },
+        # Note: CheckSum, TLastMarker, IODMA are legacy FINN backend-only components
+        # without base kernel classes, so they cannot be registered here.
     ]
 
 
@@ -259,7 +349,15 @@ def _register_kernels():
 def _register_backends():
     """Register FINN backends - static list for performance.
 
-    Returns 27 backends (20 HLS + 7 RTL implementations).
+    Returns 27 backends:
+    - 17 HLS implementations (16 computational + 1 infrastructure)
+    - 10 RTL implementations (7 computational + 3 infrastructure)
+
+    Infrastructure backends are for kernels inserted by topology transforms
+    (StreamingFIFO, StreamingDataWidthConverter).
+
+    Note: CheckSum_hls, TLastMarker_hls, IODMA_hls are legacy backend-only
+    components and are not registered (no base kernel class).
 
     Note: This is a static list for fast discovery (~1ms).
     When adding new backends to FINN, add them here manually.
@@ -299,6 +397,119 @@ def _register_backends():
             "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
             "class_name": "ElementwiseBinaryOperation_hls",
             "target_kernel": "finn:ElementwiseBinaryOperation",
+            "language": "hls",
+        },
+        # Specialized elementwise backends
+        {
+            "name": "ElementwiseAdd_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseAdd_hls",
+            "target_kernel": "finn:ElementwiseAdd",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseSub_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseSub_hls",
+            "target_kernel": "finn:ElementwiseSub",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseMul_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseMul_hls",
+            "target_kernel": "finn:ElementwiseMul",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseDiv_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseDiv_hls",
+            "target_kernel": "finn:ElementwiseDiv",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseAnd_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseAnd_hls",
+            "target_kernel": "finn:ElementwiseAnd",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseOr_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseOr_hls",
+            "target_kernel": "finn:ElementwiseOr",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseXor_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseXor_hls",
+            "target_kernel": "finn:ElementwiseXor",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseEqual_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseEqual_hls",
+            "target_kernel": "finn:ElementwiseEqual",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseLess_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseLess_hls",
+            "target_kernel": "finn:ElementwiseLess",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseLessOrEqual_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseLessOrEqual_hls",
+            "target_kernel": "finn:ElementwiseLessOrEqual",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseGreater_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseGreater_hls",
+            "target_kernel": "finn:ElementwiseGreater",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseGreaterOrEqual_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseGreaterOrEqual_hls",
+            "target_kernel": "finn:ElementwiseGreaterOrEqual",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseBitwiseAnd_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseBitwiseAnd_hls",
+            "target_kernel": "finn:ElementwiseBitwiseAnd",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseBitwiseOr_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseBitwiseOr_hls",
+            "target_kernel": "finn:ElementwiseBitwiseOr",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseBitwiseXor_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseBitwiseXor_hls",
+            "target_kernel": "finn:ElementwiseBitwiseXor",
+            "language": "hls",
+        },
+        {
+            "name": "ElementwiseBitShift_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
+            "class_name": "ElementwiseBitShift_hls",
+            "target_kernel": "finn:ElementwiseBitShift",
             "language": "hls",
         },
         {
@@ -414,6 +625,30 @@ def _register_backends():
             "target_kernel": "finn:VVAU",
             "language": "rtl",
         },
+        # Infrastructure kernel backends
+        {
+            "name": "StreamingFIFO_rtl",
+            "module": "finn.custom_op.fpgadataflow.rtl.streamingfifo_rtl",
+            "class_name": "StreamingFIFO_rtl",
+            "target_kernel": "finn:StreamingFIFO",
+            "language": "rtl",
+        },
+        {
+            "name": "StreamingDataWidthConverter_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.streamingdatawidthconverter_hls",
+            "class_name": "StreamingDataWidthConverter_hls",
+            "target_kernel": "finn:StreamingDataWidthConverter",
+            "language": "hls",
+        },
+        {
+            "name": "StreamingDataWidthConverter_rtl",
+            "module": "finn.custom_op.fpgadataflow.rtl.streamingdatawidthconverter_rtl",
+            "class_name": "StreamingDataWidthConverter_rtl",
+            "target_kernel": "finn:StreamingDataWidthConverter",
+            "language": "rtl",
+        },
+        # Note: CheckSum_hls, TLastMarker_hls, IODMA_hls are legacy backend-only
+        # components without base kernel classes, so they're not registered.
     ]
 
 
