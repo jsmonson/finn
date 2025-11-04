@@ -84,8 +84,8 @@ SUBCOMPONENT_KERNELS = {
 def _register_kernels():
     """Register FINN kernels - static list for performance.
 
-    Returns 18 kernels:
-    - 16 computational kernels (with infer transforms)
+    Returns 17 kernels:
+    - 15 computational kernels (with infer transforms)
     - 2 infrastructure kernels (marked with is_infrastructure=True)
 
     Infrastructure kernels are inserted by topology transforms (InsertFIFO,
@@ -94,6 +94,10 @@ def _register_kernels():
 
     Note: CheckSum, TLastMarker, IODMA are legacy FINN backend-only components
     (no base kernel class) and are not registered in Brainsmith.
+
+    Note: ElementwiseBinaryOperation is not registered - backends target the
+    specialized variants created by InferElementwiseBinaryOperation, not the
+    base kernel.
 
     Note: This is a static list for fast discovery (~1ms).
     When adding new kernels to FINN, add them here manually.
@@ -261,15 +265,18 @@ def _register_kernels():
 def _register_backends():
     """Register FINN backends - static list for performance.
 
-    Returns 27 backends:
-    - 17 HLS implementations (16 computational + 1 infrastructure)
-    - 10 RTL implementations (7 computational + 3 infrastructure)
+    Returns 21 backends:
+    - 15 HLS implementations (14 computational + 1 infrastructure)
+    - 6 RTL implementations
 
     Infrastructure backends are for kernels inserted by topology transforms
     (StreamingFIFO, StreamingDataWidthConverter).
 
     Note: CheckSum_hls, TLastMarker_hls, IODMA_hls are legacy backend-only
     components and are not registered (no base kernel class).
+
+    Note: ElementwiseBinaryOperation backends are not registered - they target
+    specialized variants created by the infer transform, not the base kernel.
 
     Note: This is a static list for fast discovery (~1ms).
     When adding new backends to FINN, add them here manually.
