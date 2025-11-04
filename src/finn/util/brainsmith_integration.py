@@ -74,8 +74,10 @@ SUBCOMPONENT_KERNELS = {
     # Created by other infer transforms
     "FMPadding",  # Created by InferConvInpGen when padding needed
     "FMPadding_Pixel",  # Variant of FMPadding
-    # Note: Specialized elementwise operations (ElementwiseAdd, etc.) are now registered
-    # as full kernels for backend specialization support
+    # FINN ElementwiseBinaryOperation not supported: Backends target the specialized
+    # variants (ElementwiseAdd, ElementwiseMul, etc.) created by InferElementwiseBinaryOperation,
+    # not the base ElementwiseBinaryOperation HWCustomOp. This breaks Brainsmith's kernel→backend
+    # model where backends must target the user-specified kernel.
 }
 
 
@@ -142,96 +144,6 @@ def _register_kernels():
                 "module": "finn.transformation.fpgadataflow.convert_to_hw_layers",
                 "class_name": "InferDuplicateStreamsLayer",
             },
-        },
-        {
-            "name": "ElementwiseBinaryOperation",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseBinaryOperation",
-            "infer_transform": {
-                "module": "finn.transformation.fpgadataflow.convert_to_hw_layers",
-                "class_name": "InferElementwiseBinaryOperation",
-            },
-        },
-        # Specialized elementwise operations (output of InferElementwiseBinaryOperation)
-        {
-            "name": "ElementwiseAdd",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseAdd",
-        },
-        {
-            "name": "ElementwiseSub",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseSub",
-        },
-        {
-            "name": "ElementwiseMul",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseMul",
-        },
-        {
-            "name": "ElementwiseDiv",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseDiv",
-        },
-        {
-            "name": "ElementwiseAnd",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseAnd",
-        },
-        {
-            "name": "ElementwiseOr",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseOr",
-        },
-        {
-            "name": "ElementwiseXor",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseXor",
-        },
-        {
-            "name": "ElementwiseEqual",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseEqual",
-        },
-        {
-            "name": "ElementwiseLess",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseLess",
-        },
-        {
-            "name": "ElementwiseLessOrEqual",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseLessOrEqual",
-        },
-        {
-            "name": "ElementwiseGreater",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseGreater",
-        },
-        {
-            "name": "ElementwiseGreaterOrEqual",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseGreaterOrEqual",
-        },
-        {
-            "name": "ElementwiseBitwiseAnd",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseBitwiseAnd",
-        },
-        {
-            "name": "ElementwiseBitwiseOr",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseBitwiseOr",
-        },
-        {
-            "name": "ElementwiseBitwiseXor",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseBitwiseXor",
-        },
-        {
-            "name": "ElementwiseBitShift",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseBitShift",
         },
         {
             "name": "GlobalAccPool",
@@ -390,126 +302,6 @@ def _register_backends():
             "module": "finn.custom_op.fpgadataflow.hls.duplicatestreams_hls",
             "class_name": "DuplicateStreams_hls",
             "target_kernel": "finn:DuplicateStreams",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseBinaryOperation_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseBinaryOperation_hls",
-            "target_kernel": "finn:ElementwiseBinaryOperation",
-            "language": "hls",
-        },
-        # Specialized elementwise backends
-        {
-            "name": "ElementwiseAdd_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseAdd_hls",
-            "target_kernel": "finn:ElementwiseAdd",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseSub_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseSub_hls",
-            "target_kernel": "finn:ElementwiseSub",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseMul_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseMul_hls",
-            "target_kernel": "finn:ElementwiseMul",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseDiv_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseDiv_hls",
-            "target_kernel": "finn:ElementwiseDiv",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseAnd_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseAnd_hls",
-            "target_kernel": "finn:ElementwiseAnd",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseOr_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseOr_hls",
-            "target_kernel": "finn:ElementwiseOr",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseXor_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseXor_hls",
-            "target_kernel": "finn:ElementwiseXor",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseEqual_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseEqual_hls",
-            "target_kernel": "finn:ElementwiseEqual",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseLess_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseLess_hls",
-            "target_kernel": "finn:ElementwiseLess",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseLessOrEqual_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseLessOrEqual_hls",
-            "target_kernel": "finn:ElementwiseLessOrEqual",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseGreater_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseGreater_hls",
-            "target_kernel": "finn:ElementwiseGreater",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseGreaterOrEqual_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseGreaterOrEqual_hls",
-            "target_kernel": "finn:ElementwiseGreaterOrEqual",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseBitwiseAnd_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseBitwiseAnd_hls",
-            "target_kernel": "finn:ElementwiseBitwiseAnd",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseBitwiseOr_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseBitwiseOr_hls",
-            "target_kernel": "finn:ElementwiseBitwiseOr",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseBitwiseXor_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseBitwiseXor_hls",
-            "target_kernel": "finn:ElementwiseBitwiseXor",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseBitShift_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseBitShift_hls",
-            "target_kernel": "finn:ElementwiseBitShift",
             "language": "hls",
         },
         {
