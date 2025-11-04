@@ -288,9 +288,7 @@ class SpecializeLayers(Transformation):
                     new_node.attribute.append(attribute)
 
             # Set backend attribute to match implementation style
-            new_node.attribute.append(
-                helper.make_attribute("backend", impl_style)
-            )
+            new_node.attribute.append(helper.make_attribute("backend", impl_style))
 
             graph.node.insert(node_ind, new_node)
             # remove old nodes
