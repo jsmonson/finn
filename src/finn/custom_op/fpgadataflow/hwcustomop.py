@@ -35,6 +35,7 @@ from qonnx.util.basic import roundup_to_integer_multiple
 
 from finn import xsi
 from finn.util.basic import get_liveness_threshold_cycles, is_versal
+from finn.util.fpgadataflow import SUPPORTED_BACKENDS
 
 finnxsi = xsi if xsi.is_available() else None
 
@@ -55,7 +56,7 @@ class HWCustomOp(CustomOp):
             # - "fpgadataflow": generic/unspecialized HWCustomOp
             # - "hls": HLS-specialized implementation (e.g., MVAU_hls)
             # - "rtl": RTL-specialized implementation (e.g., MVAU_rtl)
-            "backend": ("s", True, "fpgadataflow", {"fpgadataflow", "hls", "rtl"}),
+            "backend": ("s", True, "fpgadataflow", SUPPORTED_BACKENDS),
             "preferred_impl_style": ("s", False, "", {"", "hls", "rtl"}),
             "code_gen_dir_ipgen": ("s", False, ""),
             "ipgen_path": ("s", False, ""),

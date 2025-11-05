@@ -9,6 +9,9 @@
 
 from qonnx.util.basic import get_by_name, is_custom_op
 
+# Supported backend attribute values for fpgadataflow nodes
+SUPPORTED_BACKENDS = {"fpgadataflow", "hls", "rtl"}
+
 
 def _get_backend_value(node):
     """Helper to extract backend value from a node. Returns None if not found."""
@@ -23,7 +26,7 @@ def is_fpgadataflow_node(node):
     if is_custom_op(node) is False:
         return False
     backend_value = _get_backend_value(node)
-    return backend_value in ("fpgadataflow", "hls", "rtl")
+    return backend_value in SUPPORTED_BACKENDS
 
 
 def is_backend_node(node, backend_name):
