@@ -282,7 +282,7 @@ class SpecializeLayers(Transformation):
                 node.output,
                 domain=f"{node.domain}.{impl_style}",
             )
-            # Copy all attributes except preferred_impl_style and backend
+            # Copy all attributes except mak_style and backend
             for attribute in node.attribute:
                 if attribute.name not in ["preferred_impl_style", "backend"]:
                     new_node.attribute.append(attribute)

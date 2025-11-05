@@ -7,7 +7,7 @@
 #
 ############################################################################
 
-from qonnx.custom_op.regsitry import is_custom_op
+from qonnx.custom_op.registry import is_custom_op
 from qonnx.util.basic import get_by_name
 
 # Supported backend attribute values for fpgadataflow nodes
@@ -24,7 +24,7 @@ def _get_backend_value(node):
 
 def is_fpgadataflow_node(node):
     """Returns True if given node has backend 'fpgadataflow', 'hls', or 'rtl'."""
-    if is_custom_op(node) is False:
+    if is_custom_op(node.domain) is False:
         return False
     backend_value = _get_backend_value(node)
     return backend_value in SUPPORTED_BACKENDS
@@ -32,7 +32,7 @@ def is_fpgadataflow_node(node):
 
 def is_backend_node(node, backend_name):
     """Returns True if given node is of specified backend."""
-    if is_custom_op(node) is False:
+    if is_custom_op(node.domain) is False:
         return False
 
     backend_value = _get_backend_value(node)
