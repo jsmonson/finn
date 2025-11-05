@@ -7,7 +7,8 @@
 #
 ############################################################################
 
-from qonnx.util.basic import get_by_name, is_custom_op
+from qonnx.custom_op.regsitry import is_custom_op
+from qonnx.util.basic import get_by_name
 
 # Supported backend attribute values for fpgadataflow nodes
 SUPPORTED_BACKENDS = {"fpgadataflow", "hls", "rtl"}
