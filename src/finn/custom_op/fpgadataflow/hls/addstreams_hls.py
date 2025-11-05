@@ -28,7 +28,6 @@
 
 from finn.custom_op.fpgadataflow.addstreams import AddStreams
 from finn.custom_op.fpgadataflow.hlsbackend import HLSBackend
-from finn.util.fpgadataflow import is_fpgadataflow_node
 
 
 class AddStreams_hls(AddStreams, HLSBackend):
@@ -45,11 +44,11 @@ class AddStreams_hls(AddStreams, HLSBackend):
 
     def verify_node(self):
         info_messages = []
-        # verify that "backend" is set to a valid fpgadataflow value
-        if is_fpgadataflow_node(self.onnx_node):
+        # verify that "backend" is set correctly
+        if self.get_nodeattr("backend") == "hls":
             info_messages.append("Attribute backend is set correctly")
         else:
-            info_messages.append('Attribute backend should be one of: "fpgadataflow", "hls", "rtl"')
+            info_messages.append('Attribute backend should set to "hls"')
 
         # verify that all necessary attributes exist
         try:

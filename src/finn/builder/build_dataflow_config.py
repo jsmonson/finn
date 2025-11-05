@@ -373,20 +373,14 @@ class DataflowBuildConfig:
     #: If set to commit hash specified version will be used
     cpp_driver_version: Optional[str] = "latest"
 
-    #: (Optional) List of (kernel_class, backend_variants) tuples for explicit
-    #: backend priority selection. step_specialize_layers runs in two phases:
-    #:   1. Explicit selection for kernels specified here (with priority/fallback)
-    #:   2. Automatic selection for all remaining nodes
+    #: (Optional) List of (kernel_name, backend_names) tuples for explicit
+    #: backend priority selection. Currently only used with Brainsmith.
     #:
-    #: Format: [(kernel_class, [variant_list])]
-    #:   - kernel_class: Base HWCustomOp class (MVAU, VVAU, etc.)
-    #:   - variant_list: Variants in priority order, tries first match
-    #:
-    #: Example - RTL-first for MVAU, automatic for everything else:
-    #:   from finn.custom_op.fpgadataflow.matrixvectoractivation import MVAU
-    #:   from finn.custom_op.fpgadataflow.rtl.matrixvectoractivation_rtl import MVAU_rtl
-    #:   from finn.custom_op.fpgadataflow.hls.matrixvectoractivation_hls import MVAU_hls
-    #:   cfg.kernel_selections = [(MVAU, [MVAU_rtl, MVAU_hls])]
+    #: Format: [(kernel_name, [backend_name_list])]
+    #:   - kernel_name: String name of kernel in global registry ("source:component_name")
+    #:   - backend_name_list: Backend names in priority order, tries first match
+    #: Example:
+    #:   cfg.kernel_selections = [("finn:MVAU", ["finn:MVAU_rtl", "finn:MVAU_hls"])]
     kernel_selections: Optional[List[tuple]] = None
 
     def _resolve_hls_clk_period(self):
