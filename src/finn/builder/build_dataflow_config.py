@@ -337,6 +337,13 @@ class DataflowBuildConfig:
     #: Default is True for good UX. Set to False for library/batch mode.
     show_progress: Optional[bool] = True
 
+    #: Log levels for subprocess categories (e.g., {"hls": logging.ERROR}).
+    #: Keys are logger names (without "finn." prefix), values are log levels.
+    #: Allows library users to customize verbosity of specific tool categories.
+    #: Example: {"hls": logging.ERROR, "vivado": logging.DEBUG}
+    #: Supports hierarchical loggers: {"vivado.stitch_ip": logging.DEBUG}
+    subprocess_log_levels: Optional[dict] = None
+
     #: If given, only run the steps in the list. If not, run default steps.
     #: See `default_build_dataflow_steps` for the default list of steps.
     #: When specified:

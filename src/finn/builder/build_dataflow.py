@@ -152,6 +152,12 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
     # Always propagate to file (via root logger)
     finn_logger.propagate = True
 
+    # Apply subprocess log level overrides (if specified)
+    if cfg.subprocess_log_levels:
+        for category, level in cfg.subprocess_log_levels.items():
+            logger_name = f'finn.{category}'
+            logging.getLogger(logger_name).setLevel(level)
+
     for transform_step in build_dataflow_steps:
         try:
             step_name = transform_step.__name__
