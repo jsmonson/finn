@@ -328,20 +328,22 @@ class DataflowBuildConfig:
     #: Whether pdb postmortem debuggig will be launched when the build fails
     enable_build_pdb_debug: Optional[bool] = True
 
-    #: When True, all warnings and compiler output will be printed in stdout.
-    #: Otherwise, these will be suppressed and only appear in the build log.
+    #: Show subprocess tool output on console. When False, tools are silent.
+    #: Use subprocess_console_levels to control per-tool verbosity when True.
     verbose: Optional[bool] = False
 
-    #: When True, build progress messages (step execution) will be shown on console.
-    #: When False, console is completely silent. File logging is unaffected.
-    #: Default is True for good UX. Set to False for library/batch mode.
+    #: Show build progress messages on console. When False, console is silent.
+    #: Recommended True for interactive builds, False for library/batch mode.
     show_progress: Optional[bool] = True
 
-    #: Log levels for subprocess categories (e.g., {"hls": logging.ERROR}).
-    #: Keys are logger names (without "finn." prefix), values are log levels.
-    #: Allows library users to customize verbosity of specific tool categories.
-    #: Example: {"hls": logging.ERROR, "vivado": logging.DEBUG}
-    #: Supports hierarchical loggers: {"vivado.stitch_ip": logging.DEBUG}
+    #: Per-tool console log levels (only when verbose=True, otherwise ignored).
+    #: Dict of {category: level}, e.g. {"hls": logging.ERROR, "vivado": logging.INFO}.
+    #: Unconfigured tools default to WARNING. Supports hierarchical: "vivado.stitch_ip".
+    subprocess_console_levels: Optional[dict] = None
+
+    #: Per-tool log file levels (always applies, independent of verbose).
+    #: Dict of {category: level}, e.g. {"hls": logging.INFO, "vivado": logging.DEBUG}.
+    #: Unconfigured tools default to DEBUG (comprehensive audit trail).
     subprocess_log_levels: Optional[dict] = None
 
     #: If given, only run the steps in the list. If not, run default steps.

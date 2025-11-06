@@ -142,21 +142,60 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
 
     # Configure finn tool loggers (subprocess output) - controlled by verbose
     finn_logger = logging.getLogger('finn')
-    finn_logger.setLevel(logging.INFO)
+    finn_logger.setLevel(logging.DEBUG)  # Permissive parent (children can filter)
+
+    # Add console handler if verbose mode
     if cfg.verbose:
-        # Verbose mode: show tool output on console with logger names
-        console_handler = logging.StreamHandler(sys.stdout)
+        finn_console_handler = logging.StreamHandler(sys.stdout)
         console_formatter = logging.Formatter('[%(name)s] %(levelname)s: %(message)s')
-        console_handler.setFormatter(console_formatter)
-        finn_logger.addHandler(console_handler)
+        finn_console_handler.setFormatter(console_formatter)
+        finn_console_handler.setLevel(logging.WARNING)  # Default console level
+        finn_logger.addHandler(finn_console_handler)
+
     # Always propagate to file (via root logger)
     finn_logger.propagate = True
 
-    # Apply subprocess log level overrides (if specified)
+    # Apply subprocess log level overrides (console and file independently)
+    # Collect all categories from both configs
+    all_categories = set()
+    if cfg.subprocess_console_levels:
+        all_categories.update(cfg.subprocess_console_levels.keys())
     if cfg.subprocess_log_levels:
-        for category, level in cfg.subprocess_log_levels.items():
-            logger_name = f'finn.{category}'
-            logging.getLogger(logger_name).setLevel(level)
+        all_categories.update(cfg.subprocess_log_levels.keys())
+
+    configured_logger_names = []
+    for category in all_categories:
+        logger_name = f'finn.{category}'
+        configured_logger_names.append(logger_name)
+        subprocess_logger = logging.getLogger(logger_name)
+
+        # Determine console level (default: WARNING)
+        console_level = (cfg.subprocess_console_levels or {}).get(category, logging.WARNING)
+        # Determine file level (default: DEBUG for comprehensive audit trail)
+        file_level = (cfg.subprocess_log_levels or {}).get(category, logging.DEBUG)
+
+        # Set logger to most permissive (minimum level) so both destinations work
+        subprocess_logger.setLevel(min(console_level, file_level))
+
+        # Add child-specific console handler (when verbose)
+        if cfg.verbose:
+            child_console_handler = logging.StreamHandler(sys.stdout)
+            child_console_handler.setFormatter(console_formatter)
+            child_console_handler.setLevel(console_level)
+            subprocess_logger.addHandler(child_console_handler)
+
+        # Always propagate to root for file logging
+        subprocess_logger.propagate = True
+
+    # Add filter to parent console handler to exclude configured children
+    # (prevents duplication for any children that DO propagate)
+    if cfg.verbose and configured_logger_names:
+        class ExcludeConfiguredLoggersFilter(logging.Filter):
+            def filter(self, record):
+                # Block messages from configured subprocess loggers
+                return not any(record.name.startswith(name) for name in configured_logger_names)
+
+        finn_console_handler.addFilter(ExcludeConfiguredLoggersFilter())
 
     for transform_step in build_dataflow_steps:
         try:
