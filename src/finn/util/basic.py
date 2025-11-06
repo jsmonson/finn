@@ -435,13 +435,13 @@ def launch_process_helper(
     t_out = threading.Thread(
         target=stream_output,
         args=(proc.stdout, stdout_level, "stdout"),
-        daemon=True,
+        daemon=False,
         name=f"finn-stdout-{proc.pid}",
     )
     t_err = threading.Thread(
         target=stream_output,
         args=(proc.stderr, stderr_level, "stderr"),
-        daemon=True,
+        daemon=False,
         name=f"finn-stderr-{proc.pid}",
     )
 
