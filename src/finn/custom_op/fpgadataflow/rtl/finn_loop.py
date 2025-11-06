@@ -484,8 +484,20 @@ class FINNLoop(HWCustomOp, RTLBackend):
                                     path, param_node.name, pe_value, stage, iter
                                 )
                                 with open(iter_file, "r") as infile:
+                                    cnt = 0
                                     for line in infile:
+                                        if cnt == 0:
+                                            hex_len = len(line.strip())
+                                        cnt += 1
                                         outfile.write(line)
+                                    # is power of 2?
+                                    if (cnt & (cnt - 1)) != 0:
+                                        # pad with max value
+                                        next_pow2 = 2 ** math.ceil(math.log2(cnt))
+                                        pad_val = 2**o_bitwidth - 1
+                                        for _ in range(next_pow2 - cnt):
+                                            # write out as hex of len hex_len
+                                            outfile.write(hex(pad_val)[2:].zfill(hex_len) + "\n")
                                 os.remove(iter_file)
 
                 # Replace the path for the dat files in the ipgen files
