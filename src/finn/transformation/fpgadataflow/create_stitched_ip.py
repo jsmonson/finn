@@ -643,7 +643,6 @@ close $ofile
             ["vivado", "-mode", "batch", "-source", "make_project.tcl"],
             cwd=vivado_stitch_proj_dir,
             logger=logger,
-            use_logging=True,
             stdout_level=logging.INFO,
             stderr_level=logging.WARNING,
             raise_on_error=False,

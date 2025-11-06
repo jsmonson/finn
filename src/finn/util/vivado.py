@@ -66,7 +66,6 @@ def out_of_context_synth(
         call_omx,
         proc_env=os.environ.copy(),
         cwd=verilog_dir,
-        use_logging=True,
         logger=logger,
         stdout_level=logging.DEBUG,
         stderr_level=logging.WARNING,

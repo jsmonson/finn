@@ -68,102 +68,29 @@ class TestDetectLogLevel(unittest.TestCase):
 
 
 @pytest.mark.util
-class TestLaunchProcessHelperLegacy(unittest.TestCase):
-    """Test legacy mode (backward compatibility)."""
-
-    def test_returns_tuple(self):
-        """Legacy mode returns (stdout, stderr) tuple."""
-        out, err = launch_process_helper(["echo", "hello"])
-        self.assertIsInstance(out, str)
-        self.assertIsInstance(err, str)
-        self.assertIn("hello", out)
-
-    def test_stdout_content(self):
-        """Legacy mode captures stdout correctly."""
-        out, err = launch_process_helper(["echo", "test message"])
-        self.assertIn("test message", out)
-
-    def test_stderr_content(self):
-        """Legacy mode captures stderr correctly."""
-        out, err = launch_process_helper(["sh", "-c", "echo error >&2"])
-        self.assertIn("error", err)
-
-    def test_writes_to_stdout(self):
-        """Legacy mode writes to sys.stdout."""
-        old_stdout = sys.stdout
-        sys.stdout = io.StringIO()
-
-        try:
-            out, err = launch_process_helper(["echo", "stdout_test"])
-            output = sys.stdout.getvalue()
-            self.assertIn("stdout_test", output)
-        finally:
-            sys.stdout = old_stdout
-
-    def test_writes_to_stderr(self):
-        """Legacy mode writes to sys.stderr."""
-        old_stderr = sys.stderr
-        sys.stderr = io.StringIO()
-
-        try:
-            out, err = launch_process_helper(["sh", "-c", "echo stderr_test >&2"])
-            output = sys.stderr.getvalue()
-            self.assertIn("stderr_test", output)
-        finally:
-            sys.stderr = old_stderr
-
-    def test_no_exit_code_check(self):
-        """Legacy mode does not raise on error."""
-        # Should not raise even though false exits with 1
-        out, err = launch_process_helper(["false"])
-        self.assertIsInstance(out, str)
-        self.assertIsInstance(err, str)
-
-    def test_custom_env(self):
-        """Legacy mode respects proc_env parameter."""
-        env = os.environ.copy()
-        env["TEST_VAR_LEGACY"] = "test_value_12345"
-
-        out, err = launch_process_helper(["sh", "-c", "echo $TEST_VAR_LEGACY"], proc_env=env)
-        self.assertIn("test_value_12345", out)
-
-    def test_custom_cwd(self):
-        """Legacy mode respects cwd parameter."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            out, err = launch_process_helper(["pwd"], cwd=tmpdir)
-            self.assertIn(tmpdir, out)
-
-    def test_backward_compatibility(self):
-        """Existing call pattern works unchanged."""
-        # This is how existing FINN code calls it
-        launch_process_helper(["echo", "compat_test"])
-        # Should not raise, returns tuple
-
-
-@pytest.mark.util
-class TestLaunchProcessHelperLogging(unittest.TestCase):
-    """Test logging mode (new functionality)."""
+class TestLaunchProcessHelper(unittest.TestCase):
+    """Test launch_process_helper subprocess wrapper."""
 
     def test_returns_exitcode(self):
         """Logging mode returns exit code integer."""
-        exitcode = launch_process_helper(["true"], use_logging=True)
+        exitcode = launch_process_helper(["true"])
         self.assertIsInstance(exitcode, int)
         self.assertEqual(exitcode, 0)
 
     def test_success_exitcode(self):
         """Logging mode returns 0 on success."""
-        exitcode = launch_process_helper(["echo", "success"], use_logging=True)
+        exitcode = launch_process_helper(["echo", "success"])
         self.assertEqual(exitcode, 0)
 
     def test_error_exitcode(self):
         """Logging mode returns non-zero exit code."""
-        exitcode = launch_process_helper(["false"], use_logging=True, raise_on_error=False)
+        exitcode = launch_process_helper(["false"], raise_on_error=False)
         self.assertEqual(exitcode, 1)
 
     def test_streams_to_logger(self):
         """Logging mode sends output through logger."""
         with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
-            exitcode = launch_process_helper(["echo", "hello"], use_logging=True)
+            exitcode = launch_process_helper(["echo", "hello"])
             self.assertEqual(exitcode, 0)
             # Check that output was logged
             self.assertTrue(any("hello" in msg for msg in cm.output))
@@ -172,14 +99,14 @@ class TestLaunchProcessHelperLogging(unittest.TestCase):
         """Can specify custom logger."""
         custom_logger = logging.getLogger("test.custom")
         with self.assertLogs("test.custom", level="INFO") as cm:
-            launch_process_helper(["echo", "custom"], use_logging=True, logger=custom_logger)
+            launch_process_helper(["echo", "custom"], logger=custom_logger)
             self.assertTrue(any("custom" in msg for msg in cm.output))
 
     def test_stdout_level(self):
         """Can specify stdout log level."""
         with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
             launch_process_helper(
-                ["echo", "debug_output"], use_logging=True, stdout_level=logging.DEBUG
+                ["echo", "debug_output"], stdout_level=logging.DEBUG
             )
             # Should be logged at DEBUG level
             log_output = "\n".join(cm.output)
@@ -191,7 +118,6 @@ class TestLaunchProcessHelperLogging(unittest.TestCase):
         with self.assertLogs("finn.subprocess", level="WARNING") as cm:
             launch_process_helper(
                 ["sh", "-c", "echo error >&2"],
-                use_logging=True,
                 stderr_level=logging.WARNING,
             )
             log_output = "\n".join(cm.output)
@@ -202,7 +128,6 @@ class TestLaunchProcessHelperLogging(unittest.TestCase):
         with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
             launch_process_helper(
                 ["sh", "-c", "echo 'ERROR: test error'"],
-                use_logging=True,
                 stdout_level=logging.INFO,  # Base level
                 detect_levels=True,
             )
@@ -216,7 +141,6 @@ class TestLaunchProcessHelperLogging(unittest.TestCase):
         with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
             launch_process_helper(
                 ["sh", "-c", "echo 'ERROR: test'"],
-                use_logging=True,
                 stdout_level=logging.INFO,
                 detect_levels=False,  # Disabled
             )
@@ -228,14 +152,14 @@ class TestLaunchProcessHelperLogging(unittest.TestCase):
         """Does not raise when raise_on_error=False."""
         # Should return exit code without raising
         exitcode = launch_process_helper(
-            ["sh", "-c", "exit 42"], use_logging=True, raise_on_error=False
+            ["sh", "-c", "exit 42"], raise_on_error=False
         )
         self.assertEqual(exitcode, 42)
 
     def test_raise_on_error_enabled(self):
         """Raises CalledProcessError when raise_on_error=True."""
         with self.assertRaises(subprocess.CalledProcessError) as cm:
-            launch_process_helper(["false"], use_logging=True, raise_on_error=True)
+            launch_process_helper(["false"], raise_on_error=True)
         self.assertEqual(cm.exception.returncode, 1)
 
 
@@ -248,7 +172,6 @@ class TestLaunchProcessHelperIntegration(unittest.TestCase):
         with self.assertLogs("finn.subprocess", level="INFO") as cm:
             launch_process_helper(
                 ["sh", "-c", "echo 'line1'; echo 'line2'; echo 'line3'"],
-                use_logging=True,
             )
             log_output = "\n".join(cm.output)
             self.assertIn("line1", log_output)
@@ -260,7 +183,6 @@ class TestLaunchProcessHelperIntegration(unittest.TestCase):
         with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
             launch_process_helper(
                 ["sh", "-c", "echo 'out'; echo 'err' >&2; echo 'out2'"],
-                use_logging=True,
                 stdout_level=logging.INFO,
                 stderr_level=logging.WARNING,
             )
@@ -273,7 +195,7 @@ class TestLaunchProcessHelperIntegration(unittest.TestCase):
         """Respects working directory parameter."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
-                launch_process_helper(["pwd"], use_logging=True, cwd=tmpdir)
+                launch_process_helper(["pwd"], cwd=tmpdir)
                 log_output = "\n".join(cm.output)
                 self.assertIn(tmpdir, log_output)
 
@@ -285,7 +207,6 @@ class TestLaunchProcessHelperIntegration(unittest.TestCase):
         with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
             launch_process_helper(
                 ["sh", "-c", "echo $TEST_VAR_LOGGING"],
-                use_logging=True,
                 proc_env=env,
             )
             log_output = "\n".join(cm.output)
@@ -297,7 +218,6 @@ class TestLaunchProcessHelperIntegration(unittest.TestCase):
         with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
             exitcode = launch_process_helper(
                 ["sh", "-c", "for i in $(seq 1 1000); do echo line$i; done"],
-                use_logging=True,
                 stdout_level=logging.DEBUG,
             )
             self.assertEqual(exitcode, 0)
@@ -311,7 +231,6 @@ class TestLaunchProcessHelperIntegration(unittest.TestCase):
         with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
             exitcode = launch_process_helper(
                 ["sh", "-c", cmd],
-                use_logging=True,
                 stdout_level=logging.INFO,
                 stderr_level=logging.WARNING,
             )
@@ -332,7 +251,6 @@ INFO: Elaboration complete"""
         with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
             launch_process_helper(
                 ["sh", "-c", f"echo '{xilinx_output}'"],
-                use_logging=True,
                 stdout_level=logging.INFO,
                 detect_levels=True,
             )

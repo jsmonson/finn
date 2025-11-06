@@ -248,7 +248,6 @@ class CppBuilder:
             cmd,
             cwd=code_gen_dir,
             logger=logger,
-            use_logging=True,
             stdout_level=logging.DEBUG,  # gcc is verbose
             stderr_level=logging.WARNING,
             raise_on_error=False,
@@ -304,78 +303,59 @@ def launch_process_helper(
     proc_env=None,
     cwd=None,
     logger: Optional[logging.Logger] = None,
-    use_logging: bool = False,
     stdout_level: int = logging.INFO,
     stderr_level: int = logging.WARNING,
     detect_levels: bool = True,
     raise_on_error: bool = False,
-) -> Union[Tuple[str, str], int]:
+) -> int:
     """
-    Launch subprocess with configurable output handling.
+    Launch subprocess with streaming output through Python logging.
 
-    This function provides two modes of operation:
+    Streams subprocess stdout/stderr line-by-line through Python's logging system,
+    enabling application-level log filtering, formatting, and routing control.
 
-    **Legacy Mode (default, use_logging=False)**:
-    - Buffers all output via communicate()
-    - Writes to sys.stdout/sys.stderr directly
-    - Returns (stdout_str, stderr_str) tuple
-    - No exit code checking
-    - Backward compatible with all existing code
-
-    **Logging Mode (use_logging=True)**:
-    - Streams output line-by-line through Python logging
-    - Enables application-level log filtering and formatting
-    - Returns exit code integer
-    - Optional automatic error raising on non-zero exit
-    - Thread-safe streaming of stdout and stderr
+    Features:
+    - Thread-safe non-blocking stdout/stderr streaming
+    - Automatic log level detection from tool output patterns
+    - Automatic environment variable expansion in command arguments
+    - Optional error raising on non-zero exit codes
+    - Integration with FINN's hierarchical logger system
 
     Args:
         args: Command and arguments as list (e.g., ["xelab", "-prj", "sim.prj"])
         proc_env: Environment variables dict (default: os.environ.copy())
         cwd: Working directory for subprocess (default: current directory)
-        logger: Logger instance for logging mode (default: 'finn.subprocess')
-        use_logging: Enable logging mode (default: False for compatibility)
+        logger: Logger instance (default: 'finn.subprocess')
         stdout_level: Base log level for stdout (default: INFO)
         stderr_level: Base log level for stderr (default: WARNING)
         detect_levels: Auto-detect log levels from output patterns (default: True)
         raise_on_error: Raise CalledProcessError on non-zero exit (default: False)
 
     Returns:
-        - If use_logging=False: (stdout: str, stderr: str) tuple
-        - If use_logging=True: exit_code: int
+        Exit code (int) from the subprocess
 
     Raises:
-        subprocess.CalledProcessError: If use_logging=True, raise_on_error=True,
-                                       and subprocess exits with non-zero code
+        subprocess.CalledProcessError: If raise_on_error=True and subprocess
+                                       exits with non-zero code
 
-    Examples:
-        Legacy mode (backward compatible)::
+    Example::
 
-            out, err = launch_process_helper(["echo", "hello"])
-            # Writes "hello" to sys.stdout, returns tuple
+        import logging
+        logger = logging.getLogger('finn.vivado')
 
-        Logging mode (new)::
-
-            import logging
-            logging.basicConfig(level=logging.INFO)
-
-            exitcode = launch_process_helper(
-                ["xelab", "work.top", "-prj", "sim.prj"],
-                use_logging=True,
-                logger=logging.getLogger('finn.xsi'),
-                stdout_level=logging.DEBUG,
-                stderr_level=logging.WARNING,
-                raise_on_error=True
-            )
+        exitcode = launch_process_helper(
+            ["vivado", "-mode", "batch", "-source", "script.tcl"],
+            logger=logger,
+            stdout_level=logging.INFO,
+            stderr_level=logging.WARNING,
+            raise_on_error=True
+        )
 
     Notes:
-        - Return value change when use_logging=True is safe: all existing FINN
-          code discards return values (verified by codebase analysis)
-        - Logging mode uses threads for non-blocking stdout/stderr reading
-        - Pattern detection (detect_levels=True) automatically adjusts levels
-          based on tool output (ERROR:, WARNING:, etc.)
-        - For long-running processes, logging mode is more memory-efficient
-          than legacy mode (streams vs. buffers)
+        - Environment variables (e.g., $FINN_ROOT) are automatically expanded
+        - Pattern detection promotes ERROR:/WARNING: to appropriate log levels
+        - Uses threads for non-blocking I/O (prevents pipe buffer deadlocks)
+        - Integrates with verbose flag control via logger propagation
     """
     if proc_env is None:
         proc_env = os.environ.copy()
@@ -383,28 +363,6 @@ def launch_process_helper(
     # Expand environment variables in all command arguments
     # This matches shell behavior and prevents callers from forgetting
     args = [os.path.expandvars(str(arg)) for arg in args]
-
-    # ============================================================
-    # LEGACY MODE: Preserve existing behavior exactly
-    # ============================================================
-    if not use_logging:
-        with subprocess.Popen(
-            args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=proc_env, cwd=cwd
-        ) as proc:
-            (cmd_out, cmd_err) = proc.communicate()
-
-        if cmd_out is not None:
-            cmd_out = cmd_out.decode("utf-8")
-            sys.stdout.write(cmd_out)
-        if cmd_err is not None:
-            cmd_err = cmd_err.decode("utf-8")
-            sys.stderr.write(cmd_err)
-
-        return (cmd_out, cmd_err)
-
-    # ============================================================
-    # LOGGING MODE: Stream through Python logging
-    # ============================================================
 
     # Default logger if not specified
     if logger is None:

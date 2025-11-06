@@ -72,7 +72,6 @@ class CallHLS:
             cmd,
             cwd=code_gen_dir,
             logger=logger,
-            use_logging=True,
             stdout_level=logging.INFO,
             stderr_level=logging.WARNING,
             raise_on_error=False,

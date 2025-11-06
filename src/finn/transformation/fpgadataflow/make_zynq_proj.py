@@ -258,7 +258,6 @@ class MakeZYNQProject(Transformation):
             ["vivado", "-mode", "batch", "-source", ipcfg],
             cwd=vivado_pynq_proj_dir,
             logger=logger,
-            use_logging=True,
             stdout_level=logging.INFO,
             stderr_level=logging.WARNING,
             raise_on_error=False,

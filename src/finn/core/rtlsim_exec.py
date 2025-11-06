@@ -284,7 +284,6 @@ def rtlsim_exec_cppxsi(
     launch_process_helper(
         build_cmd,
         cwd=sim_base,
-        use_logging=True,
         logger=logger,
         stdout_level=logging.INFO,
         stderr_level=logging.ERROR,
@@ -305,7 +304,6 @@ def rtlsim_exec_cppxsi(
     launch_process_helper(
         runsim_cmd,
         cwd=sim_base,
-        use_logging=True,
         logger=xsim_logger,
         stdout_level=logging.INFO,
         stderr_level=logging.WARNING,
