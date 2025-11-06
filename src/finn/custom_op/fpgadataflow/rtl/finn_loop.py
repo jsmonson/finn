@@ -479,13 +479,28 @@ class FINNLoop(HWCustomOp, RTLBackend):
                             stage,
                         )
                         with open(param_file, "w") as outfile:
+                            total_lines = 0
                             for iter in range(iteration):
                                 iter_file = "{}/{}_threshs_{}_{}_i{}.dat".format(
                                     path, param_node.name, pe_value, stage, iter
                                 )
                                 with open(iter_file, "r") as infile:
                                     for line in infile:
+                                        if total_lines == 0:
+                                            hex_len = len(line.strip())
                                         outfile.write(line)
+                                        total_lines += 1
+                                    # is power of 2?
+                                    if (total_lines & (total_lines - 1)) != 0:
+                                        current_lines = total_lines
+                                        # pad with max value
+                                        next_pow2 = 2 ** math.ceil(math.log2(current_lines))
+                                        pad_val = 2**o_bitwidth - 1
+                                        for _ in range(next_pow2 - current_lines):
+                                            # write out as hex of len hex_len
+                                            outfile.write(hex(pad_val)[2:].zfill(hex_len) + "\n")
+                                            total_lines += 1
+
                                 os.remove(iter_file)
 
                 # Replace the path for the dat files in the ipgen files
