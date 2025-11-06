@@ -83,7 +83,6 @@ def out_of_context_synth(
     ret["vivado_proj_folder"] = vivado_proj_folder
     for res_line in res_data:
         res_fields = res_line.split("=")
-        print(res_fields)
         try:
             ret[res_fields[0]] = float(res_fields[1])
         except ValueError:

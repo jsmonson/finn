@@ -43,25 +43,6 @@ from finn.builder.build_dataflow_config import (
 from finn.builder.build_dataflow_steps import build_dataflow_step_lookup
 
 
-# adapted from https://stackoverflow.com/a/39215961
-class StreamToLogger(object):
-    """
-    Fake file-like stream object that redirects writes to a logger instance.
-    """
-
-    def __init__(self, logger, level):
-        self.logger = logger
-        self.level = level
-        self.linebuf = ""
-
-    def write(self, buf):
-        for line in buf.rstrip().splitlines():
-            self.logger.log(self.level, line.rstrip())
-
-    def flush(self):
-        pass
-
-
 def resolve_build_steps(cfg: DataflowBuildConfig, partial: bool = True):
     steps = cfg.steps
     if steps is None:
@@ -108,23 +89,26 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
     :param model_filename: ONNX model filename to build
     :param cfg: Build configuration
     """
+    # Set up builder logger for user-facing status messages
+    builder_log = logging.getLogger('finn.builder')
+
     # if start_step is specified, override the input model
     if cfg.start_step is None:
-        print("Building dataflow accelerator from " + model_filename)
+        builder_log.info("Building dataflow accelerator from " + model_filename)
         model = ModelWrapper(model_filename)
     else:
         intermediate_model_filename = resolve_step_filename(cfg.start_step, cfg, -1)
-        print(
-            "Building dataflow accelerator from intermediate checkpoint"
+        builder_log.info(
+            "Building dataflow accelerator from intermediate checkpoint "
             + intermediate_model_filename
         )
         model = ModelWrapper(intermediate_model_filename)
     assert type(model) is ModelWrapper
     finn_build_dir = os.environ["FINN_BUILD_DIR"]
 
-    print("Intermediate outputs will be generated in " + finn_build_dir)
-    print("Final outputs will be generated in " + cfg.output_dir)
-    print("Build log is at " + cfg.output_dir + "/build_dataflow.log")
+    builder_log.info("Intermediate outputs will be generated in " + finn_build_dir)
+    builder_log.info("Final outputs will be generated in " + cfg.output_dir)
+    builder_log.info("Build log is at " + cfg.output_dir + "/build_dataflow.log")
     # create the output dir if it doesn't exist
     if not os.path.exists(cfg.output_dir):
         os.makedirs(cfg.output_dir)
@@ -154,27 +138,14 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
         finn_logger.setLevel(logging.WARNING)
     # finn_logger.propagate = True (default) ensures all logs go to build_dataflow.log
 
-    stdout_logger = StreamToLogger(log, logging.INFO)
-    stderr_logger = StreamToLogger(log, logging.ERROR)
-    stdout_orig = sys.stdout
-    stderr_orig = sys.stderr
     for transform_step in build_dataflow_steps:
         try:
             step_name = transform_step.__name__
-            print("Running step: %s [%d/%d]" % (step_name, step_num, len(build_dataflow_steps)))
-            # redirect output to logfile
-            if not cfg.verbose and not cfg.no_stdout_redirect:
-                sys.stdout = stdout_logger
-                sys.stderr = stderr_logger
-                # also log current step name to logfile
-                print("Running step: %s [%d/%d]" % (step_name, step_num, len(build_dataflow_steps)))
+            builder_log.info("Running step: %s [%d/%d]" % (step_name, step_num, len(build_dataflow_steps)))
             # run the step
             step_start = time.time()
             model = transform_step(model, cfg)
             step_end = time.time()
-            # restore stdout/stderr
-            sys.stdout = stdout_orig
-            sys.stderr = stderr_orig
             time_per_step[step_name] = step_end - step_start
             chkpt_name = "%s.onnx" % (step_name)
             if cfg.save_intermediate_models:
@@ -184,9 +155,6 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
                 model.save("%s/%s" % (intermediate_model_dir, chkpt_name))
             step_num += 1
         except:  # noqa
-            # restore stdout/stderr
-            sys.stdout = stdout_orig
-            sys.stderr = stderr_orig
             # print exception info and traceback
             extype, value, tb = sys.exc_info()
             traceback.print_exc()
@@ -194,13 +162,13 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
             if cfg.enable_build_pdb_debug:
                 pdb.post_mortem(tb)
             else:
-                print("enable_build_pdb_debug not set in build config, exiting...")
-            print("Build failed")
+                builder_log.error("enable_build_pdb_debug not set in build config, exiting...")
+            builder_log.error("Build failed")
             return -1
 
     with open(cfg.output_dir + "/time_per_step.json", "w") as f:
         json.dump(time_per_step, f, indent=2)
-    print("Completed successfully")
+    builder_log.info("Completed successfully")
     return 0
 
 
