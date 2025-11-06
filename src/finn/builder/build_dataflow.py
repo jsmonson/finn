@@ -126,17 +126,17 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
 
     # Configure FINN tool loggers to respect verbose flag
     finn_logger = logging.getLogger('finn')
+    finn_logger.setLevel(logging.INFO)
     if cfg.verbose:
-        # Verbose mode: output to both console and file
+        # Verbose mode: output to console only (no duplication in file)
         console_handler = logging.StreamHandler(sys.stdout)
         console_formatter = logging.Formatter('[%(name)s] %(levelname)s: %(message)s')
         console_handler.setFormatter(console_formatter)
         finn_logger.addHandler(console_handler)
-        finn_logger.setLevel(logging.INFO)
+        finn_logger.propagate = False  # Don't send to file
     else:
-        # Quiet mode: only warnings/errors, file only (via root logger propagation)
-        finn_logger.setLevel(logging.WARNING)
-    # finn_logger.propagate = True (default) ensures all logs go to build_dataflow.log
+        # Quiet mode: output to file only, silent console
+        finn_logger.propagate = True  # Send to root file handler
 
     for transform_step in build_dataflow_steps:
         try:

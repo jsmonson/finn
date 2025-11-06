@@ -26,6 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import glob
 import logging
 import os
 import subprocess
@@ -220,26 +221,40 @@ class CppBuilder:
         self.executable_path = path
 
     def build(self, code_gen_dir):
-        """Builds the g++ compiler command according to entries in include_paths
-        and cpp_files lists. Saves it in bash script in given folder and
-        executes it."""
-        # raise error if includes are empty
+        """Builds and executes the g++ compiler command for cppsim compilation."""
         self.code_gen_dir = code_gen_dir
-        self.compile_components.append("g++ -o " + str(self.executable_path))
-        for cpp_file in self.cpp_files:
-            self.compile_components.append(cpp_file)
-        for lib in self.include_paths:
-            self.compile_components.append(lib)
-        bash_compile = ""
-        for component in self.compile_components:
-            bash_compile += str(component) + " "
-        self.compile_script = str(self.code_gen_dir) + "/compile.sh"
-        with open(self.compile_script, "w") as f:
-            f.write("#!/bin/bash \n")
-            f.write(bash_compile + "\n")
-        bash_command = ["bash", self.compile_script]
-        process_compile = subprocess.Popen(bash_command, stdout=subprocess.PIPE)
-        process_compile.communicate()
+
+        # Build g++ command (env vars expanded automatically by launch_process_helper)
+        cmd = ["g++", "-o", str(self.executable_path)]
+
+        # Expand glob patterns in cpp files (e.g., *.cpp)
+        # Note: Environment variables will be expanded by launch_process_helper
+        expanded_cpp_files = []
+        for f in self.cpp_files:
+            if '*' in f or '?' in f:
+                # Glob pattern - expand after env var substitution
+                expanded_pattern = os.path.expandvars(f)
+                matches = glob.glob(expanded_pattern)
+                expanded_cpp_files.extend(matches)
+            else:
+                expanded_cpp_files.append(f)
+        cmd.extend(expanded_cpp_files)
+
+        # Add include paths (env vars expanded automatically by launch_process_helper)
+        cmd.extend(self.include_paths)
+
+        logger = logging.getLogger("finn.cppsim.compile")
+        exitcode = launch_process_helper(
+            cmd,
+            cwd=code_gen_dir,
+            logger=logger,
+            use_logging=True,
+            stdout_level=logging.DEBUG,  # gcc is verbose
+            stderr_level=logging.WARNING,
+            raise_on_error=False,
+        )
+        if exitcode != 0:
+            logger.warning("g++ compilation returned non-zero exit code: %d", exitcode)
 
 
 def _detect_log_level(line: str, default: int) -> int:
@@ -364,6 +379,10 @@ def launch_process_helper(
     """
     if proc_env is None:
         proc_env = os.environ.copy()
+
+    # Expand environment variables in all command arguments
+    # This matches shell behavior and prevents callers from forgetting
+    args = [os.path.expandvars(str(arg)) for arg in args]
 
     # ============================================================
     # LEGACY MODE: Preserve existing behavior exactly
