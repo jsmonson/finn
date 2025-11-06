@@ -26,7 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from qonnx.util.basic import is_finn_op
+from qonnx.custom_op.registry import is_custom_op
 
 from finn.util.basic import getHWCustomOp
 
@@ -52,7 +52,7 @@ def op_and_param_counts(model):
 
     ret_dict = {}
     for node in model.graph.node:
-        if is_finn_op(node.domain):
+        if is_custom_op(node.domain):
             inst = getHWCustomOp(node, model)
             if hasattr(inst, "get_op_and_param_counts"):
                 node_op_and_param_counts = inst.get_op_and_param_counts()
