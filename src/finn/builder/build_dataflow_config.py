@@ -332,6 +332,11 @@ class DataflowBuildConfig:
     #: Otherwise, these will be suppressed and only appear in the build log.
     verbose: Optional[bool] = False
 
+    #: When True, build progress messages (step execution) will be shown on console.
+    #: When False, console is completely silent. File logging is unaffected.
+    #: Default is True for good UX. Set to False for library/batch mode.
+    show_progress: Optional[bool] = True
+
     #: If given, only run the steps in the list. If not, run default steps.
     #: See `default_build_dataflow_steps` for the default list of steps.
     #: When specified:

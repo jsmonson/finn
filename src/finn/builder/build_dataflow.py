@@ -115,28 +115,42 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
     step_num = 1
     time_per_step = dict()
     build_dataflow_steps = resolve_build_steps(cfg)
-    # set up logger
+
+    # Set up root logger with file handler for audit trail
     logging.basicConfig(
         level=logging.DEBUG,
-        format="[%(asctime)s] %(message)s",
+        format="[%(asctime)s] [%(name)s] %(levelname)s: %(message)s",
         filename=cfg.output_dir + "/build_dataflow.log",
         filemode="a",
     )
     log = logging.getLogger("build_dataflow")
 
-    # Configure FINN tool loggers to respect verbose flag
+    # Configure finn.builder logger (progress messages) - controlled by show_progress
+    builder_logger = logging.getLogger('finn.builder')
+    builder_logger.setLevel(logging.INFO)
+    if cfg.show_progress:
+        # Show progress messages on console with clean formatting
+        builder_console = logging.StreamHandler(sys.stdout)
+        builder_console.setFormatter(logging.Formatter('%(message)s'))
+        builder_logger.addHandler(builder_console)
+    # Add file handler for audit trail (match root logger format for consistency)
+    builder_file = logging.FileHandler(cfg.output_dir + "/build_dataflow.log", mode='a')
+    builder_file.setFormatter(logging.Formatter('[%(asctime)s] [%(name)s] %(levelname)s: %(message)s'))
+    builder_logger.addHandler(builder_file)
+    # Don't propagate to finn parent (we handle both console and file locally)
+    builder_logger.propagate = False
+
+    # Configure finn tool loggers (subprocess output) - controlled by verbose
     finn_logger = logging.getLogger('finn')
     finn_logger.setLevel(logging.INFO)
     if cfg.verbose:
-        # Verbose mode: output to console only (no duplication in file)
+        # Verbose mode: show tool output on console with logger names
         console_handler = logging.StreamHandler(sys.stdout)
         console_formatter = logging.Formatter('[%(name)s] %(levelname)s: %(message)s')
         console_handler.setFormatter(console_formatter)
         finn_logger.addHandler(console_handler)
-        finn_logger.propagate = False  # Don't send to file
-    else:
-        # Quiet mode: output to file only, silent console
-        finn_logger.propagate = True  # Send to root file handler
+    # Always propagate to file (via root logger)
+    finn_logger.propagate = True
 
     for transform_step in build_dataflow_steps:
         try:
