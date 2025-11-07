@@ -578,6 +578,6 @@ class LoopRolling(Transformation):
                     # Operator doesn't need adaptation or doesn't support it
                     pass
 
-        model = model_wrapper.transform(FoldConstants())
+        model = model_wrapper.transform(FoldConstants(), apply_to_subgraphs=True)
 
         return (model, False)
