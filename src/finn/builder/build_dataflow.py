@@ -174,8 +174,12 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
         # Determine file level (default: DEBUG for comprehensive audit trail)
         file_level = (cfg.subprocess_log_levels or {}).get(category, logging.DEBUG)
 
-        # Set logger to most permissive (minimum level) so both destinations work
-        subprocess_logger.setLevel(min(console_level, file_level))
+        # Set logger level to minimum needed by active destinations
+        # When verbose=False, console_level is irrelevant (no console handler exists)
+        if cfg.verbose:
+            subprocess_logger.setLevel(min(console_level, file_level))
+        else:
+            subprocess_logger.setLevel(file_level)
 
         # Add child-specific console handler (when verbose)
         if cfg.verbose:
