@@ -123,7 +123,6 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
         filename=cfg.output_dir + "/build_dataflow.log",
         filemode="a",
     )
-    log = logging.getLogger("build_dataflow")
 
     # Configure finn.builder logger (progress messages) - controlled by show_progress
     builder_logger = logging.getLogger('finn.builder')

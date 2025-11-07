@@ -67,7 +67,7 @@ class CallHLS:
             assert which("vitis_hls") is not None, "vitis_hls not found in PATH"
             cmd = ["vitis_hls", self.tcl_script]
 
-        logger = logging.getLogger("finn.hls")
+        logger = logging.getLogger("finn.vitis.hls")
         exitcode = launch_process_helper(
             cmd,
             cwd=code_gen_dir,
@@ -75,6 +75,7 @@ class CallHLS:
             stdout_level=logging.INFO,
             stderr_level=logging.WARNING,
             raise_on_error=False,
+            generate_script=os.path.join(code_gen_dir, "ipgen.sh"),
         )
         if exitcode != 0:
             logger.warning("HLS synthesis returned non-zero exit code: %d", exitcode)

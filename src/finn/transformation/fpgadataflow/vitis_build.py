@@ -154,6 +154,7 @@ class CreateVitisXO(Transformation):
             stdout_level=logging.INFO,
             stderr_level=logging.WARNING,
             raise_on_error=False,
+            generate_script=os.path.join(vivado_proj_dir, "gen_xo.sh"),
         )
         if exitcode != 0:
             logger.warning("Vivado returned non-zero exit code: %d", exitcode)
@@ -324,6 +325,7 @@ class VitisLink(Transformation):
             stdout_level=logging.INFO,
             stderr_level=logging.WARNING,
             raise_on_error=False,
+            generate_script=os.path.join(link_dir, "run_vitis_link.sh"),
         )
         if exitcode != 0:
             logger.warning("Vitis v++ returned non-zero exit code: %d", exitcode)
@@ -343,6 +345,7 @@ class VitisLink(Transformation):
             stdout_level=logging.DEBUG,
             stderr_level=logging.WARNING,
             raise_on_error=False,
+            generate_script=os.path.join(link_dir, "gen_report_xml.sh"),
         )
         if exitcode != 0:
             logger.warning("Vivado XML report generation returned non-zero exit code: %d", exitcode)

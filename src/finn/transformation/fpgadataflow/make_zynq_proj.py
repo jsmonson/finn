@@ -253,7 +253,7 @@ class MakeZYNQProject(Transformation):
             )
 
         # call Vivado to synthesize the project
-        logger = logging.getLogger("finn.zynq.synthesis")
+        logger = logging.getLogger("finn.vivado.zynq")
         exitcode = launch_process_helper(
             ["vivado", "-mode", "batch", "-source", ipcfg],
             cwd=vivado_pynq_proj_dir,
@@ -261,6 +261,7 @@ class MakeZYNQProject(Transformation):
             stdout_level=logging.INFO,
             stderr_level=logging.WARNING,
             raise_on_error=False,
+            generate_script=os.path.join(vivado_pynq_proj_dir, "synth_project.sh"),
         )
         if exitcode != 0:
             logger.warning("Vivado returned non-zero exit code: %d", exitcode)

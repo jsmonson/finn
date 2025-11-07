@@ -646,6 +646,7 @@ close $ofile
             stdout_level=logging.INFO,
             stderr_level=logging.WARNING,
             raise_on_error=False,
+            generate_script=os.path.join(vivado_stitch_proj_dir, "make_project.sh"),
         )
         if exitcode != 0:
             logger.warning("Vivado returned non-zero exit code: %d", exitcode)

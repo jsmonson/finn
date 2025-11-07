@@ -61,7 +61,7 @@ def out_of_context_synth(
         float(clk_period_ns),
     )
     call_omx = call_omx.split()
-    logger = logging.getLogger("finn.vivado")
+    logger = logging.getLogger("finn.vivado.synth")
     launch_process_helper(
         call_omx,
         proc_env=os.environ.copy(),
@@ -71,6 +71,7 @@ def out_of_context_synth(
         stderr_level=logging.WARNING,
         detect_levels=True,
         raise_on_error=True,
+        generate_script=os.path.join(verilog_dir, "synth_out_of_context.sh"),
     )
 
     vivado_proj_folder = "%s/results_%s" % (verilog_dir, top_name)
