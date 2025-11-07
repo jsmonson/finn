@@ -33,7 +33,7 @@ layernorm #(
 impl
 (
  .clk(ap_clk),
- .rst(ap_rst_n),
+ .rst(!ap_rst_n),
  .xdat(in0_V_TDATA),
  .xvld(in0_V_TVALID),
  .xrdy(in0_V_TREADY),
