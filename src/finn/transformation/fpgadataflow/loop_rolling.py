@@ -8,10 +8,10 @@ from onnxscript.rewriter import pattern, rewrite
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.fold_constants import FoldConstants
+from qonnx.custom_op.registry import is_custom_op
 from typing import List, Tuple
 
 from finn.util import onnxscript_helpers as osh
-
 
 def get_constant_from_value(value):
     """
@@ -567,10 +567,12 @@ class LoopRolling(Transformation):
         from finn.util.basic import getHWCustomOp
 
         for loop_node in model_wrapper.get_nodes_by_op_type("FINNLoop"):
-            loop_body_graph = get_by_name(loop_node.attribute, "body").g
-            for node in loop_body_graph.node:
+            loop_body = getHWCustomOp(loop_node).get_nodeattr("body")
+            for node in loop_body.graph.node:
+                if not is_custom_op(node.domain):
+                    continue
                 try:
-                    inst = getHWCustomOp(node, model_wrapper)
+                    inst = getHWCustomOp(node)
                     inst.adapt_for_loop_body(LoopBody.signature)
                 except (KeyError, AttributeError):
                     # Operator doesn't need adaptation or doesn't support it
