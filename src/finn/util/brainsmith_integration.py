@@ -5,7 +5,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# ##########################################################################
+############################################################################
 
 """Brainsmith integration for FINN.
 
@@ -18,9 +18,19 @@ Strategy:
 
 Components:
 - Steps: 19 build pipeline steps (static list)
-- Kernels: 16 hardware kernels (static list)
-- Backends: 27 implementations (20 HLS + 7 RTL, static list)
+- Kernels: 18 hardware kernels (16 computational + 2 infrastructure)
+- Backends: 27 implementations (17 HLS + 10 RTL, static list)
 - Infer Transforms: Manual mapping (lazy metadata)
+
+Infrastructure Kernels:
+Infrastructure kernels (DuplicateStreams, StreamingFIFO, StreamingDataWidthConverter)
+are marked with is_infrastructure=True and are filtered out of InferKernelList
+when kernel_classes=None. They are inserted by topology transforms (InsertFIFO,
+InsertDWC, InsertDuplicateStreams) rather than pattern matching.
+
+Legacy Components:
+CheckSum_hls, TLastMarker_hls, IODMA_hls are legacy FINN backend-only components
+(no base kernel class) and are not registered in Brainsmith.
 
 Maintenance:
 When adding new FINN components, add them to the static lists in
@@ -56,49 +66,38 @@ def register_all():
 # KERNELS: Hybrid auto-discovery + manual enrichment
 # ============================================================================
 
-# Kernels that are intentionally NOT registered (no infer transforms)
-# These kernels are either:
-# 1. Infrastructure: Inserted by build pipeline or manually placed
-# 2. Sub-components: Created by other transforms, not from ONNX directly
-
-INFRASTRUCTURE_KERNELS = {
-    "StreamingFIFO",  # Inserted by InsertFIFO/SetFIFODepths
-    "StreamingDataWidthConverter",  # AXI width alignment
-    "TLastMarker",  # AXI stream utility
-    "CheckSum",  # Data verification
-    "IODMA",  # DMA interface, manually placed
-}
+# Kernels that are intentionally NOT registered (sub-components only)
+# These are created by other transforms, not from ONNX directly
+# Note: Infrastructure kernels are now registered with is_infrastructure=True
 
 SUBCOMPONENT_KERNELS = {
     # Created by other infer transforms
     "FMPadding",  # Created by InferConvInpGen when padding needed
     "FMPadding_Pixel",  # Variant of FMPadding
-    # Already hardware targets (output of InferElementwiseBinaryOperation)
-    "ElementwiseAdd",
-    "ElementwiseSub",
-    "ElementwiseMul",
-    "ElementwiseDiv",
-    "ElementwiseAnd",
-    "ElementwiseOr",
-    "ElementwiseXor",
-    "ElementwiseBitwiseAnd",
-    "ElementwiseBitwiseOr",
-    "ElementwiseBitwiseXor",
-    "ElementwiseBitShift",
-    "ElementwiseEqual",
-    "ElementwiseGreater",
-    "ElementwiseGreaterOrEqual",
-    "ElementwiseLess",
-    "ElementwiseLessOrEqual",
-    # Note: ElementwiseBinaryOperation has its own infer transform, registered separately
+    # FINN ElementwiseBinaryOperation not supported: Backends target the specialized
+    # variants (ElementwiseAdd, ElementwiseMul, etc.) created by InferElementwiseBinaryOperation,
+    # not the base ElementwiseBinaryOperation HWCustomOp. This breaks Brainsmith's kernel→backend
+    # model where backends must target the user-specified kernel.
 }
 
 
 def _register_kernels():
     """Register FINN kernels - static list for performance.
 
-    Returns 16 kernels (all with infer transforms).
-    23 kernels excluded (infrastructure and sub-components).
+    Returns 17 kernels:
+    - 15 computational kernels (with infer transforms)
+    - 2 infrastructure kernels (marked with is_infrastructure=True)
+
+    Infrastructure kernels are inserted by topology transforms (InsertFIFO,
+    InsertDWC, etc.) rather than pattern matching, and are filtered out of
+    InferKernelList when kernel_classes=None.
+
+    Note: CheckSum, TLastMarker, IODMA are legacy FINN backend-only components
+    (no base kernel class) and are not registered in Brainsmith.
+
+    Note: ElementwiseBinaryOperation is not registered - backends target the
+    specialized variants created by InferElementwiseBinaryOperation, not the
+    base kernel.
 
     Note: This is a static list for fast discovery (~1ms).
     When adding new kernels to FINN, add them here manually.
@@ -144,18 +143,10 @@ def _register_kernels():
             "name": "DuplicateStreams",
             "module": "finn.custom_op.fpgadataflow.duplicatestreams",
             "class_name": "DuplicateStreams",
+            "is_infrastructure": True,  # Inserted by topology transforms (InsertDuplicateStreams)
             "infer_transform": {
                 "module": "finn.transformation.fpgadataflow.convert_to_hw_layers",
                 "class_name": "InferDuplicateStreamsLayer",
-            },
-        },
-        {
-            "name": "ElementwiseBinaryOperation",
-            "module": "finn.custom_op.fpgadataflow.elementwise_binary",
-            "class_name": "ElementwiseBinaryOperation",
-            "infer_transform": {
-                "module": "finn.transformation.fpgadataflow.convert_to_hw_layers",
-                "class_name": "InferElementwiseBinaryOperation",
             },
         },
         {
@@ -248,6 +239,21 @@ def _register_kernels():
                 "class_name": "InferVectorVectorActivation",
             },
         },
+        # Infrastructure kernels (inserted by topology transforms, not pattern matching)
+        {
+            "name": "StreamingFIFO",
+            "module": "finn.custom_op.fpgadataflow.streamingfifo",
+            "class_name": "StreamingFIFO",
+            "is_infrastructure": True,  # Inserted by InsertFIFO/InsertAndSetFIFODepths
+        },
+        {
+            "name": "StreamingDataWidthConverter",
+            "module": "finn.custom_op.fpgadataflow.streamingdatawidthconverter",
+            "class_name": "StreamingDataWidthConverter",
+            "is_infrastructure": True,  # Inserted by InsertDWC (stream width mismatch correction)
+        },
+        # Note: CheckSum, TLastMarker, IODMA are legacy FINN backend-only components
+        # without base kernel classes, so they cannot be registered here.
     ]
 
 
@@ -259,7 +265,18 @@ def _register_kernels():
 def _register_backends():
     """Register FINN backends - static list for performance.
 
-    Returns 27 backends (20 HLS + 7 RTL implementations).
+    Returns 21 backends:
+    - 15 HLS implementations (14 computational + 1 infrastructure)
+    - 6 RTL implementations
+
+    Infrastructure backends are for kernels inserted by topology transforms
+    (StreamingFIFO, StreamingDataWidthConverter).
+
+    Note: CheckSum_hls, TLastMarker_hls, IODMA_hls are legacy backend-only
+    components and are not registered (no base kernel class).
+
+    Note: ElementwiseBinaryOperation backends are not registered - they target
+    specialized variants created by the infer transform, not the base kernel.
 
     Note: This is a static list for fast discovery (~1ms).
     When adding new backends to FINN, add them here manually.
@@ -292,20 +309,6 @@ def _register_backends():
             "module": "finn.custom_op.fpgadataflow.hls.duplicatestreams_hls",
             "class_name": "DuplicateStreams_hls",
             "target_kernel": "finn:DuplicateStreams",
-            "language": "hls",
-        },
-        {
-            "name": "ElementwiseBinaryOperation_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.elementwise_binary_hls",
-            "class_name": "ElementwiseBinaryOperation_hls",
-            "target_kernel": "finn:ElementwiseBinaryOperation",
-            "language": "hls",
-        },
-        {
-            "name": "FMPadding_Pixel_hls",
-            "module": "finn.custom_op.fpgadataflow.hls.fmpadding_pixel_hls",
-            "class_name": "FMPadding_Pixel_hls",
-            "target_kernel": "finn:FMPadding_Pixel",
             "language": "hls",
         },
         {
@@ -387,13 +390,6 @@ def _register_backends():
             "language": "rtl",
         },
         {
-            "name": "FMPadding_rtl",
-            "module": "finn.custom_op.fpgadataflow.rtl.fmpadding_rtl",
-            "class_name": "FMPadding_rtl",
-            "target_kernel": "finn:FMPadding",
-            "language": "rtl",
-        },
-        {
             "name": "MVAU_rtl",
             "module": "finn.custom_op.fpgadataflow.rtl.matrixvectoractivation_rtl",
             "class_name": "MVAU_rtl",
@@ -414,6 +410,30 @@ def _register_backends():
             "target_kernel": "finn:VVAU",
             "language": "rtl",
         },
+        # Infrastructure kernel backends
+        {
+            "name": "StreamingFIFO_rtl",
+            "module": "finn.custom_op.fpgadataflow.rtl.streamingfifo_rtl",
+            "class_name": "StreamingFIFO_rtl",
+            "target_kernel": "finn:StreamingFIFO",
+            "language": "rtl",
+        },
+        {
+            "name": "StreamingDataWidthConverter_hls",
+            "module": "finn.custom_op.fpgadataflow.hls.streamingdatawidthconverter_hls",
+            "class_name": "StreamingDataWidthConverter_hls",
+            "target_kernel": "finn:StreamingDataWidthConverter",
+            "language": "hls",
+        },
+        {
+            "name": "StreamingDataWidthConverter_rtl",
+            "module": "finn.custom_op.fpgadataflow.rtl.streamingdatawidthconverter_rtl",
+            "class_name": "StreamingDataWidthConverter_rtl",
+            "target_kernel": "finn:StreamingDataWidthConverter",
+            "language": "rtl",
+        },
+        # Note: CheckSum_hls, TLastMarker_hls, IODMA_hls are legacy backend-only
+        # components without base kernel classes, so they're not registered.
     ]
 
 

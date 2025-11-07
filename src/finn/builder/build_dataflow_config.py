@@ -116,6 +116,7 @@ default_build_dataflow_steps = [
     "step_target_fps_parallelization",
     "step_apply_folding_config",
     "step_minimize_bit_width",
+    "step_transpose_decomposition",
     "step_generate_estimate_reports",
     "step_hw_codegen",
     "step_hw_ipgen",
@@ -263,6 +264,13 @@ class DataflowBuildConfig:
     #: e.g. "xc7z020clg400-1"
     fpga_part: Optional[str] = None
 
+    #: During Streamlining it might happen that a channelwise operator gets merged into
+    #: a per-tensor thresholding node, that changes the first dim of the threshold array
+    #: from 1 to number of channels.
+    #: Setting this parameter to True will prevent this but please note that this might
+    #: result in additional standalone floating point operations that need to be implemented
+    preserve_thresh_shape: Optional[bool] = False
+
     #: Whether FIFO depths will be set automatically. Involves running stitched
     #: rtlsim and can take a long time.
     #: If set to False, the folding_config_file can be used to specify sizes
@@ -378,9 +386,14 @@ class DataflowBuildConfig:
     #: If set to commit hash specified version will be used
     cpp_driver_version: Optional[str] = "latest"
 
-    #: (Optional) List of (kernel_name, backend_name) tuples specifying which
-    #: hardware backends to use for each kernel type during hardware inference.
-    #: Used by BrainSmith integration for kernel-specific hardware mapping.
+    #: (Optional) List of (kernel_name, backend_names) tuples for explicit
+    #: backend priority selection. Currently only used with Brainsmith.
+    #:
+    #: Format: [(kernel_name, [backend_name_list])]
+    #:   - kernel_name: String name of kernel in global registry ("source:component_name")
+    #:   - backend_name_list: Backend names in priority order, tries first match
+    #: Example:
+    #:   cfg.kernel_selections = [("finn:MVAU", ["finn:MVAU_rtl", "finn:MVAU_hls"])]
     kernel_selections: Optional[List[tuple]] = None
 
     def _resolve_hls_clk_period(self):
