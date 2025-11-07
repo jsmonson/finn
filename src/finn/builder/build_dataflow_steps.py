@@ -482,12 +482,20 @@ def step_transpose_decomposition(model: ModelWrapper, cfg: DataflowBuildConfig):
     can be specialised into hardware operators.
     This should be executed after the folding has been configured.
     """
-    if model.get_nodes_by_op_type("Shuffle"):
-        model = model.transform(ShuffleDecomposition())
-        model = model.transform(InferInnerOuterShuffles())
-        model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()))
-        model = model.transform(InferShapes())
-        model = model.transform(InferDataTypes())
+    # check if model contains a Shuffle node
+    has_shuffle = True if model.get_nodes_by_op_type("Shuffle") else False
+    loop_nodes = model.get_nodes_by_op_type("FINNLoop")
+    for node in loop_nodes:
+        node_inst = getHWCustomOp(node)
+        loop_model = node_inst.get_nodeattr("body")
+        has_shuffle = True if loop_model.get_nodes_by_op_type("Shuffle") else False
+
+    if has_shuffle:
+        model = model.transform(ShuffleDecomposition(), apply_to_subgraphs=True)
+        model = model.transform(InferInnerOuterShuffles(), apply_to_subgraphs=True)
+        model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()), apply_to_subgraphs=True)
+        model = model.transform(InferShapes(), apply_to_subgraphs=True)
+        model = model.transform(InferDataTypes(), apply_to_subgraphs=True)
     return model
 
 
