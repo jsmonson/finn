@@ -382,9 +382,14 @@ class DataflowBuildConfig:
     #: If set to commit hash specified version will be used
     cpp_driver_version: Optional[str] = "latest"
 
-    #: (Optional) List of (kernel_name, backend_name) tuples specifying which
-    #: hardware backends to use for each kernel type during hardware inference.
-    #: Used by BrainSmith integration for kernel-specific hardware mapping.
+    #: (Optional) List of (kernel_name, backend_names) tuples for explicit
+    #: backend priority selection. Currently only used with Brainsmith.
+    #:
+    #: Format: [(kernel_name, [backend_name_list])]
+    #:   - kernel_name: String name of kernel in global registry ("source:component_name")
+    #:   - backend_name_list: Backend names in priority order, tries first match
+    #: Example:
+    #:   cfg.kernel_selections = [("finn:MVAU", ["finn:MVAU_rtl", "finn:MVAU_hls"])]
     kernel_selections: Optional[List[tuple]] = None
 
     def _resolve_hls_clk_period(self):
