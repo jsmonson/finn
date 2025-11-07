@@ -30,7 +30,10 @@ import numpy as np
 import warnings
 from qonnx.core.datatype import DataType
 from qonnx.custom_op.general.multithreshold import multithreshold
-from qonnx.util.basic import interleave_matrix_outer_dim_from_partitions
+from qonnx.util.basic import (
+    interleave_matrix_outer_dim_from_partitions,
+    roundup_to_integer_multiple,
+)
 
 from finn.custom_op.fpgadataflow.hwcustomop import HWCustomOp
 from finn.util.fpgadataflow import is_fpgadataflow_node
@@ -128,6 +131,8 @@ class Thresholding(HWCustomOp):
         if str(idt).startswith("FLOAT") or self.get_nodeattr("weightDataType").startswith("FLOAT"):
             return DataType[self.get_nodeattr("weightDataType")]
         thresholds = model.get_initializer(self.onnx_node.input[1])
+        if self.get_nodeattr("runtime_writeable_weights") or self.get_nodeattr("mlo_max_iter"):
+            return DataType[self.get_nodeattr("weightDataType")]
         threshold_tensor = self.get_hw_compatible_threshold_tensor(thresholds)
         # TODO: extend this for fixed point
         if self.get_input_datatype(0).is_integer():
@@ -256,14 +261,19 @@ class Thresholding(HWCustomOp):
         out_bias = self.get_nodeattr("ActVal")
         # MT expects inputs to be in the shape (N,C,H,W) or (N, C)
         # if 4D then input values in context are (N,H,W,C) and need to
-        # be transposed.
+        # be transposed. Same for 3D input values
         # if 2D then inputs can be passed directly to MT function
         is_4d = len(inp_values.shape) == 4
         if is_4d:
             inp_values = np.transpose(inp_values, (0, 3, 1, 2))
+        is_3d = len(inp_values.shape) == 3
+        if is_3d:
+            inp_values = np.transpose(inp_values, (0, 2, 1))
         y = multithreshold(inp_values, th_val, out_bias=out_bias)
         if is_4d:
             y = y.transpose(0, 2, 3, 1)
+        if is_3d:
+            y = y.transpose(0, 2, 1)
         act = DataType[self.get_nodeattr("outputDataType")]
         if act == DataType["BIPOLAR"]:
             # binary to bipolar
@@ -275,3 +285,33 @@ class Thresholding(HWCustomOp):
         num_channels = self.get_nodeattr("NumChannels")
         pe = self.get_nodeattr("PE")
         return num_channels // pe
+
+    def get_verilog_top_module_intf_names(self):
+        intf_names = {}
+        intf_names["clk"] = ["ap_clk"]
+        intf_names["rst"] = ["ap_rst_n"]
+        intf_names["s_axis"] = []
+        intf_names["s_axis"].append(("in0_V", self.get_instream_width_padded(0)))
+        intf_names["m_axis"] = []
+        intf_names["m_axis"].append(("out0_V", self.get_outstream_width_padded(0)))
+        intf_names["aximm"] = []
+        intf_names["axilite"] = []
+        intf_names["ap_none"] = []
+        mlo_max_iter = self.get_nodeattr("mlo_max_iter")
+        if mlo_max_iter:
+            stream_width = DataType.get_smallest_possible(mlo_max_iter).bitwidth()
+            stream_width_padded = roundup_to_integer_multiple(stream_width, 8)
+            intf_names["s_axis"].append(("in1_V", stream_width_padded))
+        else:
+            # try to access mem_mode attribute, doesn't exist for RTL Thresholding
+            try:
+                mem_mode = self.get_nodeattr("mem_mode")
+            except AttributeError:
+                mem_mode = 0
+
+            if mem_mode == "internal_decoupled":
+                # only expose axilite interface if attribute is set
+                runtime_writable = self.get_nodeattr("runtime_writeable_weights") == 1
+                if runtime_writable:
+                    intf_names["axilite"] = ["s_axilite"]
+        return intf_names

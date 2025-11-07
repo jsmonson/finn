@@ -116,6 +116,7 @@ default_build_dataflow_steps = [
     "step_target_fps_parallelization",
     "step_apply_folding_config",
     "step_minimize_bit_width",
+    "step_transpose_decomposition",
     "step_generate_estimate_reports",
     "step_hw_codegen",
     "step_hw_ipgen",
@@ -263,6 +264,13 @@ class DataflowBuildConfig:
     #: e.g. "xc7z020clg400-1"
     fpga_part: Optional[str] = None
 
+    #: During Streamlining it might happen that a channelwise operator gets merged into
+    #: a per-tensor thresholding node, that changes the first dim of the threshold array
+    #: from 1 to number of channels.
+    #: Setting this parameter to True will prevent this but please note that this might
+    #: result in additional standalone floating point operations that need to be implemented
+    preserve_thresh_shape: Optional[bool] = False
+
     #: Whether FIFO depths will be set automatically. Involves running stitched
     #: rtlsim and can take a long time.
     #: If set to False, the folding_config_file can be used to specify sizes
@@ -376,6 +384,11 @@ class DataflowBuildConfig:
     #: If set to True, FIFOs with impl_style=vivado will be kept during
     #: rtlsim, otherwise they will be replaced by RTL implementations.
     rtlsim_use_vivado_comps: Optional[bool] = True
+
+    #: A List of strings that specify the PyTorch metadata hierarchy to
+    #: be used for the loop body hierarchy. Each item in the list should
+    #: be a string that represents a level in the hierarchy.
+    loop_body_hierarchy: Optional[List[List[str]]] = None
 
     #: Determine if the C++ driver should be generated instead of the PYNQ driver
     #: If set to latest newest version will be used

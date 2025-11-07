@@ -77,6 +77,11 @@ def _determine_impl_style(node, fpgapart, model):
                     return "rtl"
                 else:
                     return "hls"
+            elif optype == "LayerNorm":
+                if _layernorm_rtl_possible(node, model):
+                    return "rtl"
+                else:
+                    return "hls"
             return "rtl"
         # but if no rtl variant, set impl_style to hls
         elif hls_variant:
@@ -147,6 +152,16 @@ def _determine_impl_style(node, fpgapart, model):
                 )
                 warnings.warn(warn_str)
                 return "hls"
+        elif optype == "LayerNorm":
+            if _layernorm_rtl_possible(node, model):
+                return "rtl"
+            else:
+                warn_str = """There is no RTL variant for %s. The node will automatically be
+                        set to HLS variant.""" % (
+                    node.name,
+                )
+                warnings.warn(warn_str)
+                return "hls"
 
         if rtl_variant:
             return "rtl"
@@ -185,6 +200,15 @@ def _dwc_determine_impl_style(node, model=None):
         return "rtl"
     else:
         return "hls"
+
+
+def _layernorm_rtl_possible(node, model):
+    node_inst = getHWCustomOp(node, model)
+    idt = node_inst.get_input_datatype(0)
+    if idt.is_integer() or idt.is_fixed_point():
+        return False
+    else:
+        return True
 
 
 def _mvu_rtl_possible(n, fpgapart, model):
@@ -272,6 +296,11 @@ class SpecializeLayers(Transformation):
                 )
             ):
                 continue
+            # For shuffle nodes the specialisation happens after
+            # the ShuffleDecomposition transformation with a
+            # dedicated InferInnerOuterShuffle transformation
+            if node.op_type == "Shuffle":
+                continue
             node_ind += 1
             impl_style = _determine_impl_style(node, self.fpgapart, model)
             optype = node.op_type + "_" + impl_style
@@ -287,6 +316,8 @@ class SpecializeLayers(Transformation):
                 if attribute.name not in ["preferred_impl_style", "backend"]:
                     new_node.attribute.append(attribute)
 
+            if hasattr(node, "metadata_props"):
+                new_node.metadata_props.extend(node.metadata_props)
             # Set backend attribute to match implementation style
             new_node.attribute.append(helper.make_attribute("backend", impl_style))
 

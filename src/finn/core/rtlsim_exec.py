@@ -66,11 +66,16 @@ def prep_rtlsim_io_dict(model, execution_context):
             # for these functions
             i_stream_w = first_node.get_instream_width(node_inp_ind)
             i_folded_shape = first_node.get_folded_input_shape(node_inp_ind)
-        batchsize = i_tensor.shape[0]
-        # override batch size for input
-        i_folded_shape = list(i_folded_shape)
-        i_folded_shape[0] = batchsize
+
+        if first_node.onnx_node.op_type == "InnerShuffle_rtl":
+            batchsize = 1
+        else:
+            batchsize = i_tensor.shape[0]
+            i_folded_shape = list(i_folded_shape)
+            i_folded_shape[0] = batchsize
+            # override batch size for input
         i_folded_shape = tuple(i_folded_shape)
+
         # TODO any other layout transformations need to happen here!
         i_tensor = i_tensor.reshape(i_folded_shape)
         # pack input for rtlsim
@@ -93,14 +98,14 @@ def prep_rtlsim_io_dict(model, execution_context):
         o_folded_shape = last_node.get_folded_output_shape()
         # override batch size from actual input
         o_shape = list(o_shape)
-        if o_shape[0] != batchsize:
+        if o_shape[0] != batchsize and (first_node.onnx_node.op_type != "InnerShuffle_rtl"):
             o_shape[0] = batchsize
             num_out_values[if_name] = batchsize * last_node.get_number_output_values()
         else:
             num_out_values[if_name] = last_node.get_number_output_values()
         o_shape = tuple(o_shape)
         o_folded_shape = list(o_folded_shape)
-        if o_folded_shape[0] != batchsize:
+        if o_folded_shape[0] != batchsize and (first_node.onnx_node.op_type != "InnerShuffle_rtl"):
             o_folded_shape[0] = batchsize
         o_folded_shape = tuple(o_folded_shape)
         o_stream_w = last_node.get_outstream_width()
@@ -370,7 +375,6 @@ def rtlsim_exec_finnxsi(model, execution_context, pre_hook=None, post_hook=None)
     finnxsi.reset_rtlsim(sim)
     if pre_hook is not None:
         pre_hook(sim)
-        finnxsi.reset_rtlsim(sim)
     n_cycles = finnxsi.rtlsim_multi_io(
         sim,
         io_dict,
