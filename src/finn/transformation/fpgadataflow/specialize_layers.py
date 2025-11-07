@@ -316,6 +316,8 @@ class SpecializeLayers(Transformation):
                 if attribute.name not in ["preferred_impl_style", "backend"]:
                     new_node.attribute.append(attribute)
 
+            if hasattr(node, "metadata_props"):
+                new_node.metadata_props.extend(node.metadata_props)
             # Set backend attribute to match implementation style
             new_node.attribute.append(helper.make_attribute("backend", impl_style))
 

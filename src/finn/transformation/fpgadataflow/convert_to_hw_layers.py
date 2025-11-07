@@ -124,6 +124,8 @@ class InferConvInpGen(Transformation):
                         SIMD=ifm_ch,
                         name="FMPadding_Batch_" + n.name,
                     )
+                    if hasattr(n, "metadata_props"):
+                        padding_node.metadata_props.extend(n.metadata_props)
                     graph.node.insert(node_ind, padding_node)
 
                 is_1D = (ifm_dim_h == 1) or (ifm_dim_w == 1)
@@ -146,6 +148,8 @@ class InferConvInpGen(Transformation):
                     is1D=is_1D,
                     name="ConvolutionInputGenerator_" + n.name,
                 )
+                if hasattr(n, "metadata_props"):
+                    ConvInpGen_node.metadata_props.extend(n.metadata_props)
                 graph.node.insert(ConvInpGen_node_idx, ConvInpGen_node)
                 # remove old nodes
                 graph.node.remove(n)
@@ -242,7 +246,8 @@ class InferThresholdingLayer(Transformation):
                     ActVal=actval,
                     name="Thresholding_" + node.name,
                 )
-
+                if hasattr(node, "metadata_props"):
+                    new_node.metadata_props.extend(node.metadata_props)
                 graph.node.insert(insert_point, new_node)
                 # remove old node
                 graph.node.remove(node)
@@ -329,6 +334,8 @@ class InferUpsample(Transformation):
                     cpp_interface="hls_vector",
                     hls_style="freerunning",
                 )
+                if hasattr(n, "metadata_props"):
+                    Upsample_HW_node.metadata_props.extend(n.metadata_props)
 
                 # Remove the old node
                 graph.node.insert(node_ind, Upsample_HW_node)
@@ -412,6 +419,8 @@ class InferAddStreamsLayer(Transformation):
                     numInputVectors=in0_shape[:-1],
                     name="AddStreams_" + node.name,
                 )
+                if hasattr(node, "metadata_props"):
+                    new_node.metadata_props.extend(node.metadata_props)
                 graph.node.insert(insert_point, new_node)
                 # remove old node
                 graph.node.remove(node)
@@ -468,6 +477,9 @@ class InferDuplicateStreamsLayer(Transformation):
                 name="DuplicateStreams_" + output_tensor,
             )
 
+            # take metadata from first node in graph
+            if hasattr(model.find_consumer(output_tensor), "metadata_props"):
+                dup_node.metadata_props.extend(model.find_consumer(output_tensor).metadata_props)
             graph.node.insert(0, dup_node)
 
             # connect successors to out tensor clone
@@ -523,6 +535,10 @@ class InferDuplicateStreamsLayer(Transformation):
                         name="DuplicateStreams_" + node.name,
                     )
 
+                    if hasattr(model.find_consumer(output_tensor), "metadata_props"):
+                        dup_node.metadata_props.extend(
+                            model.find_consumer(output_tensor).metadata_props
+                        )
                     graph.node.insert(node_ind, dup_node)
 
                     # connect successors to out tensor clone
@@ -689,6 +705,8 @@ class InferChannelwiseLinearLayer(Transformation):
                     numInputVectors=list(ll_in_shape[:-1]),
                     name="ChannelwiseOp_" + node.name,
                 )
+                if hasattr(node, "metadata_props"):
+                    new_node.metadata_props.extend(node.metadata_props)
                 graph.node.insert(insert_point, new_node)
                 # remove old node
                 graph.node.remove(node)
@@ -747,6 +765,8 @@ class InferLabelSelectLayer(Transformation):
                     numInputVectors=num_inp_vecs,
                     name="LabelSelect_" + node.name,
                 )
+                if hasattr(node, "metadata_props"):
+                    new_node.metadata_props.extend(node.metadata_props)
                 graph.node.insert(node_ind, new_node)
                 # remove old node
                 graph.node.remove(node)
@@ -834,6 +854,9 @@ class InferGlobalAccPoolLayer(Transformation):
                     [pool_out, mul_value.name],
                     [result],
                 )
+                if hasattr(node, "metadata_props"):
+                    new_pool.metadata_props.extend(node.metadata_props)
+                    new_mul.metadata_props.extend(node.metadata_props)
                 graph.node.insert(insert_point, new_pool)
                 graph.node.insert(insert_point + 1, new_mul)
                 node_ind += 1
@@ -1551,6 +1574,8 @@ class InferQuantizedMatrixVectorActivation(Transformation):
                             dynamic_input=W is None,
                             inFIFODepths=[2, 2] if W is None else [2],
                         )
+                        if hasattr(n, "metadata_props"):
+                            new_node.metadata_props.extend(n.metadata_props)
                         graph.node.insert(node_ind, new_node)
                         # remove old nodes
                         graph.node.remove(n)
@@ -1583,6 +1608,8 @@ class InferQuantizedMatrixVectorActivation(Transformation):
                             dynamic_input=W is None,
                             inFIFODepths=[2, 2] if W is None else [2],
                         )
+                        if hasattr(n, "metadata_props"):
+                            new_node.metadata_props.extend(n.metadata_props)
                         graph.node.insert(node_ind, new_node)
                         # remove old node
                         graph.node.remove(n)
@@ -1950,6 +1977,8 @@ class InferElementwiseBinaryOperation(Transformation):
                     rhs_dtype=str(idt1),
                     out_dtype=str(odt0),
                 )
+                if hasattr(node, "metadata_props"):
+                    new_node.metadata_props.extend(node.metadata_props)
                 graph.node.insert(index + 1, new_node)
                 graph.node.remove(node)
 
