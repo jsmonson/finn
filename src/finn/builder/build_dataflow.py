@@ -149,7 +149,7 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
         finn_console_handler = logging.StreamHandler(sys.stdout)
         console_formatter = logging.Formatter('[%(name)s] %(levelname)s: %(message)s')
         finn_console_handler.setFormatter(console_formatter)
-        finn_console_handler.setLevel(logging.WARNING)  # Default console level
+        finn_console_handler.setLevel(logging.ERROR)
         finn_logger.addHandler(finn_console_handler)
 
     # Always propagate to file (via root logger)
@@ -169,8 +169,8 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
         configured_logger_names.append(logger_name)
         subprocess_logger = logging.getLogger(logger_name)
 
-        # Determine console level (default: WARNING)
-        console_level = (cfg.subprocess_console_levels or {}).get(category, logging.WARNING)
+        # Determine console level (default: ERROR - minimize console spam)
+        console_level = (cfg.subprocess_console_levels or {}).get(category, logging.ERROR)
         # Determine file level (default: DEBUG for comprehensive audit trail)
         file_level = (cfg.subprocess_log_levels or {}).get(category, logging.DEBUG)
 
