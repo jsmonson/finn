@@ -90,7 +90,7 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
     :param cfg: Build configuration
     """
     # Set up builder logger for user-facing status messages
-    builder_log = logging.getLogger('finn.builder')
+    builder_log = logging.getLogger("finn.builder")
 
     # if start_step is specified, override the input model
     if cfg.start_step is None:
@@ -125,28 +125,30 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
     )
 
     # Configure finn.builder logger (progress messages) - controlled by show_progress
-    builder_logger = logging.getLogger('finn.builder')
+    builder_logger = logging.getLogger("finn.builder")
     builder_logger.setLevel(logging.INFO)
     if cfg.show_progress:
         # Show progress messages on console with clean formatting
         builder_console = logging.StreamHandler(sys.stdout)
-        builder_console.setFormatter(logging.Formatter('%(message)s'))
+        builder_console.setFormatter(logging.Formatter("%(message)s"))
         builder_logger.addHandler(builder_console)
     # Add file handler for audit trail (match root logger format for consistency)
-    builder_file = logging.FileHandler(cfg.output_dir + "/build_dataflow.log", mode='a')
-    builder_file.setFormatter(logging.Formatter('[%(asctime)s] [%(name)s] %(levelname)s: %(message)s'))
+    builder_file = logging.FileHandler(cfg.output_dir + "/build_dataflow.log", mode="a")
+    builder_file.setFormatter(
+        logging.Formatter("[%(asctime)s] [%(name)s] %(levelname)s: %(message)s")
+    )
     builder_logger.addHandler(builder_file)
     # Don't propagate to finn parent (we handle both console and file locally)
     builder_logger.propagate = False
 
     # Configure finn tool loggers (subprocess output) - controlled by verbose
-    finn_logger = logging.getLogger('finn')
+    finn_logger = logging.getLogger("finn")
     finn_logger.setLevel(logging.DEBUG)  # Permissive parent (children can filter)
 
     # Add console handler if verbose mode
     if cfg.verbose:
         finn_console_handler = logging.StreamHandler(sys.stdout)
-        console_formatter = logging.Formatter('[%(name)s] %(levelname)s: %(message)s')
+        console_formatter = logging.Formatter("[%(name)s] %(levelname)s: %(message)s")
         finn_console_handler.setFormatter(console_formatter)
         finn_console_handler.setLevel(logging.ERROR)
         finn_logger.addHandler(finn_console_handler)
@@ -164,7 +166,7 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
 
     configured_logger_names = []
     for category in all_categories:
-        logger_name = f'finn.{category}'
+        logger_name = f"finn.{category}"
         configured_logger_names.append(logger_name)
         subprocess_logger = logging.getLogger(logger_name)
 
@@ -193,6 +195,7 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
     # Add filter to parent console handler to exclude configured children
     # (prevents duplication for any children that DO propagate)
     if cfg.verbose and configured_logger_names:
+
         class ExcludeConfiguredLoggersFilter(logging.Filter):
             def filter(self, record):
                 # Block messages from configured subprocess loggers
@@ -203,7 +206,9 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
     for transform_step in build_dataflow_steps:
         try:
             step_name = transform_step.__name__
-            builder_log.info("Running step: %s [%d/%d]" % (step_name, step_num, len(build_dataflow_steps)))
+            builder_log.info(
+                "Running step: %s [%d/%d]" % (step_name, step_num, len(build_dataflow_steps))
+            )
             # run the step
             step_start = time.time()
             model = transform_step(model, cfg)

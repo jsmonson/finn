@@ -136,7 +136,7 @@ def verify_step(
     need_parent: bool,
     rtlsim_pre_hook=None,
 ):
-    steps_log = logging.getLogger('finn.builder.steps')
+    steps_log = logging.getLogger("finn.builder.steps")
     steps_log.info("Running verification for " + step_name)
     verify_out_dir = cfg.output_dir + "/verification_output"
     intermediate_models_dir = cfg.output_dir + "/intermediate_models"
@@ -225,7 +225,7 @@ def verify_step(
 
 
 def prepare_for_stitched_ip_rtlsim(verify_model, cfg):
-    steps_log = logging.getLogger('finn.builder.steps')
+    steps_log = logging.getLogger("finn.builder.steps")
     if not cfg.rtlsim_use_vivado_comps:
         need_restitch = False
         # switch impl_style=vivado components to rtl
@@ -652,7 +652,7 @@ def step_create_stitched_ip(model: ModelWrapper, cfg: DataflowBuildConfig):
     """Create stitched IP for a graph after all HLS IP blocks have been generated.
     Depends on the DataflowOutputType.STITCHED_IP output product."""
 
-    steps_log = logging.getLogger('finn.builder.steps')
+    steps_log = logging.getLogger("finn.builder.steps")
     if DataflowOutputType.STITCHED_IP in cfg.generate_outputs:
         stitched_ip_dir = cfg.output_dir + "/stitched_ip"
         model = model.transform(
@@ -755,7 +755,7 @@ def step_make_driver(model: ModelWrapper, cfg: DataflowBuildConfig):
     """Create a driver that can be used to interface the generated accelerator.
     Use DataflowBuildConfig to select PYNQ Python or C++ driver."""
 
-    steps_log = logging.getLogger('finn.builder.steps')
+    steps_log = logging.getLogger("finn.builder.steps")
     driver_dir = os.path.join(cfg.output_dir, "driver")
     if DataflowOutputType.PYNQ_DRIVER in cfg.generate_outputs:
         # generate PYNQ driver
@@ -812,7 +812,7 @@ def step_synthesize_bitfile(model: ModelWrapper, cfg: DataflowBuildConfig):
     """Synthesize a bitfile for the using the specified shell flow, using either
     Vivado or Vitis, to target the specified board."""
 
-    steps_log = logging.getLogger('finn.builder.steps')
+    steps_log = logging.getLogger("finn.builder.steps")
     if DataflowOutputType.BITFILE in cfg.generate_outputs:
         bitfile_dir = cfg.output_dir + "/bitfile"
         os.makedirs(bitfile_dir, exist_ok=True)

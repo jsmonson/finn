@@ -31,13 +31,12 @@ import logging
 import os
 import shlex
 import subprocess
-import sys
 import tempfile
 import threading
 from datetime import datetime
 from qonnx.custom_op.registry import getCustomOp
 from qonnx.util.basic import roundup_to_integer_multiple
-from typing import Optional, Tuple, Union
+from typing import Optional
 
 # test boards used for bnn pynq tests
 test_board_map = ["Pynq-Z1", "KV260_SOM", "ZCU104", "U250"]
@@ -233,7 +232,7 @@ class CppBuilder:
         # Note: Environment variables will be expanded by launch_process_helper
         expanded_cpp_files = []
         for f in self.cpp_files:
-            if '*' in f or '?' in f:
+            if "*" in f or "?" in f:
                 # Glob pattern - expand after env var substitution
                 expanded_pattern = os.path.expandvars(f)
                 matches = glob.glob(expanded_pattern)
@@ -386,7 +385,7 @@ def _detect_log_level(line: str, default: int) -> tuple[int, str]:
         # Strip common error prefixes to avoid duplication
         for prefix in ["ERROR:", "FATAL:", "FAILED:"]:
             if line_upper.startswith(prefix):
-                return logging.ERROR, line[len(prefix):].lstrip()
+                return logging.ERROR, line[len(prefix) :].lstrip()
         return logging.ERROR, line
 
     # Warning patterns
@@ -394,7 +393,7 @@ def _detect_log_level(line: str, default: int) -> tuple[int, str]:
         # Strip warning prefix to avoid duplication
         for prefix in ["WARNING:", "WARN:"]:
             if line_upper.startswith(prefix):
-                return logging.WARNING, line[len(prefix):].lstrip()
+                return logging.WARNING, line[len(prefix) :].lstrip()
         return logging.WARNING, line
 
     # Verbose/debug patterns (tool spam)
@@ -414,7 +413,7 @@ def _detect_log_level(line: str, default: int) -> tuple[int, str]:
         # Strip info prefix
         for prefix in ["INFO:", "NOTE:"]:
             if line_upper.startswith(prefix):
-                return logging.INFO, line[len(prefix):].lstrip()
+                return logging.INFO, line[len(prefix) :].lstrip()
         return logging.INFO, line
 
     return default, line

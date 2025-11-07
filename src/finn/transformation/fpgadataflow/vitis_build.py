@@ -30,7 +30,6 @@
 import json
 import logging
 import os
-import subprocess
 from enum import Enum
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.transformation.base import Transformation
@@ -299,18 +298,20 @@ class VitisLink(Transformation):
             f.write(gen_rep_xml)
 
         # build v++ link command
-        v_cmd = [
-            "v++",
-            "-t", "hw",
-            "--platform", self.platform,
-            "--link"
-        ] + object_files + [
-            "--kernel_frequency", str(self.f_mhz),
-            "--config", "config.txt",
-            "--optimize", self.strategy.value,
-            "--save-temps",
-            "-R2"
-        ]
+        v_cmd = (
+            ["v++", "-t", "hw", "--platform", self.platform, "--link"]
+            + object_files
+            + [
+                "--kernel_frequency",
+                str(self.f_mhz),
+                "--config",
+                "config.txt",
+                "--optimize",
+                self.strategy.value,
+                "--save-temps",
+                "-R2",
+            ]
+        )
         # add debug commands if enabled
         if self.enable_debug:
             for inst in list(instance_names.values()):

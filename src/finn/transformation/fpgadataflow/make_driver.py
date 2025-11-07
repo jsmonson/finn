@@ -110,7 +110,8 @@ class MakeCPPDriver(Transformation):
         header_path = os.path.join(cpp_driver_dir, "AcceleratorDatatypes.h")
 
         # Get the base C++ driver repo
-        logger = logging.getLogger('finn.vitis.driver')
+        logger = logging.getLogger("finn.vitis.driver")
+
         def run_command(command, cwd=None, debug=False):
             try:
                 result = subprocess.run(

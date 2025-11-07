@@ -31,7 +31,6 @@ import json
 import logging
 import multiprocessing as mp
 import os
-import subprocess
 import warnings
 from qonnx.transformation.base import Transformation
 from qonnx.util.basic import get_num_default_workers

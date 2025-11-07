@@ -9,11 +9,9 @@
 
 import pytest
 
-import io
 import logging
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -42,7 +40,9 @@ class TestDetectLogLevel(unittest.TestCase):
 
     def test_warning_patterns(self):
         """WARNING patterns detected correctly and strip prefix."""
-        level, msg = _detect_log_level("WARNING: [XSIM 43-4099] Module has no timescale", logging.INFO)
+        level, msg = _detect_log_level(
+            "WARNING: [XSIM 43-4099] Module has no timescale", logging.INFO
+        )
         assert level == logging.WARNING
         assert msg == "[XSIM 43-4099] Module has no timescale"
 
@@ -137,9 +137,7 @@ class TestLaunchProcessHelper(unittest.TestCase):
     def test_stdout_level(self):
         """Can specify stdout log level."""
         with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
-            launch_process_helper(
-                ["echo", "debug_output"], stdout_level=logging.DEBUG
-            )
+            launch_process_helper(["echo", "debug_output"], stdout_level=logging.DEBUG)
             # Should be logged at DEBUG level
             log_output = "\n".join(cm.output)
             self.assertIn("DEBUG", log_output)
@@ -183,9 +181,7 @@ class TestLaunchProcessHelper(unittest.TestCase):
     def test_raise_on_error_disabled(self):
         """Does not raise when raise_on_error=False."""
         # Should return exit code without raising
-        exitcode = launch_process_helper(
-            ["sh", "-c", "exit 42"], raise_on_error=False
-        )
+        exitcode = launch_process_helper(["sh", "-c", "exit 42"], raise_on_error=False)
         self.assertEqual(exitcode, 42)
 
     def test_raise_on_error_enabled(self):
@@ -200,16 +196,15 @@ class TestLaunchProcessHelper(unittest.TestCase):
         env = os.environ.copy()
         env["TEST_EXPAND_VAR"] = "/test/expanded/path"
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Use echo to output the path so we can verify expansion happened
-            with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
-                launch_process_helper(
-                    ["echo", "$TEST_EXPAND_VAR/file.txt"],
-                    proc_env=env,
-                )
-                log_output = "\n".join(cm.output)
-                # Should see the expanded path, not the literal $TEST_EXPAND_VAR
-                self.assertIn("/test/expanded/path/file.txt", log_output)
+        # Use echo to output the path so we can verify expansion happened
+        with self.assertLogs("finn.subprocess", level="DEBUG") as cm:
+            launch_process_helper(
+                ["echo", "$TEST_EXPAND_VAR/file.txt"],
+                proc_env=env,
+            )
+            log_output = "\n".join(cm.output)
+            # Should see the expanded path, not the literal $TEST_EXPAND_VAR
+            self.assertIn("/test/expanded/path/file.txt", log_output)
 
 
 @pytest.mark.util
@@ -365,7 +360,6 @@ class TestShellScriptGeneration(unittest.TestCase):
         """Generated script includes cd command when cwd is specified."""
         with tempfile.TemporaryDirectory() as tmpdir:
             script_path = os.path.join(tmpdir, "test_script.sh")
-            workdir = "/some/work/directory"
             launch_process_helper(
                 ["echo", "test"],
                 cwd=tmpdir,  # Use tmpdir as actual cwd so command works
@@ -526,8 +520,8 @@ class TestShellScriptGeneration(unittest.TestCase):
             self.assertIn("echo test", content)
             # Should not have environment variable exports section
             # (or if it does, should be minimal/empty)
-            lines = content.split('\n')
-            export_lines = [l for l in lines if l.strip().startswith('export')]
+            lines = content.split("\n")
+            export_lines = [line for line in lines if line.strip().startswith("export")]
             # Either no exports, or very few (only if they differ from current env)
             self.assertLessEqual(len(export_lines), 2)
 

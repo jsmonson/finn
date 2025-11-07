@@ -11,7 +11,6 @@ import pytest
 
 import json
 import logging
-import os
 import shutil
 import sys
 import unittest
@@ -27,7 +26,14 @@ class TestLoggingConfig(unittest.TestCase):
     def setUp(self):
         """Clear all logger handlers before each test."""
         # Clear handlers from all FINN loggers
-        for logger_name in ['finn', 'finn.builder', 'finn.hls', 'finn.vivado', 'finn.xsim', 'finn.gcc']:
+        for logger_name in [
+            "finn",
+            "finn.builder",
+            "finn.hls",
+            "finn.vivado",
+            "finn.xsim",
+            "finn.gcc",
+        ]:
             logger = logging.getLogger(logger_name)
             logger.handlers.clear()
             logger.setLevel(logging.NOTSET)
@@ -63,24 +69,24 @@ class TestLoggingConfig(unittest.TestCase):
         )
 
         # Configure finn.builder logger (progress messages)
-        builder_logger = logging.getLogger('finn.builder')
+        builder_logger = logging.getLogger("finn.builder")
         builder_logger.setLevel(logging.INFO)
         if cfg.show_progress:
             builder_console = logging.StreamHandler(stdout)
-            builder_console.setFormatter(logging.Formatter('%(message)s'))
+            builder_console.setFormatter(logging.Formatter("%(message)s"))
             builder_logger.addHandler(builder_console)
-        builder_file = logging.FileHandler(cfg.output_dir + "/build_dataflow.log", mode='a')
+        builder_file = logging.FileHandler(cfg.output_dir + "/build_dataflow.log", mode="a")
         builder_file.setFormatter(
-            logging.Formatter('[%(asctime)s] [%(name)s] %(levelname)s: %(message)s')
+            logging.Formatter("[%(asctime)s] [%(name)s] %(levelname)s: %(message)s")
         )
         builder_logger.addHandler(builder_file)
         builder_logger.propagate = False
 
         # Configure finn tool loggers (subprocess output)
-        finn_logger = logging.getLogger('finn')
+        finn_logger = logging.getLogger("finn")
         finn_logger.setLevel(logging.DEBUG)
 
-        console_formatter = logging.Formatter('[%(name)s] %(levelname)s: %(message)s')
+        console_formatter = logging.Formatter("[%(name)s] %(levelname)s: %(message)s")
 
         if cfg.verbose:
             finn_console_handler = logging.StreamHandler(stdout)
@@ -99,7 +105,7 @@ class TestLoggingConfig(unittest.TestCase):
 
         configured_logger_names = []
         for category in all_categories:
-            logger_name = f'finn.{category}'
+            logger_name = f"finn.{category}"
             configured_logger_names.append(logger_name)
             subprocess_logger = logging.getLogger(logger_name)
 
@@ -128,6 +134,7 @@ class TestLoggingConfig(unittest.TestCase):
             subprocess_logger.propagate = True
 
         if cfg.verbose and configured_logger_names:
+
             class ExcludeConfiguredLoggersFilter(logging.Filter):
                 def filter(self, record):
                     return not any(record.name.startswith(name) for name in configured_logger_names)
@@ -148,12 +155,13 @@ class TestLoggingConfig(unittest.TestCase):
 
         # Capture stdout
         from io import StringIO
+
         captured = StringIO()
 
         self._configure_loggers(cfg, stdout_override=captured)
 
         try:
-            builder_logger = logging.getLogger('finn.builder')
+            builder_logger = logging.getLogger("finn.builder")
             builder_logger.info("Running step 1/19")
 
             output = captured.getvalue()
@@ -177,12 +185,13 @@ class TestLoggingConfig(unittest.TestCase):
 
         # Capture stdout
         from io import StringIO
+
         captured = StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
 
         try:
-            builder_logger = logging.getLogger('finn.builder')
+            builder_logger = logging.getLogger("finn.builder")
             builder_logger.info("Running step 1/19")
 
             output = captured.getvalue()
@@ -205,12 +214,13 @@ class TestLoggingConfig(unittest.TestCase):
 
         # Capture stdout
         from io import StringIO
+
         captured = StringIO()
 
         self._configure_loggers(cfg, stdout_override=captured)
 
         try:
-            hls_logger = logging.getLogger('finn.hls')
+            hls_logger = logging.getLogger("finn.hls")
             # Default console level is ERROR, so WARNING won't show
             hls_logger.warning("This warning should not appear")
             hls_logger.error("HLS synthesis error")
@@ -238,12 +248,13 @@ class TestLoggingConfig(unittest.TestCase):
 
         # Capture stdout
         from io import StringIO
+
         captured = StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
 
         try:
-            hls_logger = logging.getLogger('finn.hls')
+            hls_logger = logging.getLogger("finn.hls")
             hls_logger.warning("HLS synthesis warning")
 
             output = captured.getvalue()
@@ -262,20 +273,20 @@ class TestLoggingConfig(unittest.TestCase):
             generate_outputs=[],
             show_progress=False,
             verbose=False,
-            subprocess_log_levels={'hls': 'ERROR'},  # Only errors
+            subprocess_log_levels={"hls": "ERROR"},  # Only errors
         )
 
         self._configure_loggers(cfg)
 
         try:
-            hls_logger = logging.getLogger('finn.hls')
+            hls_logger = logging.getLogger("finn.hls")
             hls_logger.info("This INFO should be filtered")
             hls_logger.warning("This WARNING should be filtered")
             hls_logger.error("This ERROR should appear")
 
             # Check log file
             log_file = cfg.output_dir + "/build_dataflow.log"
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 content = f.read()
                 self.assertNotIn("This INFO should be filtered", content)
                 self.assertNotIn("This WARNING should be filtered", content)
@@ -293,18 +304,19 @@ class TestLoggingConfig(unittest.TestCase):
             generate_outputs=[],
             show_progress=False,
             verbose=True,
-            subprocess_console_levels={'vivado': 'ERROR'},  # Only errors on console
-            subprocess_log_levels={'vivado': 'DEBUG'},      # Everything in file
+            subprocess_console_levels={"vivado": "ERROR"},  # Only errors on console
+            subprocess_log_levels={"vivado": "DEBUG"},  # Everything in file
         )
 
         # Capture stdout
         from io import StringIO
+
         captured = StringIO()
 
         self._configure_loggers(cfg, stdout_override=captured)
 
         try:
-            vivado_logger = logging.getLogger('finn.vivado')
+            vivado_logger = logging.getLogger("finn.vivado")
             vivado_logger.info("This INFO should not appear on console")
             vivado_logger.warning("This WARNING should not appear on console")
             vivado_logger.error("This ERROR should appear on console")
@@ -316,7 +328,7 @@ class TestLoggingConfig(unittest.TestCase):
 
             # But file should have everything
             log_file = cfg.output_dir + "/build_dataflow.log"
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 file_content = f.read()
                 self.assertIn("This INFO should not appear on console", file_content)
                 self.assertIn("This WARNING should not appear on console", file_content)
@@ -331,8 +343,8 @@ class TestLoggingConfig(unittest.TestCase):
             synth_clk_period_ns=5.0,
             generate_outputs=[],
             show_progress=False,
-            subprocess_log_levels={'vivado': 'ERROR', 'hls': 'WARNING'},
-            subprocess_console_levels={'vivado': 'WARNING'},
+            subprocess_log_levels={"vivado": "ERROR", "hls": "WARNING"},
+            subprocess_console_levels={"vivado": "WARNING"},
         )
 
         # Serialize to JSON
@@ -340,16 +352,16 @@ class TestLoggingConfig(unittest.TestCase):
         json_dict = json.loads(json_str)
 
         # Verify fields present in JSON
-        self.assertEqual(json_dict['show_progress'], False)
-        self.assertEqual(json_dict['subprocess_log_levels'], {'vivado': 'ERROR', 'hls': 'WARNING'})
-        self.assertEqual(json_dict['subprocess_console_levels'], {'vivado': 'WARNING'})
+        self.assertEqual(json_dict["show_progress"], False)
+        self.assertEqual(json_dict["subprocess_log_levels"], {"vivado": "ERROR", "hls": "WARNING"})
+        self.assertEqual(json_dict["subprocess_console_levels"], {"vivado": "WARNING"})
 
         # Deserialize back
         cfg2 = DataflowBuildConfig.from_json(json_str)
 
         self.assertEqual(cfg2.show_progress, False)
-        self.assertEqual(cfg2.subprocess_log_levels, {'vivado': 'ERROR', 'hls': 'WARNING'})
-        self.assertEqual(cfg2.subprocess_console_levels, {'vivado': 'WARNING'})
+        self.assertEqual(cfg2.subprocess_log_levels, {"vivado": "ERROR", "hls": "WARNING"})
+        self.assertEqual(cfg2.subprocess_console_levels, {"vivado": "WARNING"})
 
     def test_backwards_compatible_verbose_only(self):
         """Old code using only verbose flag still works (new fields default correctly)."""
@@ -370,6 +382,7 @@ class TestLoggingConfig(unittest.TestCase):
 
         # Capture stdout
         from io import StringIO
+
         captured = StringIO()
 
         # Should configure without errors
@@ -377,11 +390,11 @@ class TestLoggingConfig(unittest.TestCase):
 
         try:
             # Progress should show (default)
-            builder_logger = logging.getLogger('finn.builder')
+            builder_logger = logging.getLogger("finn.builder")
             builder_logger.info("Progress message")
 
             # Subprocess should show errors (verbose=True, default console level is ERROR)
-            hls_logger = logging.getLogger('finn.hls')
+            hls_logger = logging.getLogger("finn.hls")
             hls_logger.warning("HLS warning - should not appear")
             hls_logger.error("HLS error - should appear")
 
