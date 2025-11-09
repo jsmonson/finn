@@ -94,11 +94,11 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
 
     # if start_step is specified, override the input model
     if cfg.start_step is None:
-        builder_log.info("Building dataflow accelerator from " + model_filename)
+        builder_log.debug("Building dataflow accelerator from " + model_filename)
         model = ModelWrapper(model_filename)
     else:
         intermediate_model_filename = resolve_step_filename(cfg.start_step, cfg, -1)
-        builder_log.info(
+        builder_log.debug(
             "Building dataflow accelerator from intermediate checkpoint "
             + intermediate_model_filename
         )
@@ -106,9 +106,9 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
     assert type(model) is ModelWrapper
     finn_build_dir = os.environ["FINN_BUILD_DIR"]
 
-    builder_log.info("Intermediate outputs will be generated in " + finn_build_dir)
-    builder_log.info("Final outputs will be generated in " + cfg.output_dir)
-    builder_log.info("Build log is at " + cfg.output_dir + "/build_dataflow.log")
+    builder_log.debug("Intermediate outputs will be generated in " + finn_build_dir)
+    builder_log.debug("Final outputs will be generated in " + cfg.output_dir)
+    builder_log.debug("Build log is at " + cfg.output_dir + "/build_dataflow.log")
     # create the output dir if it doesn't exist
     if not os.path.exists(cfg.output_dir):
         os.makedirs(cfg.output_dir)

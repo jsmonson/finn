@@ -145,7 +145,7 @@ def verify_step(
     rtlsim_pre_hook=None,
 ):
     steps_log = logging.getLogger("finn.builder.steps")
-    steps_log.info("Running verification for " + step_name)
+    steps_log.debug("Running verification for " + step_name)
     verify_out_dir = cfg.output_dir + "/verification_output"
     intermediate_models_dir = cfg.output_dir + "/intermediate_models"
     os.makedirs(verify_out_dir, exist_ok=True)
@@ -232,7 +232,7 @@ def verify_step(
                 new_wdb_path = wdb_path.replace(".wdb", "_%d.wdb" % b)
                 shutil.move(wdb_path, new_wdb_path)
 
-    steps_log.info("Verification for %s : %s" % (step_name, res_to_str[all_res]))
+    steps_log.debug("Verification for %s : %s" % (step_name, res_to_str[all_res]))
 
 
 def prepare_for_stitched_ip_rtlsim(verify_model, cfg):
@@ -794,7 +794,7 @@ def step_create_stitched_ip(model: ModelWrapper, cfg: DataflowBuildConfig):
         shutil.copytree(
             model.get_metadata_prop("vivado_stitch_proj"), stitched_ip_dir, dirs_exist_ok=True
         )
-        steps_log.info("Vivado stitched IP written into " + stitched_ip_dir)
+        steps_log.debug("Vivado stitched IP written into " + stitched_ip_dir)
     if VerificationStepType.STITCHED_IP_RTLSIM in cfg._resolve_verification_steps():
         # prepare ip-stitched rtlsim
         verify_model = deepcopy(model)
@@ -893,7 +893,7 @@ def step_make_driver(model: ModelWrapper, cfg: DataflowBuildConfig):
         # generate PYNQ driver
         model = model.transform(MakePYNQDriver(cfg._resolve_driver_platform()))
         shutil.copytree(model.get_metadata_prop("pynq_driver_dir"), driver_dir, dirs_exist_ok=True)
-        steps_log.info("PYNQ Python driver written into " + driver_dir)
+        steps_log.debug("PYNQ Python driver written into " + driver_dir)
     elif DataflowOutputType.CPP_DRIVER in cfg.generate_outputs:
         # generate C++ Driver
         model = model.transform(
@@ -908,7 +908,7 @@ def step_make_driver(model: ModelWrapper, cfg: DataflowBuildConfig):
             dirs_exist_ok=True,
             copy_function=shutil.copyfile,
         )
-        steps_log.info("C++ driver written into " + driver_dir)
+        steps_log.debug("C++ driver written into " + driver_dir)
     else:
         warnings.warn(
             "The step step_make_driver is in the build list but will not be executed"
@@ -1001,7 +1001,7 @@ def step_synthesize_bitfile(model: ModelWrapper, cfg: DataflowBuildConfig):
                 json.dump(post_synth_resources, f, indent=2)
         else:
             raise Exception("Unrecognized shell_flow_type: " + str(cfg.shell_flow_type))
-        steps_log.info("Bitfile written into " + bitfile_dir)
+        steps_log.debug("Bitfile written into " + bitfile_dir)
 
     return model
 
