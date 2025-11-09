@@ -218,7 +218,7 @@ def verify_step(
             np.savez(verification_output_fn, **out_dict)
         else:
             if cfg.verify_save_full_context:
-                print("Warning: Unable to save the full context when using MLO")
+                steps_log.warning("Unable to save the full context when using MLO")
             verification_output_fn = verify_out_dir + "/verify_%s_%d_%s.npy" % (
                 step_name,
                 b,
@@ -1028,14 +1028,15 @@ def step_loop_rolling(model, cfg):
     """Roll a repeating sequence of layers into a loop. PyTorch metadata node hierarchy
     is used to indicate the loop structure."""
 
+    steps_log = logging.getLogger("finn.builder.steps")
     if cfg.loop_body_hierarchy is not None:
-        print(f"Running Loop Rolling on {cfg.loop_body_hierarchy} hierarchy")
+        steps_log.debug(f"Running Loop Rolling on {cfg.loop_body_hierarchy} hierarchy")
         model = model.transform(FoldConstants())
         loop_extraction = LoopExtraction(cfg.loop_body_hierarchy)
         model = model.transform(loop_extraction)
         model = model.transform(LoopRolling(loop_extraction.loop_body_template))
     else:
-        print("No loop_body_hierarchy specified, skipping Loop Rolling step")
+        steps_log.debug("No loop_body_hierarchy specified, skipping Loop Rolling step")
 
     return model
 
