@@ -280,6 +280,9 @@ def prepare_loop_ops_fifo_sizing(node, cfg):
     loop_nodes = loop_model.get_nodes_by_op_type("FINNLoop")
     for loop_node in loop_nodes:
         prepare_loop_ops_fifo_sizing(loop_node, cfg)
+    # MLO: RoundAndClipThresholds doesn't handle thresholds that are graph inputs
+    # (only initializers), so we skip it here. Thresholds will be processed
+    # at the parent model level before being streamed into the loop.
     loop_model = loop_model.transform(
         PrepareIP(cfg._resolve_fpga_part(), cfg._resolve_hls_clk_period())
     )
@@ -485,12 +488,24 @@ def step_transpose_decomposition(model: ModelWrapper, cfg: DataflowBuildConfig):
     can be specialised into hardware operators.
     This should be executed after the folding has been configured.
     """
-    if model.get_nodes_by_op_type("Shuffle"):
-        model = model.transform(ShuffleDecomposition())
-        model = model.transform(InferInnerOuterShuffles())
-        model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()))
-        model = model.transform(InferShapes())
-        model = model.transform(InferDataTypes())
+    # Check for Shuffle nodes in main model
+    has_shuffles = len(model.get_nodes_by_op_type("Shuffle")) > 0
+
+    # Also check for Shuffle nodes in FINNLoop subgraphs
+    if not has_shuffles:
+        for loop_node in model.get_nodes_by_op_type("FINNLoop"):
+            loop_inst = getHWCustomOp(loop_node, model)
+            loop_body = loop_inst.get_nodeattr("body")
+            if len(loop_body.get_nodes_by_op_type("Shuffle")) > 0:
+                has_shuffles = True
+                break
+
+    if has_shuffles:
+        model = model.transform(ShuffleDecomposition(), apply_to_subgraphs=True)
+        model = model.transform(InferInnerOuterShuffles(), apply_to_subgraphs=True)
+        model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()), apply_to_subgraphs=True)
+        model = model.transform(InferShapes(), apply_to_subgraphs=True)
+        model = model.transform(InferDataTypes(), apply_to_subgraphs=True)
     return model
 
 

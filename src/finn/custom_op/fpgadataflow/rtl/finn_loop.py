@@ -152,7 +152,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
             # normal input shape
             node = loop_body.graph.node[0]
             if is_finn_op(node.domain):
-                inst = getHWCustomOp(node)  # No model context: read only
+                inst = getHWCustomOp(node, loop_body)
                 ishape = inst.get_normal_input_shape(0)
             else:
                 ishape = loop_body.get_tensor_shape(node.input[0])
@@ -162,7 +162,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
             # get consumer, assuming the second input is the parameter input
             param_node = loop_body.find_consumer(tensor)
             if is_finn_op(param_node.domain):
-                inst = getHWCustomOp(param_node)  # No model context: read only
+                inst = getHWCustomOp(param_node, loop_body)
                 ishape = inst.get_normal_input_shape(1)
             else:
                 ishape = loop_body.get_tensor_shape(tensor)
@@ -174,7 +174,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
         # normal output shape
         node = loop_body.graph.node[-1]
         if is_finn_op(node.domain):
-            inst = getHWCustomOp(node)  # No model context: read only
+            inst = getHWCustomOp(node, loop_body)
             oshape = inst.get_normal_output_shape(0)
         else:
             oshape = loop_body.get_tensor_shape(node.output[0])
@@ -186,13 +186,13 @@ class FINNLoop(HWCustomOp, RTLBackend):
             # get first node in loop body and return
             # normal input shape
             node = loop_body.graph.node[0]
-            inst = getHWCustomOp(node)  # No model context: read only
+            inst = getHWCustomOp(node, loop_body)
             ishape = inst.get_folded_input_shape(0)
         else:
             tensor = loop_body.graph.input[ind].name
             # get consumer, assuming the second input is the parameter input
             param_node = loop_body.find_consumer(tensor)
-            inst = getHWCustomOp(param_node)  # No model context: read only
+            inst = getHWCustomOp(param_node, loop_body)
             ishape = inst.get_folded_input_shape(1)
         return ishape
 
@@ -201,7 +201,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
         # get last node in loop body and return
         # normal output shape
         node = loop_body.graph.node[-1]
-        inst = getHWCustomOp(node)  # No model context: read only
+        inst = getHWCustomOp(node, loop_body)
         return inst.get_folded_output_shape(0)
 
     def infer_node_datatype(self, model):
@@ -213,11 +213,12 @@ class FINNLoop(HWCustomOp, RTLBackend):
             idt = DataType[self.get_nodeattr("inputDataType")]
         else:
             loop_body = self.get_nodeattr("body")
+            loop_body = ModelWrapper(loop_body)
             tensor = loop_body.graph.input[ind].name
             # get consumer, assuming the second input is the parameter input
             param_node = loop_body.find_consumer(tensor)
             if is_finn_op(param_node.domain):
-                inst = getHWCustomOp(param_node)  # No model context: read only
+                inst = getHWCustomOp(param_node, loop_body)
                 idt = inst.get_input_datatype(1)
             else:
                 idt = loop_body.get_tensor_datatype(tensor)
@@ -233,13 +234,13 @@ class FINNLoop(HWCustomOp, RTLBackend):
             # get first node in loop body and return
             # normal input shape
             node = loop_body.graph.node[0]
-            inst = getHWCustomOp(node)  # No model context: read only
+            inst = getHWCustomOp(node, loop_body)
             iwidth = inst.get_instream_width(0)
         else:
             tensor = loop_body.graph.input[ind].name
             # get consumer, assuming the second input is the parameter input
             param_node = loop_body.find_consumer(tensor)
-            inst = getHWCustomOp(param_node)  # No model context: read only
+            inst = getHWCustomOp(param_node, loop_body)
             iwidth = inst.get_instream_width(1)
         return iwidth
 
@@ -248,7 +249,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
         check_if_cycles_annotated = False
 
         for node in loop_body.graph.node:
-            cnode = getHWCustomOp(node)  # No model context: read only
+            cnode = getHWCustomOp(node, loop_body)
             if cnode.get_nodeattr("cycles_estimate"):
                 check_if_cycles_annotated = True
                 break
@@ -264,7 +265,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
         # get last node in loop body and return
         # normal output shape
         node = loop_body.graph.node[-1]
-        inst = getHWCustomOp(node)  # No model context: read only
+        inst = getHWCustomOp(node, loop_body)
         return inst.get_outstream_width(0)
 
     def get_number_output_values(self):
@@ -272,7 +273,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
         # get last node in loop body and return
         # normal output values
         node = loop_body.graph.node[-1]
-        inst = getHWCustomOp(node)  # No model context: read only
+        inst = getHWCustomOp(node, loop_body)
         return inst.get_number_output_values()
 
     def prepare_rtlsim(self):
@@ -396,7 +397,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
             for iter in range(iteration):
                 loop_body.set_initializer(loop_tensor, params[iter])
                 loop_body.set_tensor_datatype(loop_tensor, param_dtype)
-                inst = getHWCustomOp(param_node, model)
+                inst = getHWCustomOp(param_node, loop_body)
                 inst.generate_params(loop_body, path)
                 param_file = "{}/memblock.dat".format(path)
                 new_param_file = "{}/{}_memblock_{}.dat".format(path, param_node.op_type, iter)
@@ -448,7 +449,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 # Replace the path for the dat files in the ipgen files if Eltwise
                 # Adapted from transformations.fpgadataflow.replace_verilog_relpaths
                 if param_node.op_type.startswith("Elementwise"):
-                    param_customop = getHWCustomOp(param_node, model)
+                    param_customop = getHWCustomOp(param_node, loop_body)
                     ipgen_path = param_customop.get_nodeattr("code_gen_dir_ipgen")
                     if ipgen_path is not None and os.path.isdir(ipgen_path):
                         for dname, dirs, files in os.walk(ipgen_path):
@@ -502,7 +503,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
 
                 # Replace the path for the dat files in the ipgen files
                 # Adapted from transformations.fpgadataflow.replace_verilog_relpaths
-                param_customop = getHWCustomOp(param_node, model)
+                param_customop = getHWCustomOp(param_node, loop_body)
                 ipgen_path = param_customop.get_nodeattr("ipgen_path")
                 if ipgen_path is not None and os.path.isdir(ipgen_path):
                     for dname, dirs, files in os.walk(ipgen_path):
@@ -531,7 +532,7 @@ class FINNLoop(HWCustomOp, RTLBackend):
         # pad to nearest multiple of 8
         data_width = roundup_to_integer_multiple(data_width, 8)
         for node in loop_body.graph.node:
-            node_inst = getHWCustomOp(node)  # No model context: read only
+            node_inst = getHWCustomOp(node, loop_body)
             if node_inst.get_nodeattr("mlo_max_iter"):
                 # calculate TAP_REP
                 # for Thresholds this value is fm size / pe
@@ -569,8 +570,9 @@ class FINNLoop(HWCustomOp, RTLBackend):
         # add RTL streamer IP
         ip_dirs.append("$::env(FINN_ROOT)/finn-rtllib/memstream")
         loop_model = self.get_nodeattr("body")
+        loop_body = ModelWrapper(loop_model)
         for node in loop_model.graph.node:
-            node_inst = getHWCustomOp(node)  # No model context: read only
+            node_inst = getHWCustomOp(node, loop_body)
             ip_dir_value = node_inst.get_nodeattr("ip_path")
             assert os.path.isdir(ip_dir_value), "IP generation directory doesn't exist."
             ip_dirs += [ip_dir_value]

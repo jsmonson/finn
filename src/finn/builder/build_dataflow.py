@@ -214,12 +214,29 @@ def build_dataflow_cfg(model_filename, cfg: DataflowBuildConfig):
             model = transform_step(model, cfg)
             step_end = time.time()
             time_per_step[step_name] = step_end - step_start
-            chkpt_name = "%s.onnx" % (step_name)
+            chkpt_name = "%d_%s.onnx" % (step_num, step_name)
             if cfg.save_intermediate_models:
                 intermediate_model_dir = cfg.output_dir + "/intermediate_models"
                 if not os.path.exists(intermediate_model_dir):
                     os.makedirs(intermediate_model_dir)
                 model.save("%s/%s" % (intermediate_model_dir, chkpt_name))
+
+                # Save FINNLoop bodies as separate checkpoints for debugging MLO
+                loop_nodes = model.get_nodes_by_op_type("FINNLoop")
+                if loop_nodes:
+                    from finn.util.basic import getHWCustomOp
+                    for loop_idx, loop_node in enumerate(loop_nodes):
+                        try:
+                            loop_inst = getHWCustomOp(loop_node, model)
+                            loop_body = loop_inst.get_nodeattr("body")
+                            loop_chkpt_name = "%d_%s_loop_%d_%s.onnx" % (
+                                step_num, step_name, loop_idx, loop_node.name
+                            )
+                            loop_body.save("%s/%s" % (intermediate_model_dir, loop_chkpt_name))
+                        except Exception as e:
+                            builder_log.warning(
+                                f"Could not save FINNLoop body for {loop_node.name}: {e}"
+                            )
             step_num += 1
         except:  # noqa
             # print exception info and traceback

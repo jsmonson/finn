@@ -1,4 +1,5 @@
 import copy
+import logging
 import numpy as np
 import onnx
 import onnxscript
@@ -11,6 +12,9 @@ from qonnx.transformation.fold_constants import FoldConstants
 from typing import List, Tuple
 
 from finn.util import onnxscript_helpers as osh
+from finn.util.fpgadataflow import is_fpgadataflow_node
+
+logger = logging.getLogger(__name__)
 
 
 def get_constant_from_value(value):
@@ -55,17 +59,13 @@ def build_loop_replace_pattern(graph, LoopBody):
             g_shape = nodes[0].inputs[i].shape
             for node in nodes:
                 if node.inputs[i].shape != g_shape:
-                    print(
-                        (
-                            f"LoopRolling: Index {i} expected shape {g_shape}, "
-                            f"got {node.inputs[i].shape}."
-                        )
+                    logger.debug(
+                        f"LoopRolling: Index {i} expected shape {g_shape}, "
+                        f"got {node.inputs[i].shape}."
                     )
                     raise Exception(
-                        (
-                            "LoopRolling: all loop-body initializers of the same index "
-                            "must have the same shape."
-                        )
+                        "LoopRolling: all loop-body initializers of the same index "
+                        "must have the same shape."
                     )
 
             # Build Concat Node
@@ -251,7 +251,7 @@ class LoopExtraction(Transformation):
                         break
 
             if mnode is None:
-                print(f"warning: could not find metadata for node {node.name}, skipping")
+                logger.debug(f"warning: could not find metadata for node {node.name}, skipping")
                 continue
 
             node.metadata_props["pkg.torch.onnx.name_scopes"] = mnode.metadata_props[
@@ -369,15 +369,15 @@ def validate_loop_io_tensors(loop_node: ir.Node):
     # Validate that loop body activation input and output types and shapes match
     body_graph = loop_node.attributes["body"].value
 
-    print(f"DEBUG: Loop validation details:")
-    print(f"  loop_node.inputs ({len(loop_node.inputs)}): {[inp.name for inp in loop_node.inputs]}")
-    print(f"  loop_node.outputs ({len(loop_node.outputs)}): {[out.name for out in loop_node.outputs]}")
-    print(f"  body_graph.inputs ({len(body_graph.inputs)}): {[inp.name for inp in body_graph.inputs]}")
-    print(f"  body_graph.outputs ({len(body_graph.outputs)}): {[out.name for out in body_graph.outputs]}")
+    logger.debug("DEBUG: Loop validation details:")
+    logger.debug(f"  loop_node.inputs ({len(loop_node.inputs)}): {[inp.name for inp in loop_node.inputs]}")
+    logger.debug(f"  loop_node.outputs ({len(loop_node.outputs)}): {[out.name for out in loop_node.outputs]}")
+    logger.debug(f"  body_graph.inputs ({len(body_graph.inputs)}): {[inp.name for inp in body_graph.inputs]}")
+    logger.debug(f"  body_graph.outputs ({len(body_graph.outputs)}): {[out.name for out in body_graph.outputs]}")
 
     # For now, skip validation if structures don't match expected ONNX Loop pattern
     # This appears to be a FINN-specific loop structure that doesn't follow standard ONNX
-    print("WARNING: Skipping loop I/O validation - non-standard loop structure")
+    logger.debug("WARNING: Skipping loop I/O validation - non-standard loop structure")
     return
 
     # ONNX Loop structure:
@@ -504,12 +504,12 @@ class LoopRolling(Transformation):
         graph = model_ir.graph
         LoopBody = self.loop_body_template
 
-        print(f"\n{'='*80}")
-        print(f"DEBUG: LoopRolling.apply() - Starting loop rolling transformation")
-        print(f"{'='*80}")
-        print(f"Loop body template function name: {LoopBody.function.name}")
-        print(f"Loop body template graph inputs: {len(LoopBody.function.graph.inputs)}")
-        print(f"Loop body template graph outputs: {len(LoopBody.function.graph.outputs)}")
+        logger.debug("\n" + "="*80)
+        logger.debug("DEBUG: LoopRolling.apply() - Starting loop rolling transformation")
+        logger.debug("="*80)
+        logger.debug(f"Loop body template function name: {LoopBody.function.name}")
+        logger.debug(f"Loop body template graph inputs: {len(LoopBody.function.graph.inputs)}")
+        logger.debug(f"Loop body template graph outputs: {len(LoopBody.function.graph.outputs)}")
 
         #################################
         # I/O Normalization for Loop Body
@@ -520,23 +520,23 @@ class LoopRolling(Transformation):
         # TODO: write a check to ensure that there is only one
         #       set of consecutive nodes.
         nodes = osh.find_nodes_of_optype(graph, LoopBody.function.name)
-        print(f"\nDEBUG: Found {len(nodes)} node(s) matching loop body pattern")
+        logger.debug(f"\nDEBUG: Found {len(nodes)} node(s) matching loop body pattern")
         # Loop through all the nodes (execept the last one) and
         # identify the input to output pairs
 
         for idx, node in enumerate(nodes):
-            print(f"\nDEBUG: Node {idx}: {node.name} (op_type={node.op_type})")
-            print(f"  Inputs ({len(node.inputs)}):")
+            logger.debug(f"\nDEBUG: Node {idx}: {node.name} (op_type={node.op_type})")
+            logger.debug(f"  Inputs ({len(node.inputs)}):")
             for i, inp in enumerate(node.inputs):
                 is_init = inp.is_initializer()
                 is_graph_in = inp.is_graph_input()
                 producer = inp.producer()
                 producer_info = f"producer={producer.op_type if producer else 'None'}"
-                print(f"    [{i}] {inp.name} (init={is_init}, graph_in={is_graph_in}, {producer_info})")
-            print(f"  Outputs ({len(node.outputs)}):")
+                logger.debug(f"    [{i}] {inp.name} (init={is_init}, graph_in={is_graph_in}, {producer_info})")
+            logger.debug(f"  Outputs ({len(node.outputs)}):")
             for i, out in enumerate(node.outputs):
                 uses_count = len(out.uses())
-                print(f"    [{i}] {out.name} (uses={uses_count})")
+                logger.debug(f"    [{i}] {out.name} (uses={uses_count})")
 
         # my loop rolling code assumes that the activation inputs are listed first and
         # that corresponding output activations have the same index as the input
@@ -576,9 +576,9 @@ class LoopRolling(Transformation):
 
         # apply the input swaps to the function graph
         # mark swapped nodes as activations
-        print(f"\nDEBUG: Applying {len(input_swaps)} input swap(s):")
+        logger.debug(f"\nDEBUG: Applying {len(input_swaps)} input swap(s):")
         for swap in input_swaps:
-            print(f"  Swap indices: {swap[0]} <-> {swap[1]}")
+            logger.debug(f"  Swap indices: {swap[0]} <-> {swap[1]}")
 
         activations = 0
         for swap in input_swaps:
@@ -589,13 +589,13 @@ class LoopRolling(Transformation):
             LoopBody.signature[swap[0]] = LoopBodyInputType.ACTIVATION
             activations += 1
 
-        print(f"DEBUG: Marked {activations} activation input(s)")
+        logger.debug(f"DEBUG: Marked {activations} activation input(s)")
 
         # Next Label Inputs according to how they are produced.
         # Indexable inputs will have different constant or none producers
         # Constant values broadcast to all nodes will have the same producer
         # Skip the (all) Activation inputs (have been swapped to beginning of the list)
-        print(f"\nDEBUG: Classifying remaining {len(nodes[0].inputs) - activations} input(s):")
+        logger.debug(f"\nDEBUG: Classifying remaining {len(nodes[0].inputs) - activations} input(s):")
         for index in range(activations, len(nodes[0].inputs)):
             inputs = []
             for node in nodes:
@@ -605,19 +605,19 @@ class LoopRolling(Transformation):
             if osh.same(inputs) or same_values(inputs):
                 # Constant with Respect to Loop
                 LoopBody.signature[index] = LoopBodyInputType.CONSTANT
-                print(f"  Input[{index}]: CONSTANT (same across all iterations)")
+                logger.debug(f"  Input[{index}]: CONSTANT (same across all iterations)")
             else:
                 # Must be Indexed
                 LoopBody.signature[index] = LoopBodyInputType.PARAMETER
-                print(f"  Input[{index}]: PARAMETER (varies per iteration)")
+                logger.debug(f"  Input[{index}]: PARAMETER (varies per iteration)")
 
         ###################################################
         # End I/O Normalization for Loop Body
         ###################################################
 
-        print(f"\nDEBUG: Final loop body signature:")
+        logger.debug("\nDEBUG: Final loop body signature:")
         for i, sig_type in enumerate(LoopBody.signature):
-            print(f"  Input[{i}]: {sig_type}")
+            logger.debug(f"  Input[{i}]: {sig_type}")
 
         LoopMatchPattern, nodes = LoopBody.build_function_match_pattern(
             model_ir.graph, use_iteration_ext=False
@@ -628,14 +628,14 @@ class LoopRolling(Transformation):
         change_function_calls_to_loop = pattern.RewriteRule(LoopMatchPattern, loop_replace_pattern)
         rewrite_set = pattern.RewriteRuleSet([change_function_calls_to_loop])
         count = rewrite_set.apply_to_model(model_ir, verbose=None)
-        print(f"\nDEBUG: Rolled {count} function calls into a loop operator")
+        logger.debug(f"\nDEBUG: Rolled {count} function calls into a loop operator")
 
-        print(f"\nDEBUG: Validating created Loop node(s)...")
+        logger.debug("\nDEBUG: Validating created Loop node(s)...")
         for node in model_ir.graph._nodes:
             if node.op_type == "FINNLoop":
-                print(f"  Found FINNLoop node: {node.name}")
-                print(f"    Inputs: {len(node.inputs)}")
-                print(f"    Outputs: {len(node.outputs)}")
+                logger.debug(f"  Found FINNLoop node: {node.name}")
+                logger.debug(f"    Inputs: {len(node.inputs)}")
+                logger.debug(f"    Outputs: {len(node.outputs)}")
                 validate_loop_node(node)
 
         model = onnxscript.ir.serde.serialize_model(model_ir)
@@ -647,24 +647,64 @@ class LoopRolling(Transformation):
         # "const" to "input" for streamed parameters)
         # This must be done after serialization so we can work with protobuf nodes
         from qonnx.util.basic import get_by_name
+        from qonnx.custom_op.registry import getCustomOp
 
         from finn.util.basic import getHWCustomOp
 
-        print(f"\nDEBUG: Adapting loop body operators...")
+        logger.debug("\nDEBUG: Adapting loop body operators...")
         for loop_node in model_wrapper.get_nodes_by_op_type("FINNLoop"):
-            loop_body_graph = get_by_name(loop_node.attribute, "body").g
-            print(f"  Loop body has {len(loop_body_graph.node)} node(s)")
-            for node in loop_body_graph.node:
+            # Get the FINNLoop instance and extract its body ModelWrapper
+            # (get_nodeattr("body") already wraps GraphProto in ModelWrapper)
+            loop_node_inst = getHWCustomOp(loop_node, model_wrapper)
+            loop_body_model = loop_node_inst.get_nodeattr("body")
+            iterations = loop_node_inst.get_nodeattr("iteration")
+            logger.debug(f"  Loop body has {len(loop_body_model.graph.node)} node(s), iterations={iterations}")
+
+            # CRITICAL: Set mlo_max_iter on protobuf nodes
+            # ONNX-IR set these attributes in lines 108-119, but they're lost during serialization
+            # Must re-apply them to protobuf nodes after serde.serialize_model()
+            for i, input_type in enumerate(LoopBody.signature):
+                if input_type == LoopBodyInputType.PARAMETER:
+                    # Find consumer of this loop body input
+                    input_name = loop_body_model.graph.input[i].name
+                    for node in loop_body_model.graph.node:
+                        if input_name in node.input:
+                            # This node consumes a PARAMETER input - set MLO attributes
+                            if is_fpgadataflow_node(node):
+                                from onnx import helper
+                                # Check if attribute already exists
+                                existing_attrs = {a.name for a in node.attribute}
+                                if "mlo_max_iter" not in existing_attrs:
+                                    node.attribute.append(helper.make_attribute("mlo_max_iter", iterations))
+                                    logger.debug(f"    Set mlo_max_iter={iterations} on {node.name}")
+                                if "inFIFODepths" not in existing_attrs:
+                                    node.attribute.append(helper.make_attribute("inFIFODepths", [2, 2]))
+                            break  # Only first consumer per input
+
+            for node in loop_body_model.graph.node:
                 try:
-                    inst = getHWCustomOp(node, model_wrapper)
-                    print(f"    Adapting node {node.name} (op_type={node.op_type})")
-                    inst.adapt_for_loop_body(LoopBody.signature)
+                    # Get custom op WITHOUT building design space
+                    inst = getCustomOp(node)
+
+                    # Adapt for loop body context if supported
+                    if hasattr(inst, 'adapt_for_loop_body'):
+                        logger.debug(f"    Adapting node {node.name} (op_type={node.op_type})")
+                        inst.adapt_for_loop_body(LoopBody.signature)
+
+                    # Skip design space building during loop_rolling - it will be built later when needed
+                    # Building it now causes validation issues because the loop body graph is not yet
+                    # fully configured (e.g., ElementwiseBinaryOp RHS changes from initializer to input)
+
                 except (KeyError, AttributeError) as e:
                     # Operator doesn't need adaptation or doesn't support it
-                    print(f"    Skipping node {node.name} (op_type={node.op_type}): {type(e).__name__}")
+                    logger.debug(f"    Skipping node {node.name} (op_type={node.op_type}): {type(e).__name__}")
                 except Exception as e:
-                    print(f"    ERROR adapting node {node.name} (op_type={node.op_type}): {e}")
+                    logger.debug(f"    ERROR adapting node {node.name} (op_type={node.op_type}): {e}")
                     raise
+
+            # CRITICAL: Save the modified loop body back to the FINNLoop node
+            # set_nodeattr expects a GraphProto, not a ModelWrapper
+            loop_node_inst.set_nodeattr("body", loop_body_model.graph)
 
         model = model_wrapper.transform(FoldConstants())
 
