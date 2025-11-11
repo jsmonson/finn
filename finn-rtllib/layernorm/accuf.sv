@@ -85,7 +85,7 @@ module accuf #(
 				M <= { $shortrealtobits($bitstoshortreal(A1)*$bitstoshortreal(B1)), M[2] };
 				LdBias3 <= load_bias;
 				P4 <= $shortrealtobits(
-					$bitstoshortreal(HAVE_BIAS && LdBias3? BIAS_BITS : Lst[3]? 0 : P4) + 
+					$bitstoshortreal(HAVE_BIAS && LdBias3? BIAS_BITS : Lst[3]? 0 : P4) +
 					$bitstoshortreal(M[3])
 				);
 			end
