@@ -282,8 +282,12 @@ def prepare_loop_ops_fifo_sizing(node, cfg):
     )
     loop_model = loop_model.transform(HLSSynthIP(cfg._resolve_hls_clk_period()))
     loop_model = loop_model.transform(ReplaceVerilogRelPaths())
-    if node_inst.get_nodeattr("rtlsim_trace"):
-        loop_model.set_metadata_prop("rtlsim_trace", f"{node.name}_fifosim_trace.wdb")
+    if cfg.fifosim_save_waveform:
+        report_dir = cfg.output_dir + "/report"
+        os.makedirs(report_dir, exist_ok=True)
+        loop_model.set_metadata_prop(
+            "rtlsim_trace", os.path.abspath(report_dir) + f"/{node.name}_fifosim_trace.wdb"
+        )
     loop_model = loop_model.transform(
         InsertAndSetFIFODepths(
             cfg._resolve_fpga_part(),
