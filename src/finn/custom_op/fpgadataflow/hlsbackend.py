@@ -227,7 +227,7 @@ class HLSBackend(ABC):
         f.close()
         self.code_gen_dict.clear()
 
-    def code_generation_ipi(self):
+    def code_generation_ipi(self, behavioral=False):
         """Constructs and returns the TCL for node instantiation in Vivado IPI."""
         vlnv = self.get_nodeattr("ip_vlnv")
         cmd = ["create_bd_cell -type ip -vlnv %s %s" % (vlnv, self.onnx_node.name)]

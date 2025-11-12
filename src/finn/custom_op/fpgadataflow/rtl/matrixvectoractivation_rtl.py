@@ -160,7 +160,7 @@ class MVAU_rtl(MVAU, RTLBackend):
             mult_dsp = np.ceil(P / 4) * Q
         return int(mult_dsp)
 
-    def instantiate_ip(self, cmd):
+    def instantiate_ip(self, cmd, behavioral=False):
         # instantiate the RTL IP
         node_name = self.onnx_node.name
         code_gen_dir = self.get_nodeattr("code_gen_dir_ipgen")
@@ -173,9 +173,13 @@ class MVAU_rtl(MVAU, RTLBackend):
             "mvu_vvu_8sx9_dsp58.sv",
             "add_multi.sv",
         ]
-        sourcefiles = [
-            os.path.join(code_gen_dir, self.get_nodeattr("gen_top_module") + "_wrapper.v")
-        ] + [rtllib_dir + _ for _ in sourcefiles]
+        if behavioral is True:
+            wrapper_file = self.get_nodeattr("gen_top_module") + "_wrapper_sim.v"
+        else:
+            wrapper_file = self.get_nodeattr("gen_top_module") + "_wrapper.v"
+        sourcefiles = [os.path.join(code_gen_dir, wrapper_file)] + [
+            rtllib_dir + _ for _ in sourcefiles
+        ]
 
         for f in sourcefiles:
             cmd.append("add_files -norecurse %s" % (f))
