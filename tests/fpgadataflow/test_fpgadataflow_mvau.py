@@ -856,7 +856,7 @@ def test_fpgadataflow_rtl_mvau(
 
 @pytest.mark.parametrize("mh", [32])
 @pytest.mark.parametrize("mw", [16])
-@pytest.mark.parametrize("n_vectors", [1, 32], [8, 32])
+@pytest.mark.parametrize("n_vectors", [[1, 32], [8, 32]])
 @pytest.mark.parametrize("pe", [1, 16, 32])
 @pytest.mark.parametrize("simd", [1, 8, 16])
 @pytest.mark.parametrize(
