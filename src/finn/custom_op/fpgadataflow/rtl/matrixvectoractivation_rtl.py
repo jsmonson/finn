@@ -97,7 +97,7 @@ class MVAU_rtl(MVAU, RTLBackend):
                         mw = self.get_nodeattr("MW")
                         total_rows, mh = flat_in.shape
 
-                        assert total_rows % mw == 0, ("Total rows must be a multiple of MW")
+                        assert total_rows % mw == 0, "Total rows must be a multiple of MW"
                         n_chunks = total_rows // mw
                         chunks = np.split(flat_in, n_chunks, axis=0)
 
@@ -138,13 +138,12 @@ class MVAU_rtl(MVAU, RTLBackend):
                 wei_list = list(wei)
                 total_len = len(wei_list)
 
-                assert total_len % n_chunks == 0, ("Total encoded length not divisible by n_chunks")
+                assert total_len % n_chunks == 0, "Total encoded length not divisible by n_chunks"
 
                 chunk_len = total_len // n_chunks
 
                 wei_chunks = [
-                    wei_list[i * chunk_len : (i + 1) * chunk_len]
-                    for i in range(n_chunks)
+                    wei_list[i * chunk_len : (i + 1) * chunk_len] for i in range(n_chunks)
                 ]
 
                 full_wei_stream = []

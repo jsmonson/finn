@@ -854,9 +854,9 @@ def test_fpgadataflow_rtl_mvau(
     ).all(), "Output of ONNX model not matching output of stitched-IP RTL model!"
 
 
-@pytest.mark.parametrize("mh", [128])
-@pytest.mark.parametrize("mw", [32])
-@pytest.mark.parametrize("n_vectors", [128])
+@pytest.mark.parametrize("mh", [32])
+@pytest.mark.parametrize("mw", [16])
+@pytest.mark.parametrize("n_vectors", [1, 32], [8, 32])
 @pytest.mark.parametrize("pe", [1, 16, 32])
 @pytest.mark.parametrize("simd", [1, 8, 16])
 @pytest.mark.parametrize(
@@ -866,7 +866,7 @@ def test_fpgadataflow_rtl_mvau(
     "part", ["xcvc1902-vsva2197-2MP-e-S", "xcku3p-ffva676-1-e", "xc7z020clg400-1"]
 )
 # Backend
-@pytest.mark.parametrize("impl_style", ["rtl"])  # , "hls"])
+@pytest.mark.parametrize("impl_style", ["rtl", "hls"])
 @pytest.mark.fpgadataflow
 @pytest.mark.slow
 @pytest.mark.vivado
@@ -879,9 +879,13 @@ def test_fpgadataflow_rtl_dynamic_mvau(mh, mw, n_vectors, pe, simd, idt_wdt, par
 
     idt, wdt = idt_wdt
     # Create test input vector (produced by SWG)
-    ifm = helper.make_tensor_value_info("ifm", TensorProto.FLOAT, [1, 12, n_vectors, mw])
-    wfm = helper.make_tensor_value_info("wfm", TensorProto.FLOAT, [1, 12, mw, mh])
-    ofm = helper.make_tensor_value_info("ofm", TensorProto.FLOAT, (1, 12, n_vectors, mh))
+    ifm = helper.make_tensor_value_info(
+        "ifm", TensorProto.FLOAT, [1, n_vectors[0], n_vectors[1], mw]
+    )
+    wfm = helper.make_tensor_value_info("wfm", TensorProto.FLOAT, [1, n_vectors[0], mw, mh])
+    ofm = helper.make_tensor_value_info(
+        "ofm", TensorProto.FLOAT, (1, n_vectors[0], n_vectors[1], mh)
+    )
 
     model = make_dynamic_matmul_modelwrapper(ifm, wfm, ofm, idt, wdt)
     model = model.transform(GiveUniqueNodeNames())
