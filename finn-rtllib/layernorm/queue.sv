@@ -45,6 +45,9 @@ module queue #(
 	uwire  push = Rdy && ivld;
 	uwire  pop = !Ptr[$left(Ptr)] && bload;
 
+	uwire [$clog2(ELASTICITY):0] n_ptr;
+	assign n_ptr = Ptr + ((push == pop)? 0 : push? 1 : -1);
+
 	always_ff @(posedge clk) begin
 		if(push)  A <= { idat, A[0:ELASTICITY-2] };
 	end
@@ -57,8 +60,8 @@ module queue #(
 			B <= 'x;
 		end
 		else begin
-			Ptr <= Ptr + ((push == pop)? 0 : push? 1 : -1);
-			Rdy <= bload || (push? ((ELASTICITY-2) & ~Ptr[$left(Ptr)-1:0]) != 0 : Rdy);
+			Ptr <= n_ptr;
+			Rdy <= bload || (push? ((ELASTICITY-2) & ~n_ptr[$left(n_ptr)-1:0]) != 0 : Rdy);
 			if(bload) begin
 				Vld <= !Ptr[$left(Ptr)];
 				B <= A[Ptr[$left(Ptr)-1:0]];
