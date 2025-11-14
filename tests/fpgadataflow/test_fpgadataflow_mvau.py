@@ -856,7 +856,7 @@ def test_fpgadataflow_rtl_mvau(
 
 @pytest.mark.parametrize("mh", [32])
 @pytest.mark.parametrize("mw", [16])
-@pytest.mark.parametrize("n_vectors", [32])
+@pytest.mark.parametrize("n_vectors", [[1, 32], [8, 32]])
 @pytest.mark.parametrize("pe", [1, 16, 32])
 @pytest.mark.parametrize("simd", [1, 8, 16])
 @pytest.mark.parametrize(
@@ -875,13 +875,19 @@ def test_fpgadataflow_rtl_dynamic_mvau(mh, mw, n_vectors, pe, simd, idt_wdt, par
     if part == "xc7z020clg400-1" and impl_style == "rtl":
         pytest.skip("Skip test because narrow range can't be ensured for the second input")
 
+    if impl_style == "hls" and n_vectors[0] != 0:
+        pytest.skip("Skip test because dynamic HLS MVAU only supports 2 dims != 1")
     clk_ns = 4
 
     idt, wdt = idt_wdt
     # Create test input vector (produced by SWG)
-    ifm = helper.make_tensor_value_info("ifm", TensorProto.FLOAT, [1, 1, n_vectors, mw])
-    wfm = helper.make_tensor_value_info("wfm", TensorProto.FLOAT, [1, 1, mw, mh])
-    ofm = helper.make_tensor_value_info("ofm", TensorProto.FLOAT, (1, 1, n_vectors, mh))
+    ifm = helper.make_tensor_value_info(
+        "ifm", TensorProto.FLOAT, [1, n_vectors[0], n_vectors[1], mw]
+    )
+    wfm = helper.make_tensor_value_info("wfm", TensorProto.FLOAT, [1, n_vectors[0], mw, mh])
+    ofm = helper.make_tensor_value_info(
+        "ofm", TensorProto.FLOAT, (1, n_vectors[0], n_vectors[1], mh)
+    )
 
     model = make_dynamic_matmul_modelwrapper(ifm, wfm, ofm, idt, wdt)
     model = model.transform(GiveUniqueNodeNames())
