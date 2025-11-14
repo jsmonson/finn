@@ -737,7 +737,7 @@ foreach xci_file $xci_files {
         tcl.append(
             "set all_v_files [get_files -filter {USED_IN_SYNTHESIS == 1 "
             + "&& (FILE_TYPE == Verilog || FILE_TYPE == SystemVerilog "
-            + '|| FILE_TYPE =="Verilog Header" || FILE_TYPE == XCI)}]'
+            + '|| FILE_TYPE =="Verilog Header" || FILE_TYPE == XCI || FILE_TYPE == VHDL)}]'
         )
         # tcl.append("set all_v_files [concat $all_v_files $xci_files]")
         v_file_list = "%s/all_verilog_srcs.txt" % vivado_stitch_proj_dir
