@@ -213,7 +213,6 @@ class FINNLoop(HWCustomOp, RTLBackend):
             idt = DataType[self.get_nodeattr("inputDataType")]
         else:
             loop_body = self.get_nodeattr("body")
-            loop_body = ModelWrapper(loop_body)
             tensor = loop_body.graph.input[ind].name
             # get consumer, assuming the second input is the parameter input
             param_node = loop_body.find_consumer(tensor)
