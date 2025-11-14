@@ -875,6 +875,8 @@ def test_fpgadataflow_rtl_dynamic_mvau(mh, mw, n_vectors, pe, simd, idt_wdt, par
     if part == "xc7z020clg400-1" and impl_style == "rtl":
         pytest.skip("Skip test because narrow range can't be ensured for the second input")
 
+    if impl_style == "hls" and n_vectors[0] != 0:
+        pytest.skip("Skip test because dynamic HLS MVAU only supports 2 dims != 1")
     clk_ns = 4
 
     idt, wdt = idt_wdt
