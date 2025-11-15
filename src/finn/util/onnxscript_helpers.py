@@ -319,6 +319,7 @@ def vdisconnect(value):
     value._graph = None
     return value
 
+
 def is_fpgadataflow_onnxir_node(node):
     """Returns True if given node is fpgadataflow node. Otherwise False."""
     if node is not None:
