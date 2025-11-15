@@ -17,6 +17,7 @@ from onnxscript.rewriter.pattern import (
     RewriterContext,
     pattern_builder,
 )
+from finn.util.fpgadataflow import is_fpgadataflow_node
 from qonnx.util.basic import is_finn_op
 from typing import List, Optional
 
@@ -318,18 +319,12 @@ def vdisconnect(value):
     value._graph = None
     return value
 
-
 def is_fpgadataflow_onnxir_node(node):
     """Returns True if given node is fpgadataflow node. Otherwise False."""
-    is_node = False
     if node is not None:
-        if is_finn_op(node.domain):
-            if "backend" in node.attributes:
-                backend_value = node.attributes["backend"].as_string()
-                if backend_value == "fpgadataflow":
-                    is_node = True
-
-    return is_node
+        if is_fpgadataflow_node(ir.serde.serialize_node(node)):
+            return True
+    return False
 
 
 class ReplacementPatternGraph(ReplacementPatternFunction):
