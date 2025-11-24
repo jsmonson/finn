@@ -55,6 +55,7 @@ from finn.transformation.fpgadataflow.annotate_cycles import AnnotateCycles
 from finn.util.basic import getHWCustomOp, make_build_dir
 from finn.util.create import adjacency_list
 from finn.util.data_packing import npy_to_rtlsim_input, rtlsim_output_to_npy
+from finn.util.fpgadataflow import is_fpgadataflow_node
 from finn.util.mlo_sim import mlo_prehook_func_factory
 
 
@@ -248,6 +249,9 @@ class FINNLoop(HWCustomOp, RTLBackend):
         check_if_cycles_annotated = False
 
         for node in loop_body.graph.node:
+            # Skip standard ONNX nodes (empty domain)
+            if not is_fpgadataflow_node(node):
+                continue
             cnode = getHWCustomOp(node, loop_body)
             if cnode.get_nodeattr("cycles_estimate"):
                 check_if_cycles_annotated = True
@@ -408,8 +412,8 @@ class FINNLoop(HWCustomOp, RTLBackend):
                 elif param_node.op_type.startswith("Thresholding"):
                     # get all generated Thresholding dat files
                     pe = inst.get_nodeattr("PE")
-                    output_data_type = inst.get_nodeattr("outputDataType")
-                    o_bitwidth = DataType[output_data_type].bitwidth()
+                    odt = inst.get_output_datatype()
+                    o_bitwidth = odt.bitwidth()
                     param_files = []
                     for stage in range(o_bitwidth):
                         for pe_value in range(pe):
@@ -469,8 +473,8 @@ class FINNLoop(HWCustomOp, RTLBackend):
             elif param_node.op_type.startswith("Thresholding"):
                 # concatinate all .dat files together
                 pe = inst.get_nodeattr("PE")
-                output_data_type = inst.get_nodeattr("outputDataType")
-                o_bitwidth = DataType[output_data_type].bitwidth()
+                odt = inst.get_output_datatype()
+                o_bitwidth = odt.bitwidth()
                 for stage in range(o_bitwidth):
                     for pe_value in range(pe):
                         param_file = path + "/Thresholding_id_%s_threshs_%s_%s.dat" % (

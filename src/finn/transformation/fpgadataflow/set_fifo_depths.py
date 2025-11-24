@@ -288,7 +288,10 @@ class InsertAndSetFIFODepths(Transformation):
         self.ind_map = {}
 
     def apply(self, model):
-        model = model.transform(GiveUniqueNodeNames())
+        # Only name nodes that don't have names (e.g., newly inserted FIFOs)
+        # Preserve existing node names (including prefixes from loop body processing)
+        model = model.transform(GiveUniqueNodeNames(only_empty=True))
+
         model = model.transform(GiveReadableTensorNames())
         for x in model.graph.node:
             if x.op_type == "FINNLoop":
@@ -342,25 +345,41 @@ class InsertAndSetFIFODepths(Transformation):
                         node.onnx_node.op_type == "Thresholding_rtl"
                         or node.onnx_node.op_type.startswith("Elementwise")
                     ):
-                        # set thresholding array to a dummy value
                         param_input = node.onnx_node.input[1]
-                        # remember index of input
-                        inputs = [x.name for x in model.graph.input]
-                        ind = inputs.index(param_input)
-                        tdt = model.get_tensor_datatype(param_input)
-                        tshape = model.get_tensor_shape(param_input)
-                        dummy_threshs = gen_finn_dt_tensor(tdt, tuple(tshape))
-                        if node.onnx_node.op_type == "Thresholding_rtl":
-                            dummy_threshs = np.sort(dummy_threshs, axis=1)
-                        model.set_initializer(param_input, dummy_threshs)
-                        self.ind_map[node.onnx_node.name] = ind
+                        # Check if real parameter data already exists as initializer
+                        if model.get_initializer(param_input) is not None:
+                            # Real data provided from parent model - use it!
+                            pass
+                        else:
+                            # Parameter is a graph input - convert to dummy initializer
+                            # (This shouldn't happen if parent model provides real data)
+                            inputs = [x.name for x in model.graph.input]
+                            if param_input in inputs:
+                                ind = inputs.index(param_input)
+                                tdt = model.get_tensor_datatype(param_input)
+                                tshape = model.get_tensor_shape(param_input)
+                                dummy_threshs = gen_finn_dt_tensor(tdt, tuple(tshape))
+                                if node.onnx_node.op_type == "Thresholding_rtl":
+                                    dummy_threshs = np.sort(dummy_threshs, axis=1)
+                                model.set_initializer(param_input, dummy_threshs)
+                                self.ind_map[node.onnx_node.name] = ind
                     self.mlo_max_iter = mlo_max_iter
                     reset_implementation(node)
         # insert stream infrastructure (DWC/FIFO)
         model = model.transform(InsertDWC())
         model = model.transform(InsertFIFO(create_shallow_fifos=True))
         model = model.transform(SpecializeLayers(self.fpgapart))
-        model = model.transform(GiveUniqueNodeNames())
+
+        # Preserve prefix when naming FIFO nodes
+        # Only rename if there are unnamed or duplicate nodes from InsertFIFO
+        node_names = [node.name for node in model.graph.node]
+        has_unnamed_nodes = any(name == "" for name in node_names)
+        has_duplicate_names = len(node_names) != len(set(node_names))
+
+        if has_unnamed_nodes or has_duplicate_names:
+            model = model.transform(GiveUniqueNodeNames())
+        # else: preserve existing names (keep loop body prefix)
+
         model = model.transform(GiveReadableTensorNames())
 
         # gather FIFO names, check they are of expected depth

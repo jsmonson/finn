@@ -307,6 +307,7 @@ class SpecializeLayers(Transformation):
                 optype,
                 node.input,
                 node.output,
+                name=node.name,  # Preserve the original node's name
                 domain=f"{node.domain}.{impl_style}",
             )
             # Copy all attributes except mak_style and backend

@@ -638,8 +638,8 @@ class LoopRolling(Transformation):
                 logger.debug(f"    Outputs: {len(node.outputs)}")
                 validate_loop_node(node)
 
+        # Serialize IR model back to protobuf
         model = onnxscript.ir.serde.serialize_model(model_ir)
-
         model_wrapper = ModelWrapper(model)
 
         # Allow operators in the loop body to adapt their attributes based on
@@ -682,6 +682,9 @@ class LoopRolling(Transformation):
                             break  # Only first consumer per input
 
             for node in loop_body_model.graph.node:
+                # Skip standard ONNX nodes (empty domain)
+                if not is_fpgadataflow_node(node):
+                    continue
                 try:
                     # Get custom op WITHOUT building design space
                     inst = getCustomOp(node)
@@ -706,6 +709,43 @@ class LoopRolling(Transformation):
             # set_nodeattr expects a GraphProto, not a ModelWrapper
             loop_node_inst.set_nodeattr("body", loop_body_model.graph)
 
+        # Apply FoldConstants - this creates a new model and folds constant expressions
+        # CRITICAL: Must apply FoldConstants BEFORE setting metadata because FoldConstants
+        # may create new value_info entries that would lose metadata
         model = model_wrapper.transform(FoldConstants())
+
+        # Add metadata to tensors in parent model to mark their loop body input type
+        # This enables correct handling during FIFO sizing (slice PARAMETER, copy CONSTANT)
+        # CRITICAL: Must happen AFTER FoldConstants to avoid metadata loss
+        from qonnx.util.basic import set_tensor_metadata_prop
+
+        logger.debug("\nDEBUG: Marking metadata on FINNLoop input tensors (after FoldConstants):")
+        for finn_loop_node in model.get_nodes_by_op_type("FINNLoop"):
+            # Map FINNLoop inputs back to LoopBody signature
+            # CONSTANT inputs were removed from signature during build_loop_replace_pattern
+            # So FINNLoop has fewer inputs than original signature
+
+            finn_loop_input_idx = 0
+            for sig_idx, input_type in enumerate(LoopBody.signature):
+                if input_type == LoopBodyInputType.CONSTANT:
+                    # CONSTANT inputs were pushed into loop body, skip
+                    continue
+
+                # Get the FINNLoop input tensor name (POST-REWRITE name like 'val_2')
+                if finn_loop_input_idx >= len(finn_loop_node.input):
+                    logger.error(f"  ERROR: finn_loop_input_idx={finn_loop_input_idx} >= len(inputs)={len(finn_loop_node.input)}")
+                    break
+
+                tensor_name = finn_loop_node.input[finn_loop_input_idx]
+
+                # Mark metadata on POST-REWRITE tensor name AFTER FoldConstants
+                if input_type == LoopBodyInputType.ACTIVATION:
+                    set_tensor_metadata_prop(model, tensor_name, "mlo_input_type", "activation")
+                    logger.debug(f"  {tensor_name}: mlo_input_type=activation")
+                elif input_type == LoopBodyInputType.PARAMETER:
+                    set_tensor_metadata_prop(model, tensor_name, "mlo_input_type", "parameter")
+                    logger.debug(f"  {tensor_name}: mlo_input_type=parameter")
+
+                finn_loop_input_idx += 1
 
         return (model, False)

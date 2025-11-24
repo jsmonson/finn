@@ -273,23 +273,39 @@ def prepare_for_stitched_ip_rtlsim(verify_model, cfg):
 
 
 def prepare_loop_ops_fifo_sizing(node, cfg):
+    """Run HLS synthesis and FIFO sizing on FINNLoop subgraphs.
+
+    IMPORTANT: This function is called AFTER parent-level PrepareIP runs.
+    PrepareIP (with apply_to_subgraphs=True) already called FINNLoop.generate_params()
+    which set initializers in loop bodies, so child nodes have correct data.
+
+    This function completes the loop body processing:
+    1. HLS synthesis (HLSSynthIP) - synthesizes the generated code
+    2. FIFO depth insertion (InsertAndSetFIFODepths) - RTL simulation to size FIFOs
+
+    See: /home/tafk/dev/brainsmith-1/docs/finnloop_generate_params_issue.md
+    """
     node_inst = getHWCustomOp(node)  # No model context: read only
     loop_model = node_inst.get_nodeattr("body")
-    loop_model = loop_model.transform(GiveUniqueNodeNames(prefix=node.name + "_"))
-    # go first into subgraph to check if there are other loop ops
+
+    # Recursively process nested loops
     loop_nodes = loop_model.get_nodes_by_op_type("FINNLoop")
     for loop_node in loop_nodes:
         prepare_loop_ops_fifo_sizing(loop_node, cfg)
-    # MLO: RoundAndClipThresholds doesn't handle thresholds that are graph inputs
-    # (only initializers), so we skip it here. Thresholds will be processed
-    # at the parent model level before being streamed into the loop.
+
+    # Generate code for loop body nodes
+    # At this point, parent's FINNLoop.generate_params() has already set initializers
+    # in the loop body, so nodes will generate correct .dat files
     loop_model = loop_model.transform(
         PrepareIP(cfg._resolve_fpga_part(), cfg._resolve_hls_clk_period())
     )
     loop_model = loop_model.transform(HLSSynthIP(cfg._resolve_hls_clk_period()))
     loop_model = loop_model.transform(ReplaceVerilogRelPaths())
+
+    # FIFO sizing via RTL simulation
     if node_inst.get_nodeattr("rtlsim_trace"):
         loop_model.set_metadata_prop("rtlsim_trace", f"{node.name}_fifosim_trace.wdb")
+
     loop_model = loop_model.transform(
         InsertAndSetFIFODepths(
             cfg._resolve_fpga_part(),
@@ -302,7 +318,6 @@ def prepare_loop_ops_fifo_sizing(node, cfg):
     )
     loop_model = loop_model.transform(SplitLargeFIFOs())
     loop_model = loop_model.transform(RemoveShallowFIFOs())
-    loop_model = loop_model.transform(GiveUniqueNodeNames(prefix=node.name + "_"))
     loop_model = loop_model.transform(GiveReadableTensorNames())
     node_inst.set_nodeattr("body", loop_model.graph)
 
@@ -630,14 +645,28 @@ def step_hw_codegen(model: ModelWrapper, cfg: DataflowBuildConfig):
     And fills RTL templates for RTLBackend nodes."""
 
     model = model.transform(GiveUniqueNodeNames())
-    loop_nodes = model.get_nodes_by_op_type("FINNLoop")
-    for node in loop_nodes:
-        prepare_loop_ops_fifo_sizing(node, cfg)
+
+    # CRITICAL: Run PrepareIP on parent FIRST (with apply_to_subgraphs=True)
+    # This calls FINNLoop.generate_hdl() → FINNLoop.generate_params() which:
+    # 1. Gets PARAMETER data from parent model initializers
+    # 2. Sets initializers in loop body BEFORE calling child node generate_params()
+    # 3. Child nodes (Thresholding, MVAU) can now access data via get_initializer()
+    #
+    # Running PrepareIP after prepare_loop_ops_fifo_sizing causes timing bug:
+    # - Loop body nodes generate WITHOUT data → broken .dat files
+    # - FINNLoop.generate_params() sets data too late (nodes skip regeneration)
     model = model.transform(
         PrepareIP(cfg._resolve_fpga_part(), cfg._resolve_hls_clk_period()),
         apply_to_subgraphs=True,
         use_preorder_traversal=False,
     )
+
+    # Now run HLS synthesis and FIFO sizing on loop bodies
+    # (PrepareIP already ran, so nodes have generated code with correct data)
+    loop_nodes = model.get_nodes_by_op_type("FINNLoop")
+    for node in loop_nodes:
+        prepare_loop_ops_fifo_sizing(node, cfg)
+
     return model
 
 
