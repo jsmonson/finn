@@ -320,7 +320,7 @@ class MakePYNQDriver(Transformation):
                 iodma_node = getHWCustomOp(df_model.graph.node[0], df_model)
                 if iodma_node.get_nodeattr("burstMode") == "wrap":  # input weights dma?
                     dma_sdp_output = sdp_inst.onnx_node.output[0]
-                    dma_target_sdp = getCustomOp(model.find_consumer(dma_sdp_output))
+                    dma_target_sdp = getHWCustomOp(model.find_consumer(dma_sdp_output), df_model)
                     dma_target_model = ModelWrapper(dma_target_sdp.get_nodeattr("model"))
                     iodma_output_tensor = iodma_node.onnx_node.output[0]
                     dma_consumer = dma_target_model.find_consumer(iodma_output_tensor)
