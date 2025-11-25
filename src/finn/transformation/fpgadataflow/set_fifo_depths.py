@@ -306,6 +306,7 @@ class InsertAndSetFIFODepths(Transformation):
             "Thresholding_rtl",
             "ElementwiseAdd_hls",
             "ElementwiseMul_hls",
+            "ElementwiseBinaryOp_hls",
         ]
         modified_mlo_nodes = []
         for node in model.graph.node:
