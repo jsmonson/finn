@@ -18,7 +18,6 @@ from onnxscript.rewriter.pattern import (
     pattern_builder,
 )
 from finn.util.fpgadataflow import is_fpgadataflow_node
-from qonnx.util.basic import is_finn_op
 from typing import List, Optional
 
 

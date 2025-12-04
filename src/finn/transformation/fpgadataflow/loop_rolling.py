@@ -7,6 +7,7 @@ from enum import Enum
 from onnxscript import ir
 from onnxscript.rewriter import pattern, rewrite
 from qonnx.core.modelwrapper import ModelWrapper
+from qonnx.custom_op.registry import is_custom_op
 from qonnx.transformation.base import Transformation
 from qonnx.transformation.fold_constants import FoldConstants
 from typing import List, Tuple
@@ -646,7 +647,6 @@ class LoopRolling(Transformation):
         # the determined input signature (e.g., changing parameter styles from
         # "const" to "input" for streamed parameters)
         # This must be done after serialization so we can work with protobuf nodes
-        from qonnx.util.basic import get_by_name
         from qonnx.custom_op.registry import getCustomOp
 
         from finn.util.basic import getHWCustomOp
