@@ -275,18 +275,7 @@ def prepare_for_stitched_ip_rtlsim(verify_model, cfg):
 
 
 def prepare_loop_ops_fifo_sizing(node, cfg):
-    """Run HLS synthesis and FIFO sizing on FINNLoop subgraphs.
-
-    IMPORTANT: This function is called AFTER parent-level PrepareIP runs.
-    PrepareIP (with apply_to_subgraphs=True) already called FINNLoop.generate_params()
-    which set initializers in loop bodies, so child nodes have correct data.
-
-    This function completes the loop body processing:
-    1. HLS synthesis (HLSSynthIP) - synthesizes the generated code
-    2. FIFO depth insertion (InsertAndSetFIFODepths) - RTL simulation to size FIFOs
-
-    See: /home/tafk/dev/brainsmith-1/docs/finnloop_generate_params_issue.md
-    """
+    """Run HLS synthesis and FIFO sizing on FINNLoop subgraphs."""
     node_inst = getHWCustomOp(node)  # No model context: read only
     loop_model = node_inst.get_nodeattr("body")
 
@@ -296,8 +285,6 @@ def prepare_loop_ops_fifo_sizing(node, cfg):
         prepare_loop_ops_fifo_sizing(loop_node, cfg)
 
     # Generate code for loop body nodes
-    # At this point, parent's FINNLoop.generate_params() has already set initializers
-    # in the loop body, so nodes will generate correct .dat files
     loop_model = loop_model.transform(
         PrepareIP(cfg._resolve_fpga_part(), cfg._resolve_hls_clk_period())
     )

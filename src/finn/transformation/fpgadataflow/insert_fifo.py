@@ -212,13 +212,8 @@ class InsertFIFO(Transformation):
                     inp_ind = list(first_node.input).index(graph_in_name)
                     n_input = first_node.input[inp_ind]
                     n0 = getHWCustomOp(first_node, model)
-                    # For MLO nodes in normal execution (not FIFO sizing),
-                    # skip FIFOs for parameter inputs (inp_ind > 0).
-                    # During FIFO sizing, mlo_max_iter is 0 and parameters are
-                    # graph inputs, so they DO need FIFOs.
                     if inp_ind > 0:
                         mlo_max_iter = n0.get_nodeattr("mlo_max_iter")
-                        # Only skip if mlo_max_iter > 0 (actual MLO execution, not FIFO sizing)
                         if mlo_max_iter and mlo_max_iter > 0:
                             # This is MLO execution mode - parameters come from loop,
                             # not graph inputs, so no FIFO needed
